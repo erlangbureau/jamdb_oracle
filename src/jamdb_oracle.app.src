@@ -1,0 +1,11 @@
+{application, jamdb_oracle, [
+    {description, "Erlang driver for Oracle"},
+    {vsn, "0.0.1"},
+    {id, "git"},
+    {modules, []},
+    {registered, []},
+    {applications, [
+        kernel,
+        stdlib
+    ]}
+ ]}.
