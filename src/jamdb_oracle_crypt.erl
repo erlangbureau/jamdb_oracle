@@ -41,6 +41,8 @@ catkeys(<<B1,Rest1/bits>>,<<B2,Rest2/bits>>,Acc) ->
     C = [B || <<B:1/little-signed-integer-unit:8>> <= <<(B1 bxor B2)>>],
     catkeys(<<Rest1/binary>>,<<Rest2/binary>>,lists:append(Acc,C)).
 
+pad(P, Bin) -> << Bin/binary, (binary:copy(<<P>>, P))/binary >>.
+    
 %%====================================================================
 %% Internal misc
 %%====================================================================
@@ -66,20 +68,3 @@ bin2hex(Bin) when is_binary(Bin) ->
     << <<(mkhex(H)),(mkhex(L))>> || <<H:4,L:4>> <= Bin >>.
 mkhex(C) when C < 10 -> $0 + C;
 mkhex(C) -> $A + C - 10.
-
-pad(P= 1, Bin) -> << Bin/binary, P >>;
-pad(P= 2, Bin) -> << Bin/binary, P, P >>;
-pad(P= 3, Bin) -> << Bin/binary, P, P, P >>;
-pad(P= 4, Bin) -> << Bin/binary, P, P, P, P >>;
-pad(P= 5, Bin) -> << Bin/binary, P, P, P, P, P >>;
-pad(P= 6, Bin) -> << Bin/binary, P, P, P, P, P, P >>;
-pad(P= 7, Bin) -> << Bin/binary, P, P, P, P, P, P, P >>;
-pad(P= 8, Bin) -> << Bin/binary, P, P, P, P, P, P, P, P >>;
-pad(P= 9, Bin) -> << Bin/binary, P, P, P, P, P, P, P, P, P >>;
-pad(P=10, Bin) -> << Bin/binary, P, P, P, P, P, P, P, P, P, P >>;
-pad(P=11, Bin) -> << Bin/binary, P, P, P, P, P, P, P, P, P, P, P >>;
-pad(P=12, Bin) -> << Bin/binary, P, P, P, P, P, P, P, P, P, P, P, P >>;
-pad(P=13, Bin) -> << Bin/binary, P, P, P, P, P, P, P, P, P, P, P, P, P >>;
-pad(P=14, Bin) -> << Bin/binary, P, P, P, P, P, P, P, P, P, P, P, P, P, P >>;
-pad(P=15, Bin) -> << Bin/binary, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P >>;
-pad(P=16, Bin) -> << Bin/binary, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P >>.

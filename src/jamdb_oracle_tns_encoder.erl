@@ -5,6 +5,7 @@
 -export([encode_record/4]).
 -export([encode_record/2]).
 -export([encode_query/2]).
+-export([encode_token/2]).
 
 -include("TNS.hrl").
 -include("jamdb_oracle.hrl").
@@ -199,17 +200,17 @@ encode_query(Query, Bind) ->
     (encode_token(Bind))/binary
     >>.
 
-setopts(QueryPos, BindLen) when QueryPos > 0 andalso BindLen =:= 0 ->	%%select
+setopts(QueryPos, BindLen) when QueryPos > 0, BindLen =:= 0 ->	%%select
     {0, 32801, 4294967295, 2147483647, ?TTI_ROW, [1,0,0,0,0,0,0,1,0,0,0,0,0]};
-setopts(QueryPos, BindLen) when QueryPos > 0 andalso BindLen > 0 ->
+setopts(QueryPos, BindLen) when QueryPos > 0, BindLen > 0 ->
     {1, 32801 bor 8, 4294967295, 2147483647, ?TTI_ROW, [1,0,0,0,0,0,0,1,0,0,0,0,0]};
-setopts(QueryPos, BindLen) when QueryPos =:= 0 andalso BindLen =:= 0 ->	%%crud
+setopts(QueryPos, BindLen) when QueryPos =:= 0, BindLen =:= 0 ->	%%crud
     {0, 32801 bor 256, 0, 2147483647, 0, [1,1,0,0,0,0,0,0,0,0,0,0,0]};
-setopts(QueryPos, BindLen) when QueryPos =:= 0 andalso BindLen > 0 ->
+setopts(QueryPos, BindLen) when QueryPos =:= 0, BindLen > 0 ->
     {1, 32801 bor 8 bor 256, 0, 2147483647, 0, [1,1,0,0,0,0,0,0,0,0,0,0,0]};
-setopts(QueryPos, BindLen) when QueryPos < 0 andalso BindLen =:= 0 ->	%%call
+setopts(QueryPos, BindLen) when QueryPos < 0, BindLen =:= 0 ->	%%call
     {0, 1057 bor 256, 0, 32760, 0, [1,1,0,0,0,0,0,0,0,0,0,0,0]};
-setopts(QueryPos, BindLen) when QueryPos < 0 andalso BindLen > 0 ->
+setopts(QueryPos, BindLen) when QueryPos < 0, BindLen > 0 ->
     {1, 1057 bor 8 bor 256, 0, 32760, 0, [1,1,0,0,0,0,0,0,0,0,0,0,0]}.
 
 
@@ -229,9 +230,9 @@ encode_token([Data|L], Acc) ->
 encode_token(rxd, Data) when is_list(Data) -> encode_chr(Data);
 encode_token(rxd, Data) when is_number(Data) -> encode_number(Data);
 encode_token(rxd, Data) when is_tuple(Data) -> encode_date(Data);
-encode_token(oac, Data) when is_list(Data) -> encode_token(oac, 1, length(Data), 16, ?UTF8_CHARSET);
-encode_token(oac, Data) when is_number(Data) -> encode_token(oac, 2, 22, 0, 0);
-encode_token(oac, Data) when is_tuple(Data) -> encode_token(oac, 12, 7, 0, 0).
+encode_token(oac, Data) when is_list(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 32766, 16, ?UTF8_CHARSET);
+encode_token(oac, Data) when is_number(Data) -> encode_token(oac, ?TNS_TYPE_NUMBER, 22, 0, 0);
+encode_token(oac, Data) when is_tuple(Data) -> encode_token(oac, ?TNS_TYPE_DATE, 7, 0, 0).
 
 encode_token(oac, [], Acc) ->
     Acc;
@@ -239,7 +240,6 @@ encode_token(oac, [Data|L], Acc) ->
     encode_token(oac, L, <<Acc/binary, (encode_token(oac, Data))/binary>>).
 
 encode_token(oac, Type, Length, Flag, Charset) ->
-    %%oac
     <<
     (encode_ub1(Type))/binary,		%%data type
     (encode_ub1(3))/binary,		%%flg
@@ -285,17 +285,14 @@ encode_keyval(Key, Value) when is_binary(Key), is_binary(Value) ->
 encode_ub1(Data) ->
     <<Data:8>>.
 
-%encode_sb1(Data) ->
-%    encode_sb2(Data).
-
 encode_ub2(Data) ->
     <<Data:16/little>>.
 
+%encode_sb1(Data) ->
+%    encode_sb2(Data).
+
 encode_sb2(Data) ->
     encode_sb4(Data).
-
-%encode_ub4(Data) ->
-%    <<Data:32/little>>.
 
 encode_sb4(0) ->
     <<0>>;
@@ -355,9 +352,9 @@ lnxmin(N, I, Acc) when I < 20 ->
 
 lnxren(N,I) when N < 1.0 ->
     lnxren(N * 100.0,I-1);
-lnxren(N,I) when N >= 1.0 andalso N < 10.0 ->
+lnxren(N,I) when 1.0 =< N, N < 10.0 ->
     lnxpak(lists:reverse([I|lnxren(N,0,1,[])]));
-lnxren(N,I) when N >= 10.0 andalso N < 100.0 ->
+lnxren(N,I) when 10.0 =< N, N < 100.0 ->
     lnxpak(lists:reverse([I|lnxren(N,0,0,[])]));
 lnxren(N,I) when N >= 100.0 ->
     lnxren(N * 0.01,I+1).

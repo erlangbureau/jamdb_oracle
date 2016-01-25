@@ -46,14 +46,14 @@ decode_packet(_) ->
 
 decode_token(<<Token, Data/binary>>, TokensBufer) ->
     case Token of
-	?TTI_STA -> {ok, resp_sta_token};
+	?TTI_STA -> {ok, ?TTI_STA};
 	?TTI_DCB -> decode_token(dcb, Data);
-	?TTI_IOV -> decode_token(iov, Data);
+	?TTI_IOV -> decode_token(iov, Data, TokensBufer);
 	?TTI_RXH -> decode_token(rxh, Data, TokensBufer);
 	?TTI_RPA -> decode_token(rpa, Data, TokensBufer);
 	?TTI_OER -> decode_token(oer, Data, TokensBufer);
         _ -> 
-    	    {error, unknown_tns_token}
+    	    {error, unknown_token}
     end;
 decode_token(tti, Data) ->
     case binary:match(Data,<<"AUTH_">>) of
@@ -82,10 +82,8 @@ decode_token(dcb, Data) ->
     Rest4 = decode_next(ub4,Rest3),
     Rest5 = 
     case Num of
-	0 ->
-	    Rest4;
-	_ ->
-	    decode_next(ub1,Rest4)
+	0 -> Rest4;
+	_ -> decode_next(ub1,Rest4)
     end,
     {RowFormat, Rest6} = decode_token(uds, Rest5, Num, []),
     Rest7 = decode_next(dalc,Rest6),
@@ -95,18 +93,7 @@ decode_token(dcb, Data) ->
     Rest11 = decode_next(ub4,Rest10),
     Rest12 = decode_next(dalc,Rest11),
     decode_token(Rest12, {0, RowFormat, []});
-decode_token(iov, Data) -> 
-    Rest2 = decode_next(ub1,Data),
-    Num = decode_ub2(Rest2),
-    Rest3 = decode_next(rxh,Data),
-    Rest4 = decode_token(iov, Rest3, Num),
-    decode_token(Rest4, []).
-
-
-decode_token(uds, Data, 0, Acc) ->
-    {lists:reverse(Acc), Data};
-decode_token(uds, Data, Num, Acc) ->
-    %%oac
+decode_token(oac, Data) ->
     Type = decode_ub1(Data),
     Rest2 = decode_next(ub1,Data),	%%data type
     Rest3 = decode_next(ub1,Rest2),
@@ -123,18 +110,31 @@ decode_token(uds, Data, Num, Acc) ->
     Rest11 = decode_next(ub2,Rest10),	%%charset
     Rest12 = decode_next(ub1,Rest11),	%%form of use
     Rest13 = decode_next(ub4,Rest12),
-    %%uds
-    Rest14 = decode_next(ub1,Rest13),	%%nullable
-    Rest15 = decode_next(ub1,Rest14),
-    Column = decode_dalc(Rest15),
-    Rest16 = decode_next(dalc,Rest15),	%%column name
-    Schema = decode_dalc(Rest16),
-    Rest17 = decode_next(dalc,Rest16),	%%schema name
-    Rest18 = decode_next(dalc,Rest17),	%%type name
-    Rest19 = decode_next(ub2,Rest18),
-    Rest20 = decode_next(ub4,Rest19),
-    Rest = Rest20,
-    decode_token(uds, Rest, Num-1, [#format{owner_name=Schema,
+    {Rest13, Type, Scale, Length, Charset}.
+
+
+decode_token(iov, <<?TTI_RXD, Data/bits>>, 0, RowFormat) -> %%out binds
+    decode_out_params(Data, RowFormat, []);
+decode_token(iov, Data, 0, _RowFormat) ->                   %%in binds
+    {[], Data};
+decode_token(iov, <<32, Data/bits>>, Num, RowFormat) ->	    %%in binds
+    decode_token(iov, Data, Num-1, RowFormat);
+decode_token(iov, <<16, Data/bits>>, Num, RowFormat) ->	    %%out binds
+    decode_token(iov, Data, Num-1, RowFormat);
+decode_token(uds, Data, 0, Acc) ->
+    {lists:reverse(Acc), Data};
+decode_token(uds, Data, Num, Acc) ->
+    {Rest2, Type, Scale, Length, Charset} = decode_token(oac, Data),
+    Rest3 = decode_next(ub1,Rest2),	%%nullable
+    Rest4 = decode_next(ub1,Rest3),
+    Column = decode_dalc(Rest4),
+    Rest5 = decode_next(dalc,Rest4),	%%column name
+    Schema = decode_dalc(Rest5),
+    Rest6 = decode_next(dalc,Rest5),	%%schema name
+    Rest7 = decode_next(dalc,Rest6),	%%type name
+    Rest8 = decode_next(ub2,Rest7),
+    Rest9 = decode_next(ub4,Rest8),
+    decode_token(uds, Rest9, Num-1, [#format{owner_name=Schema,
 					column_name=Column,
 					data_type=Type,
 					data_length=Length,
@@ -142,12 +142,12 @@ decode_token(uds, Data, Num, Acc) ->
 					locale=Charset}|Acc]).
 
 
-decode_token(iov, Data, 0) ->
-    Data;
-decode_token(iov, <<32, Data/bits>>, Num) ->	%%in binds
-    decode_token(iov, Data, Num-1);
-decode_token(iov, <<16, Data/bits>>, Num) ->	%%out binds  TODO
-    decode_token(iov, Data, Num-1);
+decode_token(iov, Data, RowFormat) ->
+    Rest2 = decode_next(ub1,Data),
+    Num = decode_ub2(Rest2),
+    Rest3 = decode_next(rxh,Data),
+    {Rows, Rest4} = decode_token(iov, Rest3, Num, RowFormat),
+    decode_token(Rest4, {0, [], Rows});    
 decode_token(rxh, Data, {Cursor, RowFormat, Rows}) ->
     Rest2 = decode_next(ub1,Data),
     Rest3 = decode_next(ub2,Rest2),
@@ -157,8 +157,8 @@ decode_token(rxh, Data, {Cursor, RowFormat, Rows}) ->
     {Rows2, Rest6} = decode_rows(Rest5, RowFormat, Iters, []),
     Rows3 = decode_rows(Rows2, decode_row(Rows), []),
     decode_token(Rest6, {Cursor, RowFormat, Rows++Rows3});
-decode_token(rpa, Data, []) ->
-    decode_token(rpa, Data, {0, [], []});
+decode_token(rpa, Data, RowFormat) when is_list(RowFormat) ->
+    decode_token(rpa, Data, {0, RowFormat, []});
 decode_token(rpa, Data, {_Cursor, RowFormat, Rows}) ->
     Cursor =
     case decode_ub2(Data) of 
@@ -171,32 +171,18 @@ decode_token(rpa, Data, {_Cursor, RowFormat, Rows}) ->
     end,
     Rest5 = decode_next(rpa,Data),
     decode_token(Rest5, {Cursor, RowFormat, Rows});
-decode_token(oer, Data, []) ->
-    decode_token(oer, Data, {0, [], []});
+decode_token(oer, Data, RowFormat) when is_list(RowFormat) ->
+    decode_token(oer, Data, {0, RowFormat, []});
 decode_token(oer, Data, {Cursor, RowFormat, Rows}) ->
     Rest2 = decode_next(ub2,Data),
     Rest3 = decode_next(ub2,Rest2),
     RowNumber = decode_ub4(Rest3),
     Rest4 = decode_next(ub4,Rest3),
-    decode_retcode(decode_ub2(Rest4), RowNumber, Cursor, RowFormat, Rows).
+    RetCode = decode_ub2(Rest4),
+    {RetCode, RowNumber, Cursor, RowFormat, Rows}.
 
-
-decode_retcode(RetCode, RowNumber, Cursor, [], []) when RetCode =:= 0 ->
-    {crud, Cursor, [], {return, RowNumber}};
-decode_retcode(RetCode, _RowNumber, Cursor, [], []) when RetCode > 0 ->
-    {crud, Cursor, [], {error, RetCode}};
-decode_retcode(RetCode, _RowNumber, Cursor, RowFormat, Rows) ->
-    Status = 
-    case RetCode of
-	1403 -> done;
-	3113 -> ora;
-	600 -> ora;
-	28 -> ora;
-	_ -> more
-    end,
-    {Status, Cursor, RowFormat, Rows}.
-
-
+%%lager:log(info,self(),"~p",[Data]),
+    
 decode_rows(<<?TTI_RXD, Data/bits>>, RowFormat, Iters, Values) ->
     try decode_row(Data, RowFormat, []) of
 	{Value, RestData} -> decode_rows(RestData, RowFormat, Iters-1, [Value|Values])
@@ -219,8 +205,8 @@ decode_rows([Value|Values], LastRow, Rows) ->
 decode_row(<<?TTI_BVC, Data/bits>>, [], Values) ->
     Rest2 = decode_next(ub2,Data),
     decode_row(decode_next(ub1,Rest2), [], Values);
-decode_row(<<?TTI_BVC, Data/bits>>, RowFormat, Values) ->
-    Rest2 = decode_next(ub2,Data),
+decode_row(<<?TTI_BVC, Len, Data/bits>>, RowFormat, Values) when 0 =< Len, Len =< 2 ->
+    Rest2 = decode_next(Len, Data),
     decode_row(decode_next(ub1,Rest2), [], [{bvc, length(Values), length(RowFormat)}|Values]);
 decode_row(Data, [], Values) ->
     {lists:reverse(Values), Data};
@@ -231,6 +217,11 @@ decode_row(Data, [ValueFormat|RestRowFormat], Values) ->
 decode_row([]) -> [];
 decode_row(L) -> lists:last(L).
 
+decode_out_params(Data, [], Values) ->
+    {lists:reverse(Values), Data};
+decode_out_params(Data, [ValueFormat|RestRowFormat], Values) ->
+    {Value, <<0, RestData/binary>>} = decode_data(Data, ValueFormat),
+    decode_out_params(RestData, RestRowFormat, [Value|Values]).    
 
 decode_data(<<254, Data/bits>>, #format{data_type=DataType})
         when ?IS_CHAR_TYPE(DataType) ->
@@ -258,7 +249,6 @@ decode_value(BinValue, DataType)
     decode_date(BinValue);
 decode_value(BinValue, _DataType) ->
     BinValue.
-
 
 decode_next(<<Len,Rest/bits>>) ->
     <<_Data:Len/binary,Rest2/bits>> = Rest,
@@ -289,13 +279,6 @@ decode_next(dalc,<<0,Rest/bits>>) ->
 decode_next(dalc,<<Len,Rest/bits>>) ->
     <<_Data:Len/binary,Rest2/bits>> = Rest,
     decode_next(Rest2);
-decode_next(chref,<<0,Rest/bits>>) ->
-    Rest;
-decode_next(chref,<<254,Rest/bits>>) ->
-    decode_next(chref,Rest);
-decode_next(chref,<<Len,Rest/bits>>) ->
-    <<_Data:Len/binary,Rest2/bits>> = Rest,
-    decode_next(chref,Rest2);
 decode_next(keyword,Data) ->
     Rest2 = case decode_ub2(Data) of
 	0 -> decode_next(ub2,Data);
@@ -326,46 +309,64 @@ decode_next(rpa,Data) ->
     Rest7 = decode_next(keyword, Rest6, N),
     R = decode_ub4(Rest7),
     Rest8 = decode_next(ub4,Rest7),
-    decode_next(R,Rest8);
-decode_next(oer,Data) ->
-    Rest2 = decode_next(ub2,Data),
-    Rest3 = decode_next(ub2,Rest2),	%%sequencenumber
-    Rest4 = decode_next(ub4,Rest3),	%%currownumber
-    Rest5 = decode_next(ub2,Rest4),	%%retcode
-    Rest6 = decode_next(ub2,Rest5),	%%werror
-    Rest7 = decode_next(ub2,Rest6),	%%errno
-    Rest8 = decode_next(ub2,Rest7),	%%cursorid
-    Rest9 = decode_next(ub2,Rest8),	%%errorposition
-    Rest10 = decode_next(ub1,Rest9),	%%sqltype
-    Rest11 = decode_next(ub2,Rest10),	%%fatal
-    Rest12 = decode_next(ub2,Rest11),	%%flags
-    Rest13 = decode_next(ub2,Rest12),	%%cursoropt
-    Rest14 = decode_next(ub1,Rest13),	%%upiparam
-    Rest15 = decode_next(ub1,Rest14),	%%warniningflag
-    Rest16 = decode_next(ub4,Rest15),	%%rba
-    Rest17 = decode_next(ub2,Rest16),	%%partitionid
-    Rest18 = decode_next(ub1,Rest17),	%%tableid
-    Rest19 = decode_next(ub4,Rest18),	%%blocknumber
-    Rest20 = decode_next(ub2,Rest19),	%%slotnumber
-    Rest21 = decode_next(ub4,Rest20),	%%oserror
-    Rest22 = decode_next(ub1,Rest21),	%%stmtnumber
-    Rest23 = decode_next(ub1,Rest22),	%%callnumber
-    Rest24 = decode_next(ub2,Rest23),	%%pad
-    Rest25 = decode_next(ub4,Rest24),	%%successiters
-    Rest26 = decode_next(dalc,Rest25),
-    I = decode_ub2(Rest26),
-    Rest27 = decode_next(ub2,Rest26),
-    Rest28 = decode_next(ub2, Rest27, I),
-    J = decode_ub4(Rest28),
-    Rest29 = decode_next(ub4,Rest28),
-    Rest30 = decode_next(ub4, Rest29, J),
-    Rest31 = decode_next(ub2,Rest30),
-    case byte_size(Rest31) of
-	0 -> Rest31;
-	_ -> decode_next(chref,Rest31)
-    end.
+    decode_next(R,Rest8).
+%decode_next(chref,<<0,Rest/bits>>) ->
+%    Rest;
+%decode_next(chref,<<254,Rest/bits>>) ->
+%    decode_next(chref,Rest);
+%decode_next(chref,<<Len,Rest/bits>>) ->
+%    <<_Data:Len/binary,Rest2/bits>> = Rest,
+%    decode_next(chref,Rest2);
+%decode_next(oer,Data) ->
+%    Rest2 = decode_next(ub2,Data),
+%    Rest3 = decode_next(ub2,Rest2),	%%sequencenumber
+%    Rest4 = decode_next(ub4,Rest3),	%%currownumber
+%    Rest5 = decode_next(ub2,Rest4),	%%retcode
+%    Rest6 = decode_next(ub2,Rest5),	%%werror
+%    Rest7 = decode_next(ub2,Rest6),	%%errno
+%    Rest8 = decode_next(ub2,Rest7),	%%cursorid
+%    Rest9 = decode_next(ub2,Rest8),	%%errorposition
+%    Rest10 = decode_next(ub1,Rest9),	%%sqltype
+%    Rest11 = decode_next(ub2,Rest10),	%%fatal
+%    Rest12 = decode_next(ub2,Rest11),	%%flags
+%    Rest13 = decode_next(ub2,Rest12),	%%cursoropt
+%    Rest14 = decode_next(ub1,Rest13),	%%upiparam
+%    Rest15 = decode_next(ub1,Rest14),	%%warniningflag
+%    Rest16 = decode_next(ub4,Rest15),	%%rba
+%    Rest17 = decode_next(ub2,Rest16),	%%partitionid
+%    Rest18 = decode_next(ub1,Rest17),	%%tableid
+%    Rest19 = decode_next(ub4,Rest18),	%%blocknumber
+%    Rest20 = decode_next(ub2,Rest19),	%%slotnumber
+%    Rest21 = decode_next(ub4,Rest20),	%%oserror
+%    Rest22 = decode_next(ub1,Rest21),	%%stmtnumber
+%    Rest23 = decode_next(ub1,Rest22),	%%callnumber
+%    Rest24 = decode_next(ub2,Rest23),	%%pad
+%    Rest25 = decode_next(ub4,Rest24),	%%successiters
+%    Rest26 = decode_next(dalc,Rest25),
+%    I = decode_ub2(Rest26),
+%    Rest27 = decode_next(ub2,Rest26),
+%    Rest28 = decode_next(ub2, Rest27, I),
+%    J = decode_ub4(Rest28),
+%    Rest29 = decode_next(ub4,Rest28),
+%    Rest30 = decode_next(ub4, Rest29, J),
+%    Rest31 = decode_next(ub2,Rest30),
+%    case byte_size(Rest31) of
+%	0 -> Rest31;
+%	_ -> decode_next(chref,Rest31)
+%    end.
 
-%%lager:log(info,self(),"~p",[Data]),
+%decode_bvc(B) ->
+%    decode_bvc(B, {}, 0).
+
+%decode_bvc(_B1, B2, 8) ->
+%    B2;
+%decode_bvc(B1, B2, B3) ->
+%    Bvc =
+%    case (B1 band (1 bsl B3)) of
+%	0 -> B2;
+%	_ -> erlang:append_element(B2,B3)
+%    end,
+%    decode_bvc(B1, Bvc, B3+1).
 
 decode_keyval(_Data,0,List) ->
     List;
@@ -388,7 +389,6 @@ decode_keyval(Data,Count,List) ->
     end,
     Rest = decode_next(Rest4),
     decode_keyval(Rest,Count-1,List++[{Key,Value}]).
-
 
 decode_ub1(<<Byte,_Rest/bits>>) ->
     Byte.
@@ -415,19 +415,6 @@ decode_dalc(<<0,_Rest/bits>>)->
     <<>>;
 decode_dalc(Data) ->
     list_to_binary(decode_chr(decode_next(Data))).
-
-%decode_bvc(B) ->
-%    decode_bvc(B, {}, 0).
-
-%decode_bvc(_B1, B2, 8) ->
-%    B2;
-%decode_bvc(B1, B2, B3) ->
-%    Bvc =
-%    case (B1 band (1 bsl B3)) of
-%	 0 -> B2;
-%    _ -> erlang:append_element(B2,B3)
-%    end,
-%    decode_bvc(B1, Bvc, B3+1).
 
 decode_chr(<<254,Rest/bits>>) ->
     decode_chr(Rest, <<>>);
@@ -471,7 +458,6 @@ lnxnur([H|_L],0,Acc) ->
 lnxnur([H|L],I,Acc) ->
     lnxnur(L,I-1,Acc * 100 + H).
 
-
 lnxneg([102]) -> [];
 lnxneg([H|T]) -> [H|lnxneg(T)].
 
@@ -483,7 +469,6 @@ from_lnxfmt([I|L]) when I band 128 =:= 0 ->
 to_byte(Byte) ->
     [Int] = [B || <<B:1/little-signed-integer-unit:8>> <= <<Byte>>],
     Int.
-
 
 decode_date(<<Century,Year,Month,Day,Hour,Minute,Second>>) ->
     {{(Century - 100) * 100 + (Year - 100),(Month),(Day)},

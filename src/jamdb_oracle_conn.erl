@@ -19,27 +19,22 @@
     packet_size :: non_neg_integer(),
     conn_key,
     server,
-    req_capabilities = [],
-    resp_capabilities = [],
+    out_params = [],
     env = []
 }).
 
 -opaque state() :: #oraclient{}.
 -type error_type() :: socket | remote | local.
--type empty_result() :: {ok, state()} | {error, error_type(), binary(), state()}.
--type affected_rows() :: {affected_rows, non_neg_integer()}.
 -type columns() :: list().  %% TODO
 -type metainfo() :: list(). %%TODO
 -type rows() :: list().  %% TODO
--type result_set() :: {result_set, columns(), metainfo(), rows()}.
 -type return_status() :: non_neg_integer().
 -type out_params() :: list().  %% TODO
--type procedure_result() :: 
-        {proc_result, return_status(), out_params()}.
--type result() :: 
-        affected_rows() | 
-        result_set() | 
-        procedure_result().
+-type empty_result() :: {ok, state()} | {error, error_type(), binary(), state()}.
+-type affected_rows() :: {affected_rows, non_neg_integer()}.
+-type result_set() :: {result_set, columns(), metainfo(), rows()}.
+-type procedure_result() :: {proc_result, return_status(), out_params()}.
+-type result() :: affected_rows() | result_set() | procedure_result().
 -type query_result() :: {ok, [result()], state()}.
 -type env() :: 
         {host, string()} |
@@ -118,13 +113,13 @@ sql_query(State, Query) ->
 
 -spec sql_query(state(), string(), timeout()) -> query_result().
 sql_query(State = #oraclient{conn_state = connected}, Query, Timeout) ->
-    {ok, State2} = send_query_req(State, Query),    %% TODO handle error
-    handle_resp([], State2, Timeout).
+    {ok, State2 = #oraclient{out_params = RowFormat}} = send_query_req(State, Query),    %% TODO handle error
+    handle_resp(RowFormat, State2, Timeout).
 
 %% internal
 login(State, Timeout) ->
     {ok, State2} = send_req(login, State),
-    handle_login_resp(State2, Timeout).
+    handle_login_resp(State2#oraclient{conn_state = auth_negotiate}, Timeout).
 
 handle_login_resp(#oraclient{socket=Socket} = State, Timeout) ->
     case recv(Socket, Timeout) of
@@ -155,8 +150,7 @@ handle_login_resp(#oraclient{socket=Socket} = State, Timeout) ->
 			    ErrorCode
 		    end;
 		{?TTI_VERSION, Ver} ->
-            	    State2 = State#oraclient{conn_state = connected, server = Ver},
-		    {ok, State2}
+		    {ok, State#oraclient{conn_state = connected, server = Ver}}
 	    end;
         {ok, ?TNS_REFUSE, <<_ResultData:32,PacketBody/bits>>} ->
             PacketBody;
@@ -169,8 +163,7 @@ handle_login_resp(#oraclient{socket=Socket} = State, Timeout) ->
 
 send_req(auth, #oraclient{env=Env} = State, Sess, Salt) ->
     {Data,KeyConn} = ?ENCODER:encode_record(auth, Env, Sess, Salt),
-    State2 = State#oraclient{conn_key = KeyConn},
-    send(State2, ?TNS_DATA, Data).
+    send(State#oraclient{conn_key = KeyConn}, ?TNS_DATA, Data).
 
 send_req(login, #oraclient{env=Env} = State) ->
     Data = ?ENCODER:encode_record(login, Env),
@@ -183,12 +176,12 @@ send_req(Request, State) when is_integer(Request) ->
     send(State, ?TNS_DATA, Data).
 
 system_query(State, Data, Timeout) ->
-    {ok, State2} = send(State, ?TNS_DATA, Data),  %% TODO handle error
+    {ok, State2} = send(State, ?TNS_DATA, Data),
     handle_empty_resp(State2, Timeout).
 
 send_query_req(State, {Query, Bind}) ->
     Data = ?ENCODER:encode_query(Query, Bind),
-    send(State, ?TNS_DATA, Data);
+    send(State#oraclient{out_params = [get_out_params(B) || B <- Bind]}, ?TNS_DATA, Data);
 send_query_req(State, Query) ->
     Data = ?ENCODER:encode_query(Query,[]),
     send(State, ?TNS_DATA, Data).
@@ -217,27 +210,46 @@ handle_resp(TokensBufer, State = #oraclient{socket=Socket}, Timeout) ->
 
 handle_resp(Data, TokensBufer, State, Timeout) ->
     case ?DECODER:decode_token(Data, TokensBufer) of
-	{Status, Cursor, RowFormat, Rows} ->
-	    case Status of
-		done ->
-		    FieldNames = [get_field_name(Fmt) || Fmt <- RowFormat],
-	    	    {ok, [{FieldNames, [], Rows}], State};
+	{RetCode, RowNumber, Cursor, RowFormat, Rows} ->
+	    case get_result(RetCode, RowNumber, RowFormat, Rows) of
 		more ->
 		    {ok, State2} = send_req(Cursor, State),
         	    handle_resp({Cursor, RowFormat, Rows}, State2, Timeout);
-		crud ->
-	    	    {ok, [{[], [], [Rows]}], State};
-		_ ->
-    		    {error, remote, Status}
+                Result ->
+                    erlang:append_element(Result, State)
 	    end;
-	{ok, Message} ->
-	    {ok, Message, State};
+	{ok, Token} ->
+	    {ok, Token, State};
         {error, Message} ->
     	    {error, remote, Message}
     end.
 
-
 %%lager:log(info,self(),"~p",[Data]),
+
+get_result(0, RowNumber, _RowFormat, []) ->
+    {ok, [{affected_rows, RowNumber}]};
+get_result(RetCode, _RowNumber, _RowFormat, []) ->
+    {error, local, RetCode};
+get_result(0, _RowNumber, [], Rows) ->
+    {ok, [{proc_result, 0, Rows}]};
+get_result(RetCode, _RowNumbers, RowFormat, Rows) ->
+    case RetCode of
+	1403 -> 
+            FieldNames = [get_field_name(Fmt) || Fmt <- RowFormat],
+            {ok, [{result_set, FieldNames, [], Rows}]};
+%	3113 -> {error, local, RetCode};
+%	600 -> {error, local, RetCode};
+%	28 -> {error, local, RetCode};
+	_ -> more
+    end.
+    
+get_out_params(Bind) ->
+    {<<>>, Type, Scale, Length, Charset} = 
+    ?DECODER:decode_token(oac, ?ENCODER:encode_token(oac, Bind)),
+    #format{data_type=Type,
+            data_length=Length,
+            scale=Scale,
+            locale=Charset}.
 
 get_field_name(#format{column_name = ColumnName}) ->
     ColumnName.
