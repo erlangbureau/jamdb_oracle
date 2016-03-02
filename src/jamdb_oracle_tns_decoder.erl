@@ -23,6 +23,11 @@
     DataType =:= ?TNS_TYPE_TIMESTAMP
 ).
 
+-define(IS_ROWID_TYPE(DataType),
+    DataType =:= ?TNS_TYPE_ROWID;
+    DataType =:= ?TNS_TYPE_UROWID
+).
+
 %% API
 decode_packet(<<PacketSize:16, 0:16, ?TNS_DATA, 0:8, 0:16, _DataFlags:16, Rest/bits>>) ->
     BodySize = PacketSize-10,
@@ -58,17 +63,15 @@ decode_token(<<Token, Data/binary>>, TokensBufer) ->
 decode_token(tti, Data) ->
     case binary:match(Data,<<"AUTH_">>) of
 	nomatch ->
-	    Rest1 = decode_next(Data),
-	    Rest = decode_next(Rest1),
+	    Rest = decode_next(decode_next(Data)),
 	    Ver = decode_sb4(Rest),
 	    {?TTI_VERSION, Ver};
 	_ ->
 	    Count = decode_sb4(Data),
-	    Rest1 = decode_next(Data),
-	    Rest = decode_keyval(Rest1,Count,[]),
-	    Sess = proplists:get_value("AUTH_SESSKEY",Rest),
-	    Salt = proplists:get_value("AUTH_VFR_DATA",Rest),
-	    case proplists:get_value("AUTH_SVR_RESPONSE",Rest) of
+	    Rest = decode_keyval(decode_next(Data), Count, []),
+	    Sess = proplists:get_value("AUTH_SESSKEY", Rest),
+	    Salt = proplists:get_value("AUTH_VFR_DATA", Rest),
+	    case proplists:get_value("AUTH_SVR_RESPONSE", Rest) of
 		undefined ->
 		    {?TTI_SESS, Sess, Salt};
 		Resp ->
@@ -154,9 +157,8 @@ decode_token(rxh, Data, {Cursor, RowFormat, Rows}) ->
     Rest4 = decode_next(ub2,Rest3),
     Iters = decode_ub2(Rest4),
     Rest5 = decode_next(rxh,Data),
-    {Rows2, Rest6} = decode_rows(Rest5, RowFormat, Iters, []),
-    Rows3 = decode_rows(Rows2, decode_row(Rows), []),
-    decode_token(Rest6, {Cursor, RowFormat, Rows++Rows3});
+    {Rows2, Rest6} = decode_rows(Rest5, RowFormat, Iters, decode_rows([], Rows), []),    
+    decode_token(Rest6, {Cursor, RowFormat, Rows++Rows2});
 decode_token(rpa, Data, RowFormat) when is_list(RowFormat) ->
     decode_token(rpa, Data, {0, RowFormat, []});
 decode_token(rpa, Data, {_Cursor, RowFormat, Rows}) ->
@@ -182,40 +184,85 @@ decode_token(oer, Data, {Cursor, RowFormat, Rows}) ->
     {RetCode, RowNumber, Cursor, RowFormat, Rows}.
 
 %%lager:log(info,self(),"~p",[Data]),
-    
-decode_rows(<<?TTI_RXD, Data/bits>>, RowFormat, Iters, Values) ->
-    try decode_row(Data, RowFormat, []) of
-	{Value, RestData} -> decode_rows(RestData, RowFormat, Iters-1, [Value|Values])
-    catch
-	error:_ -> decode_rows(Data, RowFormat, 0, Values)
-    end;
-decode_rows(Data, _RowFormat, _Iters, Values) ->
-    {lists:reverse(Values), Data}.
 
-decode_rows([], _LastRow, Rows) ->
-    lists:reverse(Rows);
-decode_rows([Value|Values], LastRow, Rows) ->
-    Row = 
-    case lists:last(Value) of 
-	{bvc, Start, Len} -> lists:sublist(Value,Start)++lists:sublist(LastRow,Start+1,Len);
-	_ -> Value
-    end,
-    decode_rows(Values, Row, [Row|Rows]).
+decode_rows([], []) -> [];
+decode_rows(Values, []) -> hd(Values);
+decode_rows([], Rows) -> lists:last(Rows).
 
-decode_row(<<?TTI_BVC, Data/bits>>, [], Values) ->
-    Rest2 = decode_next(ub2,Data),
-    decode_row(decode_next(ub1,Rest2), [], Values);
-decode_row(<<?TTI_BVC, Len, Data/bits>>, RowFormat, Values) when 0 =< Len, Len =< 2 ->
-    Rest2 = decode_next(Len, Data),
-    decode_row(decode_next(ub1,Rest2), [], [{bvc, length(Values), length(RowFormat)}|Values]);
-decode_row(Data, [], Values) ->
+decode_rows(Data, _RowFormat, 0, _LastRow, Values) ->
     {lists:reverse(Values), Data};
-decode_row(Data, [ValueFormat|RestRowFormat], Values) ->
-    {Value, RestData} = decode_data(Data, ValueFormat),
-    decode_row(RestData, RestRowFormat, [Value|Values]).
+decode_rows(Data, RowFormat, Iters, LastRow, Values) ->
+    LastRow2 = 
+    case length(Values) of
+        0 -> LastRow;
+        _ -> decode_rows(Values, [])
+    end,    
+    try decode_row(Data, RowFormat, LastRow2, []) of
+	{Value, RestData} -> decode_rows(RestData, RowFormat, Iters-1, LastRow, [Value|Values])
+    catch
+	error:_ -> decode_rows(Data, RowFormat, 0, LastRow, Values)
+    end.
 
-decode_row([]) -> [];
-decode_row(L) -> lists:last(L).
+decode_row(<<?TTI_RXD, ?TTI_BVC, Data/bits>>, RowFormat, LastRow, []) when is_list(LastRow) ->
+    try decode_bvc(Data, RowFormat) of
+        {Rest2, I, Bvc} -> decode_row(decode_next(ub1, Rest2, I), RowFormat, Bvc, 0, LastRow, [])
+    catch
+	error:_ -> decode_row(<<?TTI_BVC, Data/bits>>, RowFormat, {}, [])
+    end;
+decode_row(<<?TTI_RXD, Data/bits>>, RowFormat, LastRow, []) when is_list(LastRow) ->
+    decode_row(Data, RowFormat, {}, []);
+decode_row(<<?TTI_BVC, Data/bits>>, RowFormat, LastRow, []) when is_list(LastRow) ->
+    {Rest2, I, Bvc} = decode_bvc(Data, RowFormat),
+    decode_row(decode_next(ub1, Rest2, I), RowFormat, Bvc, 0, LastRow, []);
+decode_row(Data, [], LastRow, Values) when is_tuple(LastRow) ->
+    {lists:reverse(Values), Data};
+decode_row(Data, [ValueFormat|RestRowFormat], LastRow, Values) when is_tuple(LastRow) ->
+    {Value, RestData} = decode_data(Data, ValueFormat),
+    decode_row(RestData, RestRowFormat, LastRow, [Value|Values]).
+
+decode_row(<<?TTI_RXD, Data/bits>>, _RowFormat, [], 0, LastRow, []) ->
+    {LastRow, Data};
+decode_row(<<?TTI_RXD, Data/bits>>, RowFormat, Bvc, 0, LastRow, []) ->
+    decode_row(Data, RowFormat, Bvc, 1, LastRow, []);
+decode_row(Data, [], _Bvc, _Iters, _LastRow, Values) ->
+    {lists:reverse(Values), Data};
+decode_row(Data, [ValueFormat|RestRowFormat], Bvc, Iters, LastRow, Values) ->
+    {Value, RestData} = 
+    case lists:member(Iters, Bvc) of
+	true -> decode_data(Data, ValueFormat);
+	false -> {lists:nth(Iters, LastRow), Data}    
+    end,    
+    decode_row(RestData, RestRowFormat, Bvc, Iters+1, LastRow, [Value|Values]).
+    
+decode_bvc(Data, RowFormat) ->
+    I = decode_ub2(Data),
+    Rest2 = decode_next(ub2,Data),
+    Len = length(RowFormat),
+    Count = Len div 8 + 
+    case Len rem 8 of
+        0 -> 0;
+        _ -> 1
+    end,
+    Bvc = decode_bvc(Rest2, [], Count, 0),
+    case length(Bvc) of
+        I -> {Rest2, Count, Bvc};
+        _ -> erlang:error(badmask)
+    end.
+    
+decode_bvc(_Data, Acc, 8, _I) when is_tuple(Acc) ->
+    Acc;
+decode_bvc(Data, Acc, Count, I) when is_tuple(Acc) ->
+    Bvc =
+    case (Data band (1 bsl Count)) of
+	0 -> Acc;
+	_ -> erlang:append_element(Acc, I * 8 + Count + 1)
+    end,
+    decode_bvc(Data, Bvc, Count+1, I);    
+decode_bvc(_Data, Acc, 0, _I) when is_list(Acc) ->
+    Acc;
+decode_bvc(Data, Acc, Count, I) when is_list(Acc) ->
+    Bvc = decode_bvc(decode_ub1(Data), {}, 0, I),
+    decode_bvc(decode_next(ub1,Data), Acc++tuple_to_list(Bvc), Count-1, I+1).
 
 decode_out_params(Data, [], Values) ->
     {lists:reverse(Values), Data};
@@ -223,30 +270,28 @@ decode_out_params(Data, [ValueFormat|RestRowFormat], Values) ->
     {Value, <<0, RestData/binary>>} = decode_data(Data, ValueFormat),
     decode_out_params(RestData, RestRowFormat, [Value|Values]).    
 
-decode_data(<<254, Data/bits>>, #format{data_type=DataType})
-        when ?IS_CHAR_TYPE(DataType) ->
-    decode_value(Data, DataType, <<>>);
+decode_data(<<0, Rest/bits>>, _ValueFormat) ->
+    {null, Rest};
+decode_data(<<254, Rest/bits>>, #format{data_type=DataType}) when ?IS_CHAR_TYPE(DataType) ->
+    decode_value(Rest, DataType, <<>>);
+decode_data(Data, #format{data_type=DataType}) when ?IS_ROWID_TYPE(DataType) ->
+    decode_value(Data, DataType);
 decode_data(Data, #format{data_type=DataType}) ->
     <<Length, BinValue:Length/binary, Rest/binary>> = Data,
-    Value = decode_value(BinValue, DataType),
-    {Value, Rest}.
+    {decode_value(BinValue, DataType), Rest}.
 
-decode_value(<<0, Rest/bits>>, DataType, Value)
-        when ?IS_CHAR_TYPE(DataType) ->
+decode_value(<<0, Rest/bits>>, DataType, Value) when ?IS_CHAR_TYPE(DataType) ->
     {decode_value(Value, DataType), Rest};
-decode_value(Data, DataType, Value)
-        when ?IS_CHAR_TYPE(DataType) ->
+decode_value(Data, DataType, Value) when ?IS_CHAR_TYPE(DataType) ->
     <<Length, BinValue:Length/binary, Rest/binary>> = Data,
     decode_value(Rest, DataType, <<Value/binary, BinValue/binary>>).
 
-decode_value(<<>>, _DataType) ->
-    null;
-decode_value(BinValue, DataType)
-        when ?IS_NUMBER_TYPE(DataType) ->
+decode_value(BinValue, DataType) when ?IS_NUMBER_TYPE(DataType) ->
     {number, decode_number(BinValue)};
-decode_value(BinValue, DataType)
-        when ?IS_DATE_TYPE(DataType) ->
+decode_value(BinValue, DataType) when ?IS_DATE_TYPE(DataType) ->
     decode_date(BinValue);
+decode_value(BinValue, DataType) when ?IS_ROWID_TYPE(DataType) ->
+    decode_rowid(BinValue);
 decode_value(BinValue, _DataType) ->
     BinValue.
 
@@ -280,11 +325,13 @@ decode_next(dalc,<<Len,Rest/bits>>) ->
     <<_Data:Len/binary,Rest2/bits>> = Rest,
     decode_next(Rest2);
 decode_next(keyword,Data) ->
-    Rest2 = case decode_ub2(Data) of
+    Rest2 =
+    case decode_ub2(Data) of
 	0 -> decode_next(ub2,Data);
 	_ -> decode_next(decode_next(ub2,Data))
     end,
-    Rest3 = case decode_ub2(Rest2) of
+    Rest3 =
+    case decode_ub2(Rest2) of
 	0 -> decode_next(ub2,Rest2);
 	_ -> decode_next(decode_next(ub2,Rest2))
     end,
@@ -355,40 +402,38 @@ decode_next(rpa,Data) ->
 %	_ -> decode_next(chref,Rest31)
 %    end.
 
-%decode_bvc(B) ->
-%    decode_bvc(B, {}, 0).
-
-%decode_bvc(_B1, B2, 8) ->
-%    B2;
-%decode_bvc(B1, B2, B3) ->
-%    Bvc =
-%    case (B1 band (1 bsl B3)) of
-%	0 -> B2;
-%	_ -> erlang:append_element(B2,B3)
-%    end,
-%    decode_bvc(B1, Bvc, B3+1).
-
+decode_rowid(Data) ->
+    Rest2 = decode_next(ub1,Data),
+    Objid = decode_ub4(Rest2),
+    Rest3 = decode_next(ub4,Rest2),
+    Filenum = decode_ub2(Rest3),
+    Rest4 = decode_next(ub2,Rest3),
+    Rest5 = decode_next(ub1,Rest4),	
+    Blocknum = decode_ub4(Rest5),
+    Rest6 = decode_next(ub4,Rest5),
+    Rowslot = decode_ub2(Rest6),
+    Rest7 = decode_next(ub2,Rest6),
+    {{rowid, Objid, Filenum, Blocknum, Rowslot}, Rest7}.
+    
 decode_keyval(_Data,0,List) ->
     List;
 decode_keyval(Data,Count,List) ->
-    {Key, Rest2} = case decode_sb4(Data) of
-	0 ->
-	    {undefined, decode_next(Data)};
+    {Key, Rest2} =
+    case decode_sb4(Data) of
+	0 -> {undefined, decode_next(Data)};
 	_ ->
-	    Rest1 = decode_next(Data),
-	    K = decode_chr(Rest1),
-	    {K, decode_next(Rest1)}
+	    Rest3 = decode_next(Data),
+	    {decode_chr(Rest3), decode_next(Rest3)}
     end,
-    {Value, Rest4} = case decode_sb4(Rest2) of
-	0 ->
-	    {undefined, decode_next(Rest2)};
+    {Value, Rest4} =
+    case decode_sb4(Rest2) of
+	0 -> {undefined, decode_next(Rest2)};
 	_ ->
-	    Rest3 = decode_next(Rest2),
-	    Val = decode_chr(Rest3),
-	    {Val, decode_next(Rest3)}
+	    Rest5 = decode_next(Rest2),
+	    {decode_chr(Rest5), decode_next(Rest5)}
     end,
-    Rest = decode_next(Rest4),
-    decode_keyval(Rest,Count-1,List++[{Key,Value}]).
+    Rest6 = decode_next(Rest4),
+    decode_keyval(Rest6,Count-1,List++[{Key,Value}]).
 
 decode_ub1(<<Byte,_Rest/bits>>) ->
     Byte.
@@ -410,7 +455,7 @@ decode_sb4(<<0,_Rest/bits>>) ->
 decode_sb4(<<Len,Rest/bits>>) ->
     <<Data:Len/binary,_Rest2/bits>> = Rest,
     binary:decode_unsigned(Data).
-
+    
 decode_dalc(<<0,_Rest/bits>>)->
     <<>>;
 decode_dalc(Data) ->
@@ -469,7 +514,7 @@ from_lnxfmt([I|L]) when I band 128 =:= 0 ->
 to_byte(Byte) ->
     [Int] = [B || <<B:1/little-signed-integer-unit:8>> <= <<Byte>>],
     Int.
-
+    
 decode_date(<<Century,Year,Month,Day,Hour,Minute,Second>>) ->
     {{(Century - 100) * 100 + (Year - 100),(Month),(Day)},
      {(Hour - 1),(Minute - 1),(Second - 1)}}.

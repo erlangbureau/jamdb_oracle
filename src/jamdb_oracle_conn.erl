@@ -19,6 +19,7 @@
     packet_size :: non_neg_integer(),
     conn_key,
     server,
+    cursors = [],
     out_params = [],
     env = []
 }).
@@ -41,10 +42,7 @@
         {port, string()} |
         {user, string()} |
         {password, string()} |
-        {schema, string()} |
         {app_name, string()} |
-        {lib_name, string()} |
-        {language, string()} |
         {packet_size, non_neg_integer()}.
 -type options() :: [env()].
 
@@ -88,11 +86,12 @@ disconnect(State) ->
 disconnect(#oraclient{conn_state=connected, socket=Socket, env=Env}, 0) ->
     ok = gen_tcp:close(Socket),
     {ok, Env};
-disconnect(State = #oraclient{conn_state=connected, socket=Socket, env=Env}, Timeout) ->
-    Data = ?ENCODER:encode_record(func, ?TTI_LOGOFF),
+disconnect(State = #oraclient{conn_state=connected, socket=Socket, cursors=Cursors, env=Env}, Timeout) ->
+    Data = ?ENCODER:encode_record(close, Cursors),
     try send(State, ?TNS_DATA, Data) of
         {ok, State2} -> 
-            _ = handle_empty_resp(State2, Timeout);
+            _ = handle_empty_resp(State2, Timeout),
+            _ = send(State2, ?TNS_DATA, <<64>>);
         {error, _Type, _Reason, _State2} ->
             ok
     after
@@ -112,8 +111,8 @@ sql_query(State, Query) ->
     sql_query(State, Query, ?DEF_TIMEOUT).
 
 -spec sql_query(state(), string(), timeout()) -> query_result().
-sql_query(State = #oraclient{conn_state = connected}, Query, Timeout) ->
-    {ok, State2 = #oraclient{out_params = RowFormat}} = send_query_req(State, Query),    %% TODO handle error
+sql_query(State = #oraclient{conn_state=connected}, Query, Timeout) ->
+    {ok, State2 = #oraclient{out_params=RowFormat}} = send_query_req(State, Query),
     handle_resp(RowFormat, State2, Timeout).
 
 %% internal
@@ -211,12 +210,13 @@ handle_resp(TokensBufer, State = #oraclient{socket=Socket}, Timeout) ->
 handle_resp(Data, TokensBufer, State, Timeout) ->
     case ?DECODER:decode_token(Data, TokensBufer) of
 	{RetCode, RowNumber, Cursor, RowFormat, Rows} ->
+            #oraclient{cursors = Cursors} = State,
 	    case get_result(RetCode, RowNumber, RowFormat, Rows) of
 		more ->
 		    {ok, State2} = send_req(Cursor, State),
         	    handle_resp({Cursor, RowFormat, Rows}, State2, Timeout);
-                Result ->
-                    erlang:append_element(Result, State)
+                Result ->                
+                    erlang:append_element(Result, State#oraclient{cursors = get_cursors(Cursor, Cursors)})
 	    end;
 	{ok, Token} ->
 	    {ok, Token, State};
@@ -242,6 +242,11 @@ get_result(RetCode, _RowNumbers, RowFormat, Rows) ->
 %	28 -> {error, local, RetCode};
 	_ -> more
     end.
+
+get_cursors(Cursor, Cursors) when Cursor > 0 ->
+    [Cursor|Cursors];
+get_cursors(Cursor, Cursors) when Cursor =:= 0 ->
+    Cursors.
     
 get_out_params(Bind) ->
     {<<>>, Type, Scale, Length, Charset} = 

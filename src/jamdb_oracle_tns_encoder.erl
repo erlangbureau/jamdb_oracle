@@ -158,12 +158,22 @@ encode_record(func, Num) ->
     ?TTI_FUN,
     (encode_ub2(Num))/binary
     >>;
-encode_record(fetch, Num) ->
+encode_record(fetch, Cursor) ->
     <<
     ?TTI_FUN,
     (encode_ub2(?TTI_FETCH))/binary,
-    (encode_sb4(Num))/binary,		%cursor
+    (encode_sb4(Cursor))/binary,	%cursor
     (encode_sb4(?TTI_ROW))/binary	%rows to fetch
+    >>;
+encode_record(close, Cursors) ->
+    <<
+    ?TTI_PFN,
+    (encode_ub2(?TTI_OCCA))/binary,
+    1,
+    (encode_sb4(length(Cursors)))/binary,  %cursors count
+    (encode_array(Cursors))/binary,        %cursors
+    ?TTI_FUN,
+    (encode_ub2(?TTI_LOGOFF))/binary
     >>.
 
 encode_query(Query, Bind) ->
@@ -215,7 +225,7 @@ setopts(QueryPos, BindLen) when QueryPos < 0, BindLen > 0 ->
 
 
 encode_token([]) ->
-    <<0>>;
+    <<>>;
 encode_token(Data) ->
     encode_token(Data, <<(encode_token(oac, Data, <<>>))/binary, ?TTI_RXD>>).
 
@@ -267,16 +277,19 @@ encode_keyval(Key, Value) when is_list(Key), is_list(Value) ->
 encode_keyval(Key, Value) when is_binary(Key), is_binary(Value) ->
     KeyLen = byte_size(Key),
     ValueLen = byte_size(Value),
-    BinKey = case KeyLen of
+    Data = encode_chr(Value),
+    BinKey =
+    case KeyLen of
 	0 -> <<0>>;
 	_ -> <<(encode_sb4(KeyLen))/binary, (encode_chr(Key))/binary>>
     end,
-    Data = encode_chr(Value),
-    BinValue = case ValueLen of
+    BinValue =
+    case ValueLen of
 	0 -> <<0>>;
 	_ -> <<(encode_sb4(ValueLen))/binary, Data/binary>>
     end,
-    BinData = case binary:last(Data) of
+    BinData =
+    case binary:last(Data) of
 	0 -> <<>>;
 	_ -> <<0>>
     end,
