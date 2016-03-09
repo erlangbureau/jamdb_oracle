@@ -23,7 +23,7 @@ Getting Started
     {user, "jamdbtest"},
     {password, "jamdbtest"},
     {sid, "JAMDBTEST"},
-    {app_name, jamdbtest}
+    {app_name, "jamdbtest"}
 ].
 
 %% Connect
@@ -37,7 +37,7 @@ Getting Started
                  [[{number,1},{number,2},{number,3}]]}]}
 
 %% Select with parameters
-4> {ok, Result2} = jamdb_oracle:sql_query(Pid, {"select 1 as one,SYSDATE, ROWID from dual where 1=:1 ",[1]}).
+4> {ok, Result2} = jamdb_oracle:sql_query(Pid, {"select 1 as one, sysdate, rowid from dual where 1=:1 ",[1]}).
 {ok,[{result_set,[<<"ONE">>,<<"SYSDATE">>,<<"ROWID">>],
                  [],
                  [[{number,1},{{2016,3,3},{14,9,57}},{rowid,142,1,1417,0}]]}]}

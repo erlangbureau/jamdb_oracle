@@ -63,7 +63,7 @@ decode_token(<<Token, Data/binary>>, TokensBufer) ->
 decode_token(tti, Data) ->
     case binary:match(Data,<<"AUTH_">>) of
 	nomatch ->
-	    Rest = decode_next(decode_next(Data)),
+	    Rest = decode_next(chr,decode_next(Data)),
 	    Ver = decode_sb4(Rest),
 	    {?TTI_VERSION, Ver};
 	_ ->
@@ -301,8 +301,12 @@ decode_next(<<Len,Rest/bits>>) ->
 
 decode_next(_Type, Data, 0) ->
     Data;
-decode_next(Type, Data, I) when is_atom(Type) ->
-    decode_next(Type, decode_next(Type, Data), I-1).
+decode_next(Type, Data, I) when is_integer(I) ->
+    decode_next(Type, decode_next(Type, Data), I-1);
+decode_next(chr, <<0,Rest/bits>>, I) when is_binary(I) ->
+    Rest;
+decode_next(chr, Data, I) when is_binary(I) ->
+    decode_next(chr, decode_next(Data), I).
 
 decode_next(Len,Data) when is_integer(Len) ->
     <<_Data:Len/binary,Rest/bits>> = Data,
@@ -356,14 +360,11 @@ decode_next(rpa,Data) ->
     Rest7 = decode_next(keyword, Rest6, N),
     R = decode_ub4(Rest7),
     Rest8 = decode_next(ub4,Rest7),
-    decode_next(R,Rest8).
-%decode_next(chref,<<0,Rest/bits>>) ->
-%    Rest;
-%decode_next(chref,<<254,Rest/bits>>) ->
-%    decode_next(chref,Rest);
-%decode_next(chref,<<Len,Rest/bits>>) ->
-%    <<_Data:Len/binary,Rest2/bits>> = Rest,
-%    decode_next(chref,Rest2);
+    decode_next(R,Rest8);
+decode_next(chr,<<254,Rest/bits>>) ->
+    decode_next(chr,Rest,<<>>);
+decode_next(chr,Data) ->
+    decode_next(Data).
 %decode_next(oer,Data) ->
 %    Rest2 = decode_next(ub2,Data),
 %    Rest3 = decode_next(ub2,Rest2),	%%sequencenumber
@@ -399,7 +400,7 @@ decode_next(rpa,Data) ->
 %    Rest31 = decode_next(ub2,Rest30),
 %    case byte_size(Rest31) of
 %	0 -> Rest31;
-%	_ -> decode_next(chref,Rest31)
+%	_ -> decode_next(chr,Rest31)
 %    end.
 
 decode_rowid(Data) ->
@@ -423,14 +424,14 @@ decode_keyval(Data,Count,List) ->
 	0 -> {undefined, decode_next(Data)};
 	_ ->
 	    Rest3 = decode_next(Data),
-	    {decode_chr(Rest3), decode_next(Rest3)}
+	    {decode_chr(Rest3), decode_next(chr,Rest3)}
     end,
     {Value, Rest4} =
     case decode_sb4(Rest2) of
 	0 -> {undefined, decode_next(Rest2)};
 	_ ->
 	    Rest5 = decode_next(Rest2),
-	    {decode_chr(Rest5), decode_next(Rest5)}
+	    {decode_chr(Rest5), decode_next(chr,Rest5)}
     end,
     Rest6 = decode_next(Rest4),
     decode_keyval(Rest6,Count-1,List++[{Key,Value}]).

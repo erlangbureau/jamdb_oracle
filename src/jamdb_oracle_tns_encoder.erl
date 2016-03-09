@@ -50,7 +50,7 @@ encode_record(login, EnvOpts) ->
     AppName         = proplists:get_value(app_name, EnvOpts),
     Data = list_to_binary(
     "(DESCRIPTION=(CONNECT_DATA=(SID="++Sid++
-    ")(CID=(PROGRAM="++atom_to_list(AppName)++
+    ")(CID=(PROGRAM="++AppName++
     ")(HOST="++UserHost++")(USER="++User++
     ")))(ADDRESS=(PROTOCOL=TCP)(HOST="++Host++
     ")(PORT="++integer_to_list(Port)++")))"),
@@ -85,7 +85,7 @@ encode_record(sess, EnvOpts) ->
     (encode_sb2(4))/binary,	%keyval count
     1,1,
     (encode_chr(string:to_upper(User)))/binary,
-    (encode_keyval("AUTH_PROGRAM_NM", atom_to_list(AppName)))/binary,
+    (encode_keyval("AUTH_PROGRAM_NM", AppName))/binary,
     (encode_keyval("AUTH_MACHINE", UserHost))/binary,
     (encode_keyval("AUTH_PID", UserPID))/binary,
     (encode_keyval("AUTH_SID", "erlang"))/binary
