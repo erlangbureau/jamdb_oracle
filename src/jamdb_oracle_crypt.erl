@@ -1,28 +1,38 @@
 -module(jamdb_oracle_crypt).
 
--export([o5logon/3]).
+-export([o5logon/4]).
 -export([validate/2]).
 
 %%====================================================================
 %% callbacks
 %%====================================================================
 
-o5logon(Sess, Salt, Pass) ->
+o5logon(Sess, User, Pass, Bits) when is_list(Sess), Bits =:= 128 ->
+    IVec = <<0:64>>,
+    CliPass = norm(User++Pass),
+    Rest1 = crypto:block_encrypt(des_cbc, hexstr2bin("0123456789ABCDEF"), IVec, CliPass),
+    Rest2 = crypto:block_encrypt(des_cbc, binary:part(Rest1,24,8), IVec, CliPass),
+    Data = binary:part(Rest2,24,8),
+    KeySess = <<Data/binary,0:64>>,
+    o5logon(hexstr2bin(Sess), KeySess, Pass, Bits);
+o5logon(Sess, Salt, Pass, Bits) when is_list(Sess), Bits =:= 192 ->
     Data = crypto:hash(sha,<<(list_to_binary(Pass))/binary,(hexstr2bin(Salt))/binary>>),
     KeySess = <<Data/binary,0:32>>,
+    o5logon(hexstr2bin(Sess), KeySess, Pass, Bits);
+o5logon(Sess, KeySess, Pass, Bits) when is_binary(Sess) ->
     IVec = <<0:128>>,
-    SrvSess = jose_jwa_aes:block_decrypt({aes_cbc, 192}, KeySess, IVec, hexstr2bin(Sess)),
-    CliSess = crypto:rand_bytes(48),
-    AuthSess = jose_jwa_aes:block_encrypt({aes_cbc, 192}, KeySess, IVec, CliSess),
-    KeyConn = catkeys(SrvSess,CliSess),
-    PadPass = 16 * ((16 + length(Pass)) div 16 + 1) - (16 + length(Pass)),
-    CliPass = <<(pad(16,<<>>))/binary,(pad(PadPass,list_to_binary(Pass)))/binary>>,
-    AuthPass = jose_jwa_aes:block_encrypt({aes_cbc, 192}, KeyConn, IVec, CliPass),
+    SrvSess = jose_jwa_aes:block_decrypt({aes_cbc, Bits}, KeySess, IVec, Sess),
+    CliSess = crypto:rand_bytes(Bits div 4),
+    AuthSess = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeySess, IVec, CliSess),
+    CatKey = cat_key(binary:part(SrvSess,16,Bits div 8),binary:part(CliSess,16,Bits div 8),[]),
+    KeyConn = conn_key(CatKey, Bits),
+    AuthPass = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeyConn, IVec, pad(Pass)),
     {bin2hexstr(AuthPass), bin2hexstr(AuthSess), bin2hexstr(KeyConn)}.
-
-validate(Resp,KeyConn) ->
+      
+validate(Resp, KeyConn) ->
     IVec = <<0:128>>,
-    Data = jose_jwa_aes:block_decrypt({aes_cbc, 192}, hexstr2bin(KeyConn), IVec, hexstr2bin(Resp)),
+    Bits = length(KeyConn) * 4,
+    Data = jose_jwa_aes:block_decrypt({aes_cbc, Bits}, hexstr2bin(KeyConn), IVec, hexstr2bin(Resp)),    
     case binary:match(Data,<<"SERVER_TO_CLIENT">>) of
 	nomatch ->
 	    {error, validate_failed};
@@ -30,23 +40,43 @@ validate(Resp,KeyConn) ->
 	    ok
     end.
 
-catkeys(Data1,Data2) ->
-    catkeys(binary:part(Data1,16,24),binary:part(Data2,16,24),[]).
-
-catkeys(<<>>,<<>>,Acc) ->
-    C = list_to_binary([<<B>> || B <- Acc]),
-    <<(erlang:md5(binary:part(C,0,16)))/binary,
-      (binary:part(erlang:md5(binary:part(C,16,8)),0,8))/binary>>;
-catkeys(<<B1,Rest1/bits>>,<<B2,Rest2/bits>>,Acc) ->
-    C = [B || <<B:1/little-signed-integer-unit:8>> <= <<(B1 bxor B2)>>],
-    catkeys(<<Rest1/binary>>,<<Rest2/binary>>,lists:append(Acc,C)).
-
-pad(P, Bin) -> << Bin/binary, (binary:copy(<<P>>, P))/binary >>.
-    
 %%====================================================================
 %% Internal misc
 %%====================================================================
 
+conn_key(Data, Bits) when Bits =:= 128 ->  
+    <<(erlang:md5(Data))/binary>>;
+conn_key(Data, Bits) when Bits =:= 192 ->  
+    <<(erlang:md5(binary:part(Data,0,16)))/binary,
+      (binary:part(erlang:md5(binary:part(Data,16,8)),0,8))/binary>>.
+
+cat_key(<<>>,<<>>,Acc) ->
+    list_to_binary([<<B>> || B <- Acc]);
+cat_key(<<B1,Rest1/bits>>,<<B2,Rest2/bits>>,Acc) ->
+    C = [B || <<B:1/little-signed-integer-unit:8>> <= <<(B1 bxor B2)>>],
+    cat_key(<<Rest1/binary>>,<<Rest2/binary>>,Acc++C).
+          
+norm(Data) ->
+    S = norm(list_to_binary(Data),[]),
+    N = (8 - (length(S) rem 8 )) rem 8,
+    list_to_binary(S++lists:duplicate(N,0)).
+
+norm(<<>>,Acc) ->
+    Acc;
+norm(<<U/utf8,R/binary>>,Acc) ->
+    C = case U of
+	N when N > 255 -> 63;
+	N when N >= 97, N =< 122 -> N-32;
+	N -> N
+    end,
+    norm(R,Acc++[0,C]).
+    
+pad(S) ->
+    P = 16 * ((16 + length(S)) div 16 + 1) - (16 + length(S)),
+    <<(pad(16,<<>>))/binary,(pad(P,list_to_binary(S)))/binary>>.
+
+pad(P, Bin) -> << Bin/binary, (binary:copy(<<P>>, P))/binary >>.
+    
 hexstr2bin(S) ->
     list_to_binary(hexstr2list(S)).
 

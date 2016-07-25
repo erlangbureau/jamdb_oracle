@@ -4,7 +4,6 @@
 -export([encode_packet/2]).
 -export([encode_record/4]).
 -export([encode_record/2]).
--export([encode_query/2]).
 -export([encode_token/2]).
 
 -include("TNS.hrl").
@@ -24,7 +23,11 @@ encode_packet(Type, Data) ->
 encode_record(auth, EnvOpts, Sess, Salt) ->
     User            = proplists:get_value(user, EnvOpts),
     Pass            = proplists:get_value(password, EnvOpts),
-    {AuthPass, AuthSess, KeyConn} = jamdb_oracle_crypt:o5logon(Sess, Salt, Pass),
+    {AuthPass, AuthSess, KeyConn} = 
+    case Salt of
+        undefined -> jamdb_oracle_crypt:o5logon(Sess, User, Pass, 128);
+        _ -> jamdb_oracle_crypt:o5logon(Sess, Salt, Pass, 192)
+    end,
     {<<
     ?TTI_FUN,
     (encode_ub2(?TTI_AUTH))/binary,
@@ -32,12 +35,11 @@ encode_record(auth, EnvOpts, Sess, Salt) ->
     (encode_sb2(length(User)))/binary,
     (encode_sb2(1 bor 256))/binary,	%logon mode
     1,
-    (encode_sb2(2))/binary,	%keyval count
+    (encode_sb2(2))/binary,	        %keyval count
     1,1,
     (encode_chr(string:to_upper(User)))/binary,
     (encode_keyval("AUTH_PASSWORD", AuthPass))/binary,
-    (encode_keyval("AUTH_SESSKEY", AuthSess))/binary,
-    1,1
+    (encode_keyval("AUTH_SESSKEY", AuthSess, 1))/binary
     >>,
     KeyConn}.
 
@@ -158,41 +160,42 @@ encode_record(func, Num) ->
     ?TTI_FUN,
     (encode_ub2(Num))/binary
     >>;
-encode_record(fetch, Cursor) ->
+encode_record(fetch, Cursor) when is_integer(Cursor) ->
     <<
     ?TTI_FUN,
     (encode_ub2(?TTI_FETCH))/binary,
     (encode_sb4(Cursor))/binary,	%cursor
     (encode_sb4(?TTI_ROW))/binary	%rows to fetch
     >>;
-encode_record(close, Cursors) ->
-    <<
-    ?TTI_PFN,
-    (encode_ub2(?TTI_OCCA))/binary,
-    1,
-    (encode_sb4(length(Cursors)))/binary,  %cursors count
-    (encode_array(Cursors))/binary,        %cursors
-    ?TTI_FUN,
-    (encode_ub2(?TTI_LOGOFF))/binary
-    >>.
-
-encode_query(Query, Bind) ->
+encode_record(fetch, {Cursor, Query, Bind, Ver}) ->
+    QueryLen = length(Query),
     BindLen = length(Bind),
-    QueryPos =
-    case lists:nth(1, string:tokens(string:to_upper(Query)," \t")) of
-	"SELECT" -> 1;
-	"BEGIN" -> -1;
-	_ -> 0
+    {BindPos, Opt, LMax, Max, Rows, Alt} = 
+    case Cursor of
+        0 -> 
+            QueryPos =
+            case lists:nth(1, string:tokens(string:to_upper(Query)," \t")) of
+                "SELECT" -> 1;
+                "BEGIN" -> -1;
+                _ -> 0
+            end,
+            setopts(QueryPos, BindLen);
+        _ -> {0, 32832, 0, 2147483647, 0, [0,10,0,0,0,0,0,1,0,0,0,0,0]}
     end,
-    {BindPos, Opt, LMax, Max, Rows, Alt} = setopts(QueryPos, BindLen),
     <<
     ?TTI_FUN,
     (encode_ub2(?TTI_ALL8))/binary,
     (encode_sb4(Opt))/binary,		%options
-    0,					%cursor
-    1,					%query not empty
-    (encode_sb4(length(Query)))/binary,	%query length
-    1,					%alt not empty
+    (encode_sb4(Cursor))/binary,	%cursor
+    case QueryLen of                    %query is empty
+        0 -> 0;
+        _ -> 1
+    end,    
+    (encode_sb4(QueryLen))/binary,	%query length
+    case length(Alt) of                 %alt is empty
+        0 -> 0;
+        _ -> 1
+    end,    
     (encode_sb4(length(Alt)))/binary,   %alt length
     0,0,
     (encode_sb4(LMax))/binary,		%long max value
@@ -204,12 +207,29 @@ encode_query(Query, Bind) ->
     0,					%no defcols
     0,					%defcols
     0,					%registration
-    0,1,0,0,0,0,0,
-    (encode_chr(Query))/binary,
+    0,1,
+    (case Ver of
+        10 -> <<>>;
+        _ -> <<0,0,0,0,0>>
+    end)/binary,
+    (case QueryLen of
+        0 -> <<>>;
+        _ -> encode_chr(Query)
+    end)/binary,
     (encode_array(Alt))/binary,
     (encode_token(Bind))/binary
+    >>;
+encode_record(close, Cursors) ->
+    <<
+    ?TTI_PFN,
+    (encode_ub2(?TTI_OCCA))/binary,
+    1,
+    (encode_sb4(length(Cursors)))/binary,  %cursors count
+    (encode_array(Cursors))/binary,        %cursors
+    ?TTI_FUN,
+    (encode_ub2(?TTI_LOGOFF))/binary
     >>.
-
+   
 setopts(QueryPos, BindLen) when QueryPos > 0, BindLen =:= 0 ->	%%select
     {0, 32801, 4294967295, 2147483647, ?TTI_ROW, [1,0,0,0,0,0,0,1,0,0,0,0,0]};
 setopts(QueryPos, BindLen) when QueryPos > 0, BindLen > 0 ->
@@ -222,8 +242,7 @@ setopts(QueryPos, BindLen) when QueryPos < 0, BindLen =:= 0 ->	%%call
     {0, 1057 bor 256, 0, 32760, 0, [1,1,0,0,0,0,0,0,0,0,0,0,0]};
 setopts(QueryPos, BindLen) when QueryPos < 0, BindLen > 0 ->
     {1, 1057 bor 8 bor 256, 0, 32760, 0, [1,1,0,0,0,0,0,0,0,0,0,0,0]}.
-
-
+        
 encode_token([]) ->
     <<>>;
 encode_token(Data) ->
@@ -240,9 +259,11 @@ encode_token([Data|L], Acc) ->
 encode_token(rxd, Data) when is_list(Data) -> encode_chr(Data);
 encode_token(rxd, Data) when is_number(Data) -> encode_number(Data);
 encode_token(rxd, Data) when is_tuple(Data) -> encode_date(Data);
+encode_token(rxd, cursor) -> encode_sb4(0);
 encode_token(oac, Data) when is_list(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 32766, 16, ?UTF8_CHARSET);
 encode_token(oac, Data) when is_number(Data) -> encode_token(oac, ?TNS_TYPE_NUMBER, 22, 0, 0);
-encode_token(oac, Data) when is_tuple(Data) -> encode_token(oac, ?TNS_TYPE_DATE, 7, 0, 0).
+encode_token(oac, Data) when is_tuple(Data) -> encode_token(oac, ?TNS_TYPE_DATE, 7, 0, 0);
+encode_token(oac, cursor) -> encode_token(oac, ?TNS_TYPE_REFCURSOR, 1, 0, ?UTF8_CHARSET).
 
 encode_token(oac, [], Acc) ->
     Acc;
@@ -270,6 +291,10 @@ encode_token(oac, Type, Length, Flag, Charset) ->
 
 %%lager:log(info,self(),"~p",[Data]),
 
+encode_keyval(Key, Value, 1) ->
+    Data = encode_keyval(Key, Value),
+    <<(binary:part(Data,0,byte_size(Data) - 1))/binary, (encode_sb4(1))/binary>>.
+
 encode_keyval(Key, Value) when is_list(Key), is_list(Value) ->
     BinKey = unicode:characters_to_binary(Key),
     BinValue = unicode:characters_to_binary(Value),
@@ -288,12 +313,7 @@ encode_keyval(Key, Value) when is_binary(Key), is_binary(Value) ->
 	0 -> <<0>>;
 	_ -> <<(encode_sb4(ValueLen))/binary, Data/binary>>
     end,
-    BinData =
-    case binary:last(Data) of
-	0 -> <<>>;
-	_ -> <<0>>
-    end,
-    <<BinKey/binary, BinValue/binary, BinData/binary>>.
+    <<BinKey/binary, BinValue/binary, 0>>.
 
 encode_ub1(Data) ->
     <<Data:8>>.

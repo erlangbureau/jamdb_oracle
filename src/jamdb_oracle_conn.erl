@@ -20,7 +20,7 @@
     conn_key,
     server,
     cursors = [],
-    out_params = [],
+    params = [],
     env = []
 }).
 
@@ -70,7 +70,7 @@ connect(Opts, Timeout) ->
             },
             case login(State, Timeout) of
                 {ok, State2 = #oraclient{conn_state = connected}} ->
-                    system_query(State2, ?ENCODER:encode_record(func, ?TTI_COMON), Timeout);
+                    send_req(func, State2, ?ENCODER:encode_record(func, ?TTI_COMON), Timeout);
                 Error ->
                     Error
             end;
@@ -111,14 +111,32 @@ sql_query(State, Query) ->
     sql_query(State, Query, ?DEF_TIMEOUT).
 
 -spec sql_query(state(), string(), timeout()) -> query_result().
-sql_query(State = #oraclient{conn_state=connected}, Query, Timeout) ->
-    {ok, State2 = #oraclient{out_params=RowFormat}} = send_query_req(State, Query),
-    handle_resp(RowFormat, State2, Timeout).
+sql_query(State = #oraclient{conn_state=connected, server=Ver}, Query, Timeout) ->
+    {ok, State2 = #oraclient{params=RowFormat}} = send_req(query, State, Query),
+    handle_resp({Ver, RowFormat}, State2, Timeout).
 
 %% internal
 login(State, Timeout) ->
     {ok, State2} = send_req(login, State),
     handle_login_resp(State2#oraclient{conn_state = auth_negotiate}, Timeout).
+
+login(State, Data, Timeout) ->
+    case ?DECODER:decode_token(tti, Data) of 
+        {?TTI_SESS, Sess, Salt} ->
+	    {ok, State2} = send_req(auth, State, Sess, Salt),
+	    handle_login_resp(State2, Timeout);
+	{?TTI_AUTH, Resp} ->
+	    #oraclient{conn_key = KeyConn} = State,
+	    case jamdb_oracle_crypt:validate(Resp,KeyConn) of
+		ok ->
+		    {ok, State2} = send_req(ver, State),
+		    handle_login_resp(State2, Timeout);
+    		{error, ErrorCode} ->
+		    ErrorCode
+	    end;
+	{?TTI_VERSION, Ver} ->
+	    {ok, State#oraclient{conn_state = connected, server = Ver}}
+    end.
 
 handle_login_resp(#oraclient{socket=Socket} = State, Timeout) ->
     case recv(Socket, Timeout) of
@@ -135,55 +153,54 @@ handle_login_resp(#oraclient{socket=Socket} = State, Timeout) ->
 	    {ok, State2} = send_req(sess, State),
 	    handle_login_resp(State2, Timeout);
         {ok, ?TNS_DATA, <<?TTI_RPA,PacketBody/bits>>} ->
-	    case ?DECODER:decode_token(tti, PacketBody) of 
-		{?TTI_SESS, Sess, Salt} ->
-		    {ok, State2} = send_req(auth, State, Sess, Salt),
-		    handle_login_resp(State2, Timeout);
-		{?TTI_AUTH, Resp} ->
-		    #oraclient{conn_key = KeyConn} = State,
-		    case jamdb_oracle_crypt:validate(Resp,KeyConn) of
-			ok ->
-			    {ok, State2} = send_req(ver, State),
-			    handle_login_resp(State2, Timeout);
-    			{error, ErrorCode} ->
-			    ErrorCode
-		    end;
-		{?TTI_VERSION, Ver} ->
-		    {ok, State#oraclient{conn_state = connected, server = Ver}}
-	    end;
+            login(State, PacketBody, Timeout);
+        {ok, ?TNS_DATA, <<?TTI_WRN,ResultData/bits>>} ->
+            case ?DECODER:decode_token(wrn, ResultData) of
+                <<?TTI_RPA,PacketBody/bits>> -> 
+                    login(State, PacketBody, Timeout);
+                PacketBody -> 
+                    PacketBody
+            end;
         {ok, ?TNS_REFUSE, <<_ResultData:32,PacketBody/bits>>} ->
             PacketBody;
         {ok, _Type, _PacketBody} ->
-	    login_failed;
+            login_failed;
         {error, _Type, ErrorCode} ->
-	    ErrorCode
-    end.
+            ErrorCode
+     end.
 
+handle_error(socket, Reason, State) ->
+    _ = disconnect(State, 0),
+    {error, socket, Reason, State#oraclient{conn_state = disconnected}};
+handle_error(Type, Reason, State) ->
+    {error, Type, Reason, State}.
 
 send_req(auth, #oraclient{env=Env} = State, Sess, Salt) ->
     {Data,KeyConn} = ?ENCODER:encode_record(auth, Env, Sess, Salt),
-    send(State#oraclient{conn_key = KeyConn}, ?TNS_DATA, Data).
+    send(State#oraclient{conn_key = KeyConn}, ?TNS_DATA, Data);
+send_req(func, State, Data, Timeout) ->
+    {ok, State2} = send(State, ?TNS_DATA, Data),
+    handle_empty_resp(State2, Timeout).
 
 send_req(login, #oraclient{env=Env} = State) ->
     Data = ?ENCODER:encode_record(login, Env),
     send(State, ?TNS_CONNECT, Data);
-send_req(Request, #oraclient{env=Env} = State) when is_atom(Request) ->
+send_req(Request, #oraclient{env=Env} = State) ->
     Data = ?ENCODER:encode_record(Request, Env),
-    send(State, ?TNS_DATA, Data);
-send_req(Request, State) when is_integer(Request) ->
+    send(State, ?TNS_DATA, Data).
+    
+send_req(fetch, State, Request) when is_integer(Request) ->
     Data = ?ENCODER:encode_record(fetch, Request),
-    send(State, ?TNS_DATA, Data).
-
-system_query(State, Data, Timeout) ->
-    {ok, State2} = send(State, ?TNS_DATA, Data),
-    handle_empty_resp(State2, Timeout).
-
-send_query_req(State, {Query, Bind}) ->
-    Data = ?ENCODER:encode_query(Query, Bind),
-    send(State#oraclient{out_params = [get_out_params(B) || B <- Bind]}, ?TNS_DATA, Data);
-send_query_req(State, Query) ->
-    Data = ?ENCODER:encode_query(Query,[]),
-    send(State, ?TNS_DATA, Data).
+    send(State, ?TNS_DATA, Data);
+send_req(fetch, #oraclient{server=Ver} = State, Request) when is_tuple(Request) ->
+    Data = ?ENCODER:encode_record(fetch, erlang:append_element(Request, Ver)),
+    send(State, ?TNS_DATA, Data);
+send_req(query, #oraclient{server=Ver} = State, {Query, Bind}) ->
+    Data = ?ENCODER:encode_record(fetch, {0, Query, [get_param(data, B) || B <- Bind], Ver}),
+    send(State#oraclient{params = [get_param(format, B) || B <- Bind]}, ?TNS_DATA, Data);
+send_req(query, #oraclient{server=Ver} = State, Query) ->
+    Data = ?ENCODER:encode_record(fetch, {0, Query, [], Ver}),
+    send(State, ?TNS_DATA, Data). 
 
 handle_empty_resp(State, Timeout) ->
     case handle_resp([], State, Timeout) of
@@ -200,20 +217,21 @@ handle_resp(TokensBufer, State = #oraclient{socket=Socket}, Timeout) ->
         {ok, ?TNS_MARKER, _BinaryData} ->
 	    {ok, State2} = send(State, ?TNS_MARKER, <<1,0,2>>),
 	    handle_resp([], State2, Timeout);
-        {error, _Type, _ErrorCode} = Error ->
-            _ = disconnect(State),
-            State2 = State#oraclient{conn_state = disconnected},
-            erlang:append_element(Error, State2)
+        {error, Type, Reason} ->
+            handle_error(Type, Reason, State)
     end.
 
 
 handle_resp(Data, TokensBufer, State, Timeout) ->
     case ?DECODER:decode_token(Data, TokensBufer) of
+	{cursor, Cursor, RowFormat} ->
+	    {ok, State2} = send_req(fetch, State, {Cursor, [], []}),
+       	    handle_resp({Cursor, RowFormat, []}, State2, Timeout);
 	{RetCode, RowNumber, Cursor, RowFormat, Rows} ->
             #oraclient{cursors = Cursors} = State,
 	    case get_result(RetCode, RowNumber, RowFormat, Rows) of
 		more ->
-		    {ok, State2} = send_req(Cursor, State),
+		    {ok, State2} = send_req(fetch, State, Cursor),
         	    handle_resp({Cursor, RowFormat, Rows}, State2, Timeout);
                 Result ->                
                     erlang:append_element(Result, State#oraclient{cursors = get_cursors(Cursor, Cursors)})
@@ -247,11 +265,20 @@ get_cursors(Cursor, Cursors) when Cursor > 0 ->
     [Cursor|Cursors];
 get_cursors(Cursor, Cursors) when Cursor =:= 0 ->
     Cursors.
-    
-get_out_params(Bind) ->
+
+get_param(data, {_Param, Data}) ->
+    Data;
+get_param(data, Data) ->
+    Data;    
+get_param(format, {Param, Data}) ->
+    get_param(Param, Data);
+get_param(format, Data) ->
+    get_param(in, Data);    
+get_param(Param, Data) ->
     {<<>>, Type, Scale, Length, Charset} = 
-    ?DECODER:decode_token(oac, ?ENCODER:encode_token(oac, Bind)),
-    #format{data_type=Type,
+    ?DECODER:decode_token(oac, ?ENCODER:encode_token(oac, Data)),
+    #format{param=Param,
+            data_type=Type,
             data_length=Length,
             scale=Scale,
             locale=Charset}.
@@ -268,8 +295,7 @@ send(State, PacketType, Data) ->
         ok ->
             send(State, PacketType, <<>>);
         {error, Reason} ->
-            State2 = State#oraclient{conn_state = disconnected},
-            {error, socket, Reason, State2}
+            handle_error(socket, Reason, State)
     end.
 
 recv(Socket, Timeout) ->
