@@ -34,19 +34,19 @@ Getting Started
 3> {ok, Result} = jamdb_oracle:sql_query(Pid, "select 1 as one, 2 as two, 3 as three from dual").
 {ok,[{result_set,[<<"ONE">>,<<"TWO">>,<<"THREE">>],
                  [],
-                 [[{number,1},{number,2},{number,3}]]}]}
+                 [[{1},{2},{3}]]}]}
 
 %% Select with parameters
 4> {ok, Result2} = jamdb_oracle:sql_query(Pid, {"select 1 as one, sysdate, rowid from dual where 1=:1 ",[1]}).
 {ok,[{result_set,[<<"ONE">>,<<"SYSDATE">>,<<"ROWID">>],
                  [],
-                 [[{number,1},{{2016,3,3},{14,9,57}},{rowid,142,1,1417,0}]]}]}
+                 [[{1},{{2016,8,1},{13,14,15}},"AAAACOAABAAAAWJAAA"]]}]}
 
 ```
 
 Author
 ======
-Michael Vstavsky
+Mykhailo Vstavskyi
 
 Contributors
 ============

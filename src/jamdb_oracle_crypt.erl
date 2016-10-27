@@ -28,16 +28,14 @@ o5logon(Sess, KeySess, Pass, Bits) when is_binary(Sess) ->
     KeyConn = conn_key(CatKey, Bits),
     AuthPass = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeyConn, IVec, pad(Pass)),
     {bin2hexstr(AuthPass), bin2hexstr(AuthSess), bin2hexstr(KeyConn)}.
-      
+
 validate(Resp, KeyConn) ->
     IVec = <<0:128>>,
     Bits = length(KeyConn) * 4,
     Data = jose_jwa_aes:block_decrypt({aes_cbc, Bits}, hexstr2bin(KeyConn), IVec, hexstr2bin(Resp)),    
     case binary:match(Data,<<"SERVER_TO_CLIENT">>) of
-	nomatch ->
-	    {error, validate_failed};
-	_ ->
-	    ok
+	nomatch -> error;
+	_ -> ok
     end.
 
 %%====================================================================
@@ -50,33 +48,32 @@ conn_key(Data, Bits) when Bits =:= 192 ->
     <<(erlang:md5(binary:part(Data,0,16)))/binary,
       (binary:part(erlang:md5(binary:part(Data,16,8)),0,8))/binary>>.
 
-cat_key(<<>>,<<>>,Acc) ->
-    list_to_binary([<<B>> || B <- Acc]);
-cat_key(<<B1,Rest1/bits>>,<<B2,Rest2/bits>>,Acc) ->
-    C = [B || <<B:1/little-signed-integer-unit:8>> <= <<(B1 bxor B2)>>],
-    cat_key(<<Rest1/binary>>,<<Rest2/binary>>,Acc++C).
-          
+cat_key(<<>>,<<>>,S) ->
+    list_to_binary(S);
+cat_key(<<H, X/bits>>,<<L, Y/bits>>,S) ->
+    cat_key(X,Y,S++[H bxor L]).
+
 norm(Data) ->
     S = norm(list_to_binary(Data),[]),
-    N = (8 - (length(S) rem 8 )) rem 8,
-    list_to_binary(S++lists:duplicate(N,0)).
+    N = (8 - (length(S) rem 8 )) rem 8,    
+    <<(list_to_binary(S))/binary, (binary:copy(<<0>>, N))/binary>>.
 
-norm(<<>>,Acc) ->
-    Acc;
-norm(<<U/utf8,R/binary>>,Acc) ->
+norm(<<>>,S) ->
+    S;
+norm(<<U/utf8,R/binary>>,S) ->
     C = case U of
 	N when N > 255 -> 63;
 	N when N >= 97, N =< 122 -> N-32;
 	N -> N
     end,
-    norm(R,Acc++[0,C]).
-    
-pad(S) ->
-    P = 16 * ((16 + length(S)) div 16 + 1) - (16 + length(S)),
-    <<(pad(16,<<>>))/binary,(pad(P,list_to_binary(S)))/binary>>.
+    norm(R,S++[0,C]).
 
-pad(P, Bin) -> << Bin/binary, (binary:copy(<<P>>, P))/binary >>.
-    
+pad(S) ->
+    P = 16 - (length(S) rem 16),
+    <<(pad(16,<<>>))/binary, (pad(P,list_to_binary(S)))/binary>>.
+
+pad(P, Bin) -> <<Bin/binary, (binary:copy(<<P>>, P))/binary>>.
+
 hexstr2bin(S) ->
     list_to_binary(hexstr2list(S)).
 
