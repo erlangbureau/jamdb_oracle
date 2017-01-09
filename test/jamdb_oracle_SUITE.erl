@@ -4,15 +4,6 @@
 
 -compile(export_all).
 
--define(ConnOpts, [
-	{host, "jamdb-oracle-dev.erlangbureau.dp.ua"},
-	{port, 1521},
-	{user, "jamdbtest"},
-	{password, "jamdbtest"},
-	{sid, "JAMDBTEST"},
-	{app_name, "jamdbtest"}
-]).
-
 %% Common Test callbacks
 
 all() ->
@@ -69,7 +60,7 @@ groups() ->
     ].
 
 init_per_suite(Config) ->
-    {ok, ConnRef} = jamdb_oracle:start(?ConnOpts),
+    {ok, ConnRef} = jamdb_oracle:start(ct:get_config(connection_options)),
     [{conn_ref, ConnRef}|Config].
 
 end_per_suite(Config) ->
