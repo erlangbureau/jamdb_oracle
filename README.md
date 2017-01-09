@@ -44,6 +44,13 @@ Getting Started
 
 ```
 
+Running Tests
+======
+First, save `test/test.config.example` as `test/test.config` and supply
+connection details for your test database. Once the connection configuration
+is saved, run the test suite with `rebar3 ct`.
+
+
 Author
 ======
 Mykhailo Vstavskyi
