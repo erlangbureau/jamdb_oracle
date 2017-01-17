@@ -23,12 +23,13 @@
 -type procedure_result() :: {proc_result, return_status(), out_params() | metainfo()}.
 -type result() :: affected_rows() | result_set() | procedure_result().
 -type query_result() :: {ok, [result()], state()}.
--type env() :: 
+-type env() ::
         {host, string()} |
         {port, non_neg_integer()} |
         {user, string()} |
         {password, string()} |
         {sid, string()} |
+        {service_name, string()} |
         {app_name, string()}.
 -type options() :: [env()].
 
