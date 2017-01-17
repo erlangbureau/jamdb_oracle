@@ -2,21 +2,12 @@
 
 -compile(export_all).
 
--define(ConnOpts, [
-	{host, "jamdb-oracle-dev.erlangbureau.dp.ua"},
-	{port, 1521},
-	{user, "jamdbtest"},
-	{password, "jamdbtest"},
-	{sid, "JAMDBTEST"},
-	{app_name, "jamdbtest"}
-]).
-
 -define(query(ConnRef,Query), jamdb_oracle:sql_query(ConnRef,Query)).
 
 %% Test callbacks
 
 all() ->
-    {ok, ConnRef} = jamdb_oracle:start(?ConnOpts),
+    {ok, ConnRef} = jamdb_oracle:start(ct:get_config(connection_options)),
     
     {ok, [{affected_rows,0}]} = 
     ?query(ConnRef, "create table t_number ( C_NUMBER NUMBER )"),

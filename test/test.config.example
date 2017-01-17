@@ -1,0 +1,8 @@
+% Copy this file to test/test.config and modify as needed.
+{connection_options, [{host, "somehost.com"},
+                      {port, 1521},
+                      {user, "someuser"},
+                      {password, "somepassword"},
+                      {service_name, "someservicename"},
+                      % {sid, "or_sid"},
+                      {app_name, "someappname"}]}.
