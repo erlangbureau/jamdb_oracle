@@ -2,16 +2,9 @@
 
 -include_lib("common_test/include/ct.hrl").
 
--compile(export_all).
+-include("jamdb_oracle_test.hrl").
 
--define(ConnOpts, [
-	{host, "jamdb-oracle-dev.erlangbureau.dp.ua"},
-	{port, 1521},
-	{user, "jamdbtest"},
-	{password, "jamdbtest"},
-	{sid, "JAMDBTEST"},
-	{app_name, "jamdbtest"}
-]).
+-compile(export_all).
 
 %% Common Test callbacks
 
