@@ -1,11 +1,12 @@
 {application, jamdb_oracle, [
     {description, "Erlang driver for Oracle"},
-    {vsn, "0.0.1"},
-    {id, "git"},
+    {vsn, "0.0.3"},
     {modules, []},
     {registered, []},
-    {applications, [
-        kernel,
-        stdlib
-    ]}
- ]}.
+    {applications, [kernel,stdlib]},
+    {included_applications, [jose]},
+    {files, [src,include,test,"rebar.config"]},
+    {maintainers, ["Mykhailo Vstavskyi","Sergiy Kostyushkin"]},
+    {licenses, ["MIT"]},
+    {links, [{"Github", "https://github.com/erlangbureau/jamdb_oracle"}]}
+    ]}.
