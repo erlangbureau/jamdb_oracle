@@ -23,6 +23,7 @@ Getting Started
     {user, "jamdbtest"},
     {password, "jamdbtest"},
     {sid, "JAMDBTEST"},
+    %%{service_name, "JAMDBTEST"},
     {app_name, "jamdbtest"}
 ].
 
