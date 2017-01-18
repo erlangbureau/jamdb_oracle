@@ -42,20 +42,13 @@ handle_call({sql_query, Query, Timeout}, _From, State) ->
     try jamdb_oracle_conn:sql_query(State, Query, Timeout) of
         {ok, Result, State2} -> 
             {reply, {ok, Result}, State2};
-        {error, socket, Reason, State2} ->
-            {ok, State3} = jamdb_oracle_conn:reconnect(State2), %% TODO error
-            {reply, {error, socket, Reason}, State3};
         {error, Type, Reason, State2} ->
             {reply, {error, Type, Reason}, State2}
     catch
-        _Class:Reason ->
+        error:_ ->
             Stacktrace = erlang:get_stacktrace(),
-            ErrDesc = [
-                {reason, Reason},
-                {stacktrace, Stacktrace}
-            ],
             {ok, State2} = jamdb_oracle_conn:reconnect(State),
-            {reply, {error, local, {unknown_error, ErrDesc}}, State2}
+            {reply, {error, local, Stacktrace}, State2}
     end;
 %handle_call({prepare, Query}, _From, State) ->
 %handle_call({execute, Query}, _From, State) ->
