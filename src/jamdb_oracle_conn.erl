@@ -29,6 +29,7 @@
         {user, string()} |
         {password, string()} |
         {sid, string()} |
+        {service_name, string()} |
         {app_name, string()}.
 -type options() :: [env()].
 
