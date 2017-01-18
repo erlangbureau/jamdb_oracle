@@ -85,10 +85,11 @@
 
 -define(ZONEIDMAP, [
 {100, "America/New_York"},
+{101, "America/Chicago"},
 {103, "America/Los_Angeles"},
 {250, "Asia/Shanghai"},
 {254, "Asia/Hong_Kong"},
-{255, "Asia/Taipei"},
+{267, "Asia/Tokyo"},
 {402, "Europe/Moscow"},
 {405, "Europe/Stockholm"},
 {408, "Europe/Kiev"}
