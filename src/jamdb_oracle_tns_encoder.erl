@@ -50,9 +50,12 @@ encode_record(login, EnvOpts) ->
     Host            = proplists:get_value(host, EnvOpts, ?DEF_HOST), 
     Port            = proplists:get_value(port, EnvOpts, ?DEF_PORT),
     Sid             = proplists:get_value(sid, EnvOpts, ?DEF_SID),
+    ServiceName     = proplists:get_value(service_name, EnvOpts),
     AppName         = proplists:get_value(app_name, EnvOpts, "jamdb"),
     Data = unicode:characters_to_binary(
-    "(DESCRIPTION=(CONNECT_DATA=(SID="++Sid++
+    "(DESCRIPTION=(CONNECT_DATA=("++ case ServiceName of
+        undefined -> "SID="++Sid;
+                _ -> "SERVICE_NAME="++ServiceName end ++
     ")(CID=(PROGRAM="++AppName++
     ")(HOST="++UserHost++")(USER="++User++
     ")))(ADDRESS=(PROTOCOL=TCP)(HOST="++Host++
