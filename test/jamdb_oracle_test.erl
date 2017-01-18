@@ -1,15 +1,8 @@
 -module(jamdb_oracle_test).
 
--compile(export_all).
+-include("jamdb_oracle_test.hrl").
 
--define(ConnOpts, [
-	{host, "jamdb-oracle-dev.erlangbureau.dp.ua"},
-	{port, 1521},
-	{user, "jamdbtest"},
-	{password, "jamdbtest"},
-	{sid, "JAMDBTEST"},
-	{app_name, "jamdbtest"}
-]).
+-compile(export_all).
 
 -define(query(ConnRef,Query), jamdb_oracle:sql_query(ConnRef,Query)).
 
