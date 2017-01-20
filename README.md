@@ -45,6 +45,11 @@ Getting Started
 
 ```
 
+Running Tests
+======
+First, supply connection details for your test database in test/jamdb_oracle_test.hrl. Once the connection configuration
+is saved, run the test suite with `rebar3 ct`.
+ 
 Author
 ======
 Mykhailo Vstavskyi
