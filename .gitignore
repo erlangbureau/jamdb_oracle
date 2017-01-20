@@ -6,6 +6,7 @@ deps
 erl_crash.dump
 ebin
 _build/
+test/jamdb_oracle_test.hrl
 rel/example_project
 .concrete/DEV_MODE
 .rebar
