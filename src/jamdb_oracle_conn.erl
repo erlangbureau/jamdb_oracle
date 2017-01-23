@@ -74,7 +74,7 @@ disconnect(#oraclient{env=Env}, _Timeout) ->
 
 -spec reconnect(state()) -> {ok, state()}.
 reconnect(State) ->
-    {ok, InitOpts} = disconnect(State),
+    {ok, InitOpts} = disconnect(State, 0),
     connect(InitOpts).
 
 -spec sql_query(state(), string() | tuple()) -> query_result().
@@ -104,13 +104,18 @@ loop(Values) ->
     receive {get, From} -> From ! Values, loop(Values) end.
 
 %% internal
-handle_login_resp(State = #oraclient{socket=Socket}, Timeout) ->
+handle_login_resp(State = #oraclient{socket=Socket, env=Env}, Timeout) ->
     case recv(Socket, Timeout) of
         {ok, ?TNS_DATA, BinaryData} ->
             case handle_token(BinaryData, State) of
                 {ok, State2} -> handle_login_resp(State2, Timeout);
                 State2 -> {ok, State2}                  %connected
             end;
+        {ok, ?TNS_REDIRECT, BinaryData} ->
+            case ?DECODER:decode_token(net, {BinaryData, Env}) of 
+                {ok, Opts} -> reconnect(State#oraclient{env=Opts});
+                _ -> handle_error(remote, BinaryData, State)
+            end;            
         {ok, ?TNS_RESEND, _BinaryData} ->
             {ok, State2} = send_req(login, State),
             handle_login_resp(State2, Timeout);
@@ -120,7 +125,6 @@ handle_login_resp(State = #oraclient{socket=Socket}, Timeout) ->
         {ok, ?TNS_MARKER, _BinaryData} ->
 	    send_req(marker, State, Timeout);
         {ok, ?TNS_REFUSE, BinaryData} ->
-            io:format("~s~n", [BinaryData]),
             handle_error(remote, BinaryData, State);
         {error, Type, Reason} ->
             handle_error(Type, Reason, State)
@@ -138,7 +142,7 @@ handle_token(<<Token, Data/binary>>, State) ->
                     To = spawn(fun() -> loop(Values) end),
                     case jamdb_oracle_crypt:validate(Resp,KeyConn) of
                         ok -> State#oraclient{auth=To, conn_state=connected, server=Ver};
-                        error -> handle_error(remote, <<>>, State)
+                        error -> handle_error(remote, Resp, State)
                     end
             end;	
 	?TTI_WRN -> handle_token(?DECODER:decode_token(wrn, Data), State);
@@ -150,6 +154,7 @@ handle_error(socket, Reason, State) ->
     _ = disconnect(State, 0),
     {error, socket, Reason, State#oraclient{conn_state=disconnected}};
 handle_error(Type, Reason, State) ->
+    io:format("~s~n", [BinaryData]),
     {error, Type, Reason, State}.
 
 send_req(auth, #oraclient{env=Env} = State, Sess, Salt) ->
