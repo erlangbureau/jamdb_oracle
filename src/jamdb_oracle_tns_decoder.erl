@@ -8,7 +8,7 @@
 -include("jamdb_oracle.hrl").
 
 %% API
-decode_packet(<<PacketSize:16, 0:16, ?TNS_DATA, 0:8, 0:16, _DataFlags:16, Rest/bits>>) ->
+decode_packet(<<PacketSize:16, 0:16, ?TNS_DATA, _Flags:8, 0:16, _DataFlags:16, Rest/bits>>) ->
     BodySize = PacketSize-10,
     case Rest of
         <<PacketBody:BodySize/binary, Rest2/bits>> ->
@@ -16,7 +16,14 @@ decode_packet(<<PacketSize:16, 0:16, ?TNS_DATA, 0:8, 0:16, _DataFlags:16, Rest/b
         _ ->
             {error, more}
     end;
-decode_packet(<<PacketSize:16, 0:16, Type, 0:8, 0:16, Rest/bits>>) ->
+decode_packet(<<PacketSize:16, 0:16, ?TNS_REDIRECT, _Flags:8, 0:16, Length:16, Rest/bits>>) when Length > PacketSize-8 ->
+    case Rest of
+        <<>> ->
+            {error, more};
+        _ ->
+            {ok, ?TNS_REDIRECT, Rest, <<>>}
+    end;
+decode_packet(<<PacketSize:16, 0:16, Type, _Flags:8, 0:16, Rest/bits>>) ->
     BodySize = PacketSize-8,
     case Rest of
         <<PacketBody:BodySize/binary, Rest2/bits>> ->
@@ -41,6 +48,12 @@ decode_token(<<Token, Data/binary>>, TokensBufer) ->
         _ -> 
     	    {error, undefined}
     end;
+decode_token(net, {Data, EnvOpts}) ->
+    Values = lists:map(fun(L) -> list_to_tuple(string:tokens(L, "=")) end, 
+        string:tokens(binary_to_list(Data), "()")),
+    Host = proplists:get_value("HOST", Values),     
+    Port = proplists:get_value("PORT", Values, ?DEF_PORT),
+    {ok, lists:append([{host, Host}, {port, list_to_integer(Port)}], EnvOpts)}.  
 decode_token(rpa, Data) ->
     Count = decode_sb4(Data),
     Values = decode_keyval(decode_next(Data), Count, []),
