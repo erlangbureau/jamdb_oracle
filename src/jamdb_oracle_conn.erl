@@ -112,10 +112,8 @@ handle_login_resp(State = #oraclient{socket=Socket, env=Env}, Timeout) ->
                 State2 -> {ok, State2}                  %connected
             end;
         {ok, ?TNS_REDIRECT, BinaryData} ->
-            case ?DECODER:decode_token(net, {BinaryData, Env}) of 
-                {ok, Opts} -> reconnect(State#oraclient{env=Opts});
-                _ -> handle_error(remote, BinaryData, State)
-            end;            
+            {ok, Opts} = ?DECODER:decode_token(net, {BinaryData, Env}),
+            reconnect(State#oraclient{env=Opts});
         {ok, ?TNS_RESEND, _BinaryData} ->
             {ok, State2} = send_req(login, State),
             handle_login_resp(State2, Timeout);
