@@ -154,7 +154,7 @@ handle_error(socket, Reason, State) ->
     _ = disconnect(State, 0),
     {error, socket, Reason, State#oraclient{conn_state=disconnected}};
 handle_error(Type, Reason, State) ->
-    io:format("~s~n", [BinaryData]),
+    io:format("~s~n", [Reason]),
     {error, Type, Reason, State}.
 
 send_req(auth, #oraclient{env=Env} = State, Sess, Salt) ->
