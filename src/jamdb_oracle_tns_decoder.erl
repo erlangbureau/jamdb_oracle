@@ -53,7 +53,7 @@ decode_token(net, {Data, EnvOpts}) ->
     Values = lists:map(fun(L) -> list_to_tuple(string:tokens(L, "=")) end, 
              string:tokens(binary_to_list(Data), "()")),
     Host = proplists:get_value("HOST", Values),
-    Port = proplists:get_value("PORT", Values, ?DEF_PORT),
+    Port = proplists:get_value("PORT", Values),
     {ok, [{host, Host}, {port, list_to_integer(Port)}]++EnvOpts};
 decode_token(rpa, Data) ->
     Count = decode_sb4(Data),
