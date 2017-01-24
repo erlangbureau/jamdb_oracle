@@ -121,7 +121,7 @@ handle_login_resp(State = #oraclient{socket=Socket, env=Env}, Timeout) ->
             {ok, State2} = send_req(pro, State),
             handle_login_resp(State2, Timeout);
         {ok, ?TNS_MARKER, _BinaryData} ->
-	    send_req(marker, State, Timeout);
+            send_req(marker, State, Timeout);
         {ok, ?TNS_REFUSE, BinaryData} ->
             handle_error(remote, BinaryData, State);
         {error, Type, Reason} ->
@@ -187,6 +187,10 @@ send_req(fetch, #oraclient{auto=Auto,server=Ver} = State, {Cursor, Def}) ->
 send_req(fetch, #oraclient{fetch=Fetch} = State, Cursor) ->
     Data = ?ENCODER:encode_record(fetch, {Cursor, Fetch}),
     send(State, ?TNS_DATA, Data);
+send_req(query, State, {Query, Bind}) when is_map(Bind) ->
+    Data = lists:filtermap(fun(L) -> case string:chr(L, $:) of 0 -> false; I -> {true, lists:nthtail(I, L)} end end, 
+        string:tokens(Query," \t;,)")),
+    send_req(query, State, {Query, get_param(Data, Bind, [])});
 send_req(query, #oraclient{auto=Auto,fetch=Fetch,server=Ver} = State, {Query, Bind}) ->
     {Type, Fetch2} = get_param(type, {Query, Fetch}), 
     Data = ?ENCODER:encode_record(fetch, {0, Type, Query, [get_param(data, B) || B <- Bind], [], Auto, Fetch2, Ver}),
@@ -197,7 +201,7 @@ handle_resp(TokensBufer, State = #oraclient{socket=Socket}, Timeout) ->
         {ok, ?TNS_DATA, Data} ->
             handle_resp(Data, TokensBufer, State, Timeout);
         {ok, ?TNS_MARKER, _Data} ->
-	    send_req(marker, State, Timeout);
+            send_req(marker, State, Timeout);
         {error, Type, Reason} ->
             handle_error(Type, Reason, State)
     end.
@@ -248,6 +252,11 @@ get_result(Cursor, Cursors) when Cursor > 0 ->
 get_result(Cursor, Cursors) when Cursor =:= 0 ->
     Cursors.
 
+get_param([], _M, Acc) ->
+    Acc;
+get_param([H|L], M, Acc) ->
+    get_param(L, M, Acc++[maps:get(list_to_atom(H), M)]).
+    
 get_param(type, {Query, Fetch}) ->
     case lists:nth(1, string:tokens(string:to_upper(Query)," \t")) of
         "SELECT" -> {1, Fetch};
