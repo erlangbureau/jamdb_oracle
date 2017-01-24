@@ -54,7 +54,7 @@ decode_token(net, {Data, EnvOpts}) ->
              string:tokens(binary_to_list(Data), "()")),
     Host = proplists:get_value("HOST", Values),
     Port = proplists:get_value("PORT", Values, ?DEF_PORT),
-    {ok, lists:append([{host, Host}, {port, list_to_integer(Port)}], EnvOpts)};
+    {ok, [{host, Host}, {port, list_to_integer(Port)}]++EnvOpts};
 decode_token(rpa, Data) ->
     Count = decode_sb4(Data),
     Values = decode_keyval(decode_next(Data), Count, []),
