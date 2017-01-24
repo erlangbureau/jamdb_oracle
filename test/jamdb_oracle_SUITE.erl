@@ -24,7 +24,8 @@ groups() ->
     [
         {basic_operations, [sequence], [
             select,
-            select_with_bind
+            select_with_bind,
+            select_with_named_bind
         ]},
         {number_datatypes, [sequence], [
             t_number,
@@ -127,6 +128,13 @@ select_with_bind(Config) ->
     Result = [{result_set, [<<"ONE">>, <<"TWO">>, <<"THREE">>], [], [ ["1","2","3"] ]}],
     {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
 
+select_with_named_bind(Config) ->
+    ConnRef = ?config(conn_ref, Config),
+    Query = {"select to_date(:str,:fmt) to_date from dual where 1=:one", 
+                #{fmt => "'YYYY-MM-DD HH24:MI:SS'", one => 1, str => "'2016-08-01 01:02:03'" }},
+    Result = [{result_set, [<<"TO_DATE">>], [], [ [{{2016,8,1},{1,2,3}}] ]}],
+    {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
+    
 t_number(Config) ->
     ConnRef = ?config(conn_ref, Config),
     Table = t_number,
@@ -327,8 +335,8 @@ with_output_params(Config) ->
 
 with_input_and_output_params(Config) ->
     ConnRef = ?config(conn_ref, Config),
-    Query = {"begin with_input_and_output_params(:1, :2); end;",
-             [{in, "select 1 one, 2 two, 3 three from dual"}, {out, cursor}]},
+    Query = {"begin with_input_and_output_params(:i1, :o2); end;",
+             #{o2 => {out, cursor}, i1 => {in, "select 1 one, 2 two, 3 three from dual"}}},
     Result = [{result_set, [<<"ONE">>, <<"TWO">>, <<"THREE">>], [], [ [{1},{2},{3}] ]}],
     {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
 
