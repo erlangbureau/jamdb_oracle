@@ -186,6 +186,8 @@ decode_token(lob, Data, _Loc) ->
     catch
 	error:_ -> {ok, [eof]}
     end;
+decode_token(rpa, Data, []) ->
+    {ok, [decode_ub4(Data)]};
 decode_token(rpa, Data, {_Ver, RowFormat}) ->
     decode_token(rpa, Data, {0, RowFormat, []});
 decode_token(rpa, Data, {0, RowFormat, Rows}) ->
@@ -456,6 +458,8 @@ decode_sb4(<<Length,Rest/bits>>) ->
 decode_dalc(<<0,_Rest/bits>>) -> [];
 decode_dalc(<<254,Rest/bits>>) ->
     decode_chr(Rest, <<>>);
+decode_dalc(<<Length,Rest:Length/binary>>) ->
+    binary_to_list(Rest);
 decode_dalc(Data) ->
     decode_chr(decode_next(ub4,Data)).
 
@@ -562,6 +566,7 @@ last([E|Es]) -> last(E, Es).
 last(_, [E|Es]) -> last(E, Es);
 last(E, []) -> E.
 
+decode_version(undefined) -> 0;
 decode_version(Data) ->
     L = integer_to_list(list_to_integer(Data), 16),
     list_to_integer([hd(L)], 16).
