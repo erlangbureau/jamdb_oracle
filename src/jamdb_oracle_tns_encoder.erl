@@ -24,6 +24,8 @@ encode_packet(Type, Data) ->
 encode_record(auth, EnvOpts, Sess, Salt) ->
     User            = proplists:get_value(user, EnvOpts),
     Pass            = proplists:get_value(password, EnvOpts),
+    Role            = proplists:get_value(role, EnvOpts, 0), 
+    Prelim          = proplists:get_value(prelim, EnvOpts, 0),
     {AuthPass, AuthSess, KeyConn} = 
     case Salt of
         undefined -> jamdb_oracle_crypt:o5logon(Sess, User, Pass, 128);
@@ -34,7 +36,7 @@ encode_record(auth, EnvOpts, Sess, Salt) ->
     (encode_ub2(?TTI_AUTH))/binary,
     1,
     (encode_sb2(length(User)))/binary,
-    (encode_sb2(1 bor 256))/binary,	%logon mode
+    (encode_sb2((Role * 32) bor (Prelim * 128) bor 1 bor 256))/binary, %logon mode
     1,
     (encode_sb2(2))/binary,	        %keyval count
     1,1,
@@ -80,13 +82,15 @@ encode_record(sess, EnvOpts) ->
     {ok, UserHost}  = inet:gethostname(),
     UserPID         = os:getpid(),
     User            = proplists:get_value(user, EnvOpts),
+    Role            = proplists:get_value(role, EnvOpts, 0), 
+    Prelim          = proplists:get_value(prelim, EnvOpts, 0),
     AppName         = proplists:get_value(app_name, EnvOpts, "jamdb"),
     <<
     ?TTI_FUN,
     (encode_ub2(?TTI_SESS))/binary,
     1,
     (encode_sb2(length(User)))/binary,
-    (encode_sb2(1))/binary,	%logon mode
+    (encode_sb2((Role * 32) bor (Prelim * 128) bor 1))/binary, %logon mode
     1,
     (encode_sb2(4))/binary,	%keyval count
     1,1,
@@ -125,6 +129,7 @@ encode_record(dty, _EnvOpts) ->
     167,167,1,0,168,168,1,0,169,169,1,0,170,170,1,0,171,171,1,0,173,173,1,0,174,174,1,0,
     175,175,1,0,176,176,1,0,177,177,1,0,178,178,1,0,179,179,1,0,180,180,1,0,181,181,1,0,
     182,182,1,0,183,183,1,0,193,193,1,0,194,194,1,0,208,208,1,0,231,231,1,0,233,233,1,0,          
+    245,245,1,0,
     2,2,10,0,3,2,10,0,4,2,10,0,5,1,1,0,6,2,10,0,7,2,10,0,9,1,1,0,12,12,10,0,13,0,14,0,15,
     23,1,0,16,0,17,0,18,0,19,0,20,0,21,0,22,0,39,120,1,0,58,0,68,2,10,0,69,0,70,0,74,0,
     76,0,91,2,10,0,94,1,1,0,95,23,1,0,96,96,1,0,97,96,1,0,104,11,1,0,105,0,108,109,1,0,
@@ -136,6 +141,26 @@ encode_record(pro, _EnvOpts) ->
     ?TTI_PRO,
     6,5,4,3,2,1,0,
     98,101,97,109,0
+    >>;
+encode_record(spfp, _EnvOpts) ->
+    <<
+    ?TTI_FUN,
+    (encode_ub2(?TTI_SPFP))/binary,
+    1,1,100,1,1,0,0,0,0,0
+    >>;
+encode_record(start, Request) ->
+    <<
+    ?TTI_FUN,
+    (encode_ub2(?TTI_STRT))/binary,
+    (encode_sb4(Request))/binary,   %mode 0 norestrict, 1 restrict, 16 force
+    1
+    >>;
+encode_record(stop, Request) ->
+    <<
+    ?TTI_FUN,
+    (encode_ub2(?TTI_STOP))/binary,
+    (encode_sb4(Request))/binary,   %mode 2 immediate, 4 normal, 8 final, 64 abort, 128 tran
+    1
     >>;
 encode_record(tran, Request) ->
     <<
@@ -150,7 +175,6 @@ encode_record(fetch, {Cursor, Fetch}) ->
     (encode_sb4(Fetch))/binary	        %rows to fetch
     >>;
 encode_record(fetch, {Cursor, Type, Query, Bind, Def, Auto, Fetch, Ver}) ->
-
     QueryLen = length(Query),
     BindLen = length(Bind),
     DefLen = length(Def),
