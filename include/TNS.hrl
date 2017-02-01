@@ -71,6 +71,8 @@
 -define(TTI_ROLLBACK, 15).
 -define(TTI_CANCEL, 20).
 -define(TTI_DSCRARR, 43).
+-define(TTI_STRT, 48).
+-define(TTI_STOP, 49).
 -define(TTI_VERSION, 59).
 -define(TTI_K2RPC, 67).
 -define(TTI_ALL7, 71).
