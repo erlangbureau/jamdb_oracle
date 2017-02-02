@@ -5,7 +5,7 @@
     {registered, []},
     {applications, [kernel,stdlib]},
     {included_applications, [jose]},
-    {files, [src,include,test,"rebar.config"]},
+    {files, [src,include,test,"rebar.config","mix.exs"]},
     {maintainers, ["Mykhailo Vstavskyi","Sergiy Kostyushkin"]},
     {licenses, ["MIT"]},
     {links, [{"Github", "https://github.com/erlangbureau/jamdb_oracle"}]}
