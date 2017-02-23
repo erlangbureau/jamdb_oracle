@@ -275,6 +275,7 @@ encode_token(rxd, cursor) -> encode_sb4(0);
 encode_token(oac, Data) when is_list(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?UTF8_CHARSET, 0);
 encode_token(oac, Data) when is_binary(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?AL16UTF16_CHARSET, 0);
 encode_token(oac, Data) when is_number(Data) -> encode_token(oac, ?TNS_TYPE_NUMBER, 22, 0, 0, 0);
+encode_token(oac, {{_Year,_Mon,_Day}, {_Hour,_Min,_Sec,_Ms}}) -> encode_token(oac, ?TNS_TYPE_TIMESTAMP, 11, 0, 0, 0);
 encode_token(oac, Data) when is_tuple(Data) -> encode_token(oac, ?TNS_TYPE_DATE, 7, 0, 0, 0);
 encode_token(oac, cursor) -> encode_token(oac, ?TNS_TYPE_REFCURSOR, 1, 0, ?UTF8_CHARSET, 0).
 
@@ -433,15 +434,17 @@ lnxfmt([I|L], Data) when Data > 0 ->
 lnxfmt([I|L], Data) when Data < 0 ->
     [(I+192+1 bxor 255)|[ 101-N || N <- L]]++[102].
 
-encode_date({Year,Month,Day}) ->
-    encode_date({{Year,Month,Day}, {0,0,0}});
-encode_date({{Year,Month,Day}, {Hour,Minute,Second}}) ->
+encode_date({Year,Mon,Day}) ->
+    encode_date({{Year,Mon,Day}, {0,0,0}});
+encode_date({{Year,Mon,Day}, {Hour,Min,Sec,Ms}}) ->
+    <<(encode_date({{Year,Mon,Day}, {Hour,Min,Sec}}))/binary, (Ms * 1000):4/integer-unit:8>>;
+encode_date({{Year,Mon,Day}, {Hour,Min,Sec}}) ->
     <<
     (Year div 100 + 100),
     (Year rem 100 + 100),
-    (Month),
+    (Mon),
     (Day),
     (Hour + 1),
-    (Minute + 1),
-    (Second + 1)
+    (Min + 1),
+    (Sec + 1)
     >>.
