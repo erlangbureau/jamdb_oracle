@@ -271,12 +271,16 @@ get_param(type, {Query, Fetch}) ->
         "BEGIN" -> {-1, 0};
         _ -> {0, 0}
     end;
-get_param(data, {_Param, Data}) ->
+get_param(data, {out, Data}) ->
+    Data;
+get_param(data, {in, Data}) ->
     Data;
 get_param(data, Data) ->
     Data;
-get_param(format, {Param, Data}) ->
-    get_param(Param, Data);
+get_param(format, {out, Data}) ->
+    get_param(out, Data);
+get_param(format, {in, Data}) ->
+    get_param(in, Data);
 get_param(format, Data) ->
     get_param(in, Data);
 get_param(Param, Data) ->
