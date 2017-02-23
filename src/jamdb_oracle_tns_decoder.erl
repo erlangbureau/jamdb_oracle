@@ -369,6 +369,8 @@ decode_data(Data, [ValueFormat|RestRowFormat], Values) ->
     {Value, RestData} = decode_data(Data, ValueFormat),
     decode_data(decode_next(ub2,RestData), RestRowFormat, [Value|Values]).
 
+decode_data(Data, #format{data_type=DataType, data_length=0}) when ?IS_NULL_TYPE(DataType) ->
+    {null, Data};
 decode_data(<<0, Rest/bits>>, #format{data_type=DataType}) when ?IS_NULL_TYPE(DataType) ->
     {null, Rest};
 decode_data(Data, #format{charset=?AL16UTF16_CHARSET}=ValueFormat) ->
@@ -521,12 +523,12 @@ decode_binary(<<I,_Rest/binary>> = Data) when I band 128 =:= 0 ->
     <<Value:Length/float-unit:8>> = << <<(B bxor 255)>> || <<B>> <= Data >>,
     Value.
 
-decode_date(<<Century,Year,Month,Day,Hour,Minute,Second>>) ->
-    {{(Century - 100) * 100 + (Year - 100),(Month),(Day)},
-     {(Hour - 1),(Minute - 1),(Second - 1)}};
+decode_date(<<Century,Year,Mon,Day,Hour,Min,Sec>>) ->
+    {{(Century - 100) * 100 + (Year - 100),(Mon),(Day)},
+     {(Hour - 1),(Min - 1),(Sec - 1)}};
 decode_date(<<Data:7/binary,Ms:4/integer-unit:8>>) ->
-    {Date,{Hour,Minute,Second}} = decode_date(Data),
-    {Date,{Hour,Minute,Second + Ms / 1.0e9}};
+    {Date,{Hour,Min,Sec}} = decode_date(Data),
+    {Date,{Hour,Min,Sec + Ms / 1.0e9}};
 decode_date(<<Data:11/binary,H,M>>) ->
     erlang:append_element(decode_date(Data),
     case (H band -128) of
@@ -541,10 +543,10 @@ decode_date(<<Data:11/binary,H,M>>) ->
             end
     end).
 
-decode_interval(<<Year:4/integer-unit:8,Month>>) ->
-    lym(Year - 2147483648, Month - 60);
-decode_interval(<<Day:4/integer-unit:8,Hour,Minute,Second,Ms:4/integer-unit:8>>) ->
-    lds(Day - 2147483648, Hour - 60, Minute - 60, Second - 60, (Ms - 2147483648) / 1.0e9).
+decode_interval(<<Year:4/integer-unit:8,Mon>>) ->
+    lym(Year - 2147483648, Mon - 60);
+decode_interval(<<Day:4/integer-unit:8,Hour,Min,Sec,Ms:4/integer-unit:8>>) ->
+    lds(Day - 2147483648, Hour - 60, Min - 60, Sec - 60, (Ms - 2147483648) / 1.0e9).
 
 ltz(I) when I < 0 -> ltz(abs(I), "-"); 
 ltz(I) -> ltz(abs(I), "+"). 
