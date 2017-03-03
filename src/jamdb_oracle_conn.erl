@@ -87,8 +87,8 @@ sql_query(State, Query) ->
 sql_query(State, Query, Timeout) when is_list(Query) ->
     sql_query(State, {Query, []}, Timeout);
 sql_query(State = #oraclient{conn_state=connected}, {Query, Bind}, Timeout) when length(Query) > 10 ->
-    {ok, State2 = #oraclient{server=Ver, params=RowFormat}} = send_req(query, State, {Query, Bind}),
-    handle_resp({Ver, RowFormat}, State2, Timeout);
+    {ok, State2 = #oraclient{server=Ver, params=RowFormat, type=Type}} = send_req(query, State, {Query, Bind}),
+    handle_resp({Ver, RowFormat, Type}, State2, Timeout);
 sql_query(State = #oraclient{conn_state=connected, auth=To}, {Query, Bind}, Timeout) ->
     case lists:nth(1, string:tokens(string:to_upper(Query)," \t;")) of
         "COMMIT" -> send_req(tran, State, ?TTI_COMMIT, Timeout);
@@ -200,9 +200,10 @@ send_req(query, State, {Query, Bind}) when is_map(Bind) ->
         string:tokens(Query," \t;,)")),
     send_req(query, State, {Query, get_param(Data, Bind, [])});
 send_req(query, #oraclient{auto=Auto,fetch=Fetch,server=Ver} = State, {Query, Bind}) ->
-    {Type, Fetch2} = get_param(type, {Query, Fetch}), 
-    Data = ?ENCODER:encode_record(fetch, {0, Type, Query, [get_param(data, B) || B <- Bind], [], Auto, Fetch2, Ver}),
-    send(State#oraclient{type=Type,params = [get_param(format, B) || B <- Bind]}, ?TNS_DATA, Data).
+    Type = lists:nth(1, string:tokens(string:to_upper(Query)," \t")),
+    {Type2, Fetch2} = get_param(type, {Type, [B || {out, B} <- Bind], Fetch}), 
+    Data = ?ENCODER:encode_record(fetch, {0, Type2, Query, [get_param(data, B) || B <- Bind], [], Auto, Fetch2, Ver}),
+    send(State#oraclient{type=Type2,params = [get_param(format, B) || B <- Bind]}, ?TNS_DATA, Data).
 
 handle_resp(TokensBufer, State = #oraclient{socket=Socket}, Timeout) ->
     case recv(Socket, Timeout) of
@@ -216,10 +217,10 @@ handle_resp(TokensBufer, State = #oraclient{socket=Socket}, Timeout) ->
 
 handle_resp(Data, TokensBufer, #oraclient{type=Type} = State, Timeout) ->
     case ?DECODER:decode_token(Data, TokensBufer) of
-	{0, 0, Cursor, RowFormat, []} when Type =/= 0, RowFormat =/= [] ->             %defcols   
+	{0, 0, Cursor, RowFormat, []} when Type =/= change, RowFormat =/= [] -> %defcols   
 	    {ok, State2} = send_req(fetch, State, {Cursor, RowFormat}),
        	    handle_resp({Cursor, RowFormat, []}, State2, Timeout);
-	{0, _RowNumber, Cursor, RowFormat, []} when Type =/= 0, RowFormat =/= [] ->    %cursor
+	{0, _RowNumber, Cursor, RowFormat, []} when Type =/= change, RowFormat =/= [] -> %cursor
 	    {ok, State2} = send_req(fetch, State, {Cursor, []}),
        	    handle_resp({Cursor, RowFormat, []}, State2, Timeout);
 	{RetCode, RowNumber, Cursor, RowFormat, Rows} ->
@@ -231,13 +232,13 @@ handle_resp(Data, TokensBufer, #oraclient{type=Type} = State, Timeout) ->
                 Result ->
                     erlang:append_element(Result, State#oraclient{cursors=get_result(Cursor,Cursors)})
 	    end;
-        {ok, Result} ->                                                                %tran
+        {ok, Result} -> %tran
 	    {ok, Result, State};
         {error, Reason} ->
-    	    {error, remote, Reason}
+    	    handle_error(remote, Reason, State)
     end.
 
-get_result(0, 0, RowNumber, _RowFormat, []) ->
+get_result(change, 0, RowNumber, _RowFormat, []) ->
     {ok, [{affected_rows, RowNumber}]};
 get_result(_Type, 0, _RowNumber, [], Rows) ->
     {ok, [{proc_result, 0, Rows}]};
@@ -265,24 +266,16 @@ get_param([], _M, Acc) ->
 get_param([H|L], M, Acc) ->
     get_param(L, M, Acc++[maps:get(list_to_atom(H), M)]).
     
-get_param(type, {Query, Fetch}) ->
-    case lists:nth(1, string:tokens(string:to_upper(Query)," \t")) of
-        "SELECT" -> {1, Fetch};
-        "BEGIN" -> {-1, 0};
-        _ -> {0, 0}
-    end;
-get_param(data, {out, Data}) ->
-    Data;
-get_param(data, {in, Data}) ->
-    Data;
-get_param(data, Data) ->
-    Data;
-get_param(format, {out, Data}) ->
-    get_param(out, Data);
-get_param(format, {in, Data}) ->
-    get_param(in, Data);
-get_param(format, Data) ->
-    get_param(in, Data);
+get_param(type, {"BEGIN", _Bind, _Fetch}) -> {block, 0};
+get_param(type, {"SELECT", [], Fetch}) -> {select, Fetch};
+get_param(type, {_Type, [], _Fetch}) -> {change, 0};
+get_param(type, {_Type, _Bind, _Fetch}) -> {return, 0};
+get_param(data, {out, Data}) -> Data;
+get_param(data, {in, Data}) -> Data;
+get_param(data, Data) -> Data;
+get_param(format, {out, Data}) -> get_param(out, Data);
+get_param(format, {in, Data}) -> get_param(in, Data);
+get_param(format, Data) -> get_param(in, Data);
 get_param(Param, Data) ->
     {<<>>, DataType, Length, Charset} = 
     ?DECODER:decode_token(oac, ?ENCODER:encode_token(oac, Data)),
