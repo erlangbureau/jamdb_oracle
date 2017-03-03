@@ -178,7 +178,7 @@ encode_record(fetch, {Cursor, Type, Query, Bind, Def, Auto, Fetch, Ver}) ->
     QueryLen = length(Query),
     BindLen = length(Bind),
     DefLen = length(Def),
-    {BindPos, Opt, LMax, Max, All8} = 
+    {BindPos, Opt, [LMax, Max], All8} = 
     case Cursor of
         0 when Auto =:= 1 -> setopts(Type, BindLen, 256);
         0 when Auto =:= 0 -> setopts(Type, BindLen, 0);
@@ -239,25 +239,29 @@ encode_record(close, Cursors) ->
     >>.
 
 setopts(all8, N) ->
-    lists:nth(N,[[1,0,0,0,0,0,0,1,0,0,0,0,0],[1,1,0,0,0,0,0,0,0,0,0,0,0],[0,10,0,0,0,0,0,1,0,0,0,0,0]]).
+    lists:nth(N,[[1,0,0,0,0,0,0,1,0,0,0,0,0],[1,1,0,0,0,0,0,0,0,0,0,0,0],[0,10,0,0,0,0,0,1,0,0,0,0,0]]);
+setopts(max, N) ->
+    lists:nth(N,[[4294967295, 2147483647],[0, 2147483647],[0, 32760]]).
+    
+setopts(select, BindLen, _Auto) when BindLen =:= 0 ->
+    {0, 32801, setopts(max, 1), setopts(all8, 1)};
+setopts(select, BindLen, _Auto) when BindLen > 0 ->
+    {1, 32801 bor 8, setopts(max, 1), setopts(all8, 1)};
+setopts(change, BindLen, Auto) when BindLen =:= 0 ->
+    {0, 32801 bor Auto, setopts(max, 2), setopts(all8, 2)};
+setopts(change, BindLen, Auto) when BindLen > 0 ->
+    {1, 32801 bor 8 bor Auto, setopts(max, 2), setopts(all8, 2)};
+setopts(return, BindLen, Auto) when BindLen > 0 ->
+    {1, 1057 bor 8 bor Auto, setopts(max, 2), setopts(all8, 2)};
+setopts(block, BindLen, Auto) when BindLen =:= 0 ->
+    {0, 1057 bor Auto, setopts(max, 3), setopts(all8, 2)};
+setopts(block, BindLen, Auto) when BindLen > 0 ->
+    {1, 1057 bor 8 bor Auto, setopts(max, 3), setopts(all8, 2)}.
 
-setopts(Type, BindLen, _Auto) when Type > 0, BindLen =:= 0 ->     %%select
-    {0, 32801, 4294967295, 2147483647, setopts(all8, 1)};
-setopts(Type, BindLen, _Auto) when Type > 0, BindLen > 0 ->
-    {1, 32801 bor 8, 4294967295, 2147483647, setopts(all8, 1)};
-setopts(Type, BindLen, Auto) when Type =:= 0, BindLen =:= 0 ->    %%crud
-    {0, 32801 bor Auto, 0, 2147483647, setopts(all8, 2)};
-setopts(Type, BindLen, Auto) when Type =:= 0, BindLen > 0 ->
-    {1, 32801 bor 8 bor Auto, 0, 2147483647, setopts(all8, 2)};
-setopts(Type, BindLen, Auto) when Type < 0, BindLen =:= 0 ->      %%call
-    {0, 1057 bor Auto, 0, 32760, setopts(all8, 2)};
-setopts(Type, BindLen, Auto) when Type < 0, BindLen > 0 ->
-    {1, 1057 bor 8 bor Auto, 0, 32760, setopts(all8, 2)}.
-
-setopts(DefLen) when DefLen =:= 0 ->                              %%fetch
-    {0, 32832, 0, 2147483647, setopts(all8, 3)};
+setopts(DefLen) when DefLen =:= 0 -> %fetch cursor
+    {0, 32832, setopts(max, 2), setopts(all8, 3)};
 setopts(DefLen) when DefLen > 0 ->
-    {0, 32848, 0, 2147483647, setopts(all8, 3)}.
+    {0, 32848, setopts(max, 2), setopts(all8, 3)}.
     
 encode_token(bind, []) ->
     <<>>;
