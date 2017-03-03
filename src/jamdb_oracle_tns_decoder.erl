@@ -91,9 +91,33 @@ decode_token(wrn, Data) ->
     Rest4 = decode_next(ub2,Rest3),	%%warnFlag
     decode_next(chr, Rest4).            %%errorMsg
 
-decode_token(uds, Data, _Ver, 0, Acc) ->
-    {lists:reverse(Acc), Data};
-decode_token(uds, Data, Ver, Num, Acc) ->
+decode_token(dcb, Data, {Ver, _RowFormat, Type}) when is_atom(Type) -> 
+    {Rest2, RowFormat} = decode_token(dcb, decode_next(Data), Ver),
+    decode_token(Rest2, {0, RowFormat, []});
+decode_token(dcb, Data, Ver) -> 
+    Rest3 = decode_next(ub4,Data),
+    Num = decode_ub4(Rest3),
+    Rest4 = decode_next(ub4,Rest3),
+    Rest5 = 
+    case Num of
+	0 -> Rest4;
+	_ -> decode_next(ub1,Rest4)
+    end,
+    {RowFormat, Rest6} = decode_token(uds, Rest5, {Ver, [], Num}),
+    Rest7 = decode_next(dalc,Rest6),
+    Rest8 = decode_next(ub4,Rest7),
+    Rest9 = decode_next(ub4,Rest8),
+    Rest10 = decode_next(ub4,Rest9),
+    Rest11 = decode_next(ub4,Rest10),
+    Rest12 =
+    case Ver of
+        10 -> Rest11;
+        _ -> decode_next(dalc,Rest11)
+    end,
+    {Rest12, RowFormat};
+decode_token(uds, Data, {_Ver, RowFormat, 0}) ->
+    {lists:reverse(RowFormat), Data};
+decode_token(uds, Data, {Ver, RowFormat, Num}) ->
     {Rest2, DataType, Length, Charset} = decode_token(oac, Data),
     Rest3 = decode_next(ub1,Rest2),	%%nullable
     Rest4 = decode_next(ub1,Rest3),
@@ -107,56 +131,8 @@ decode_token(uds, Data, Ver, Num, Acc) ->
         10 -> Rest8;
         _ -> decode_next(ub4,Rest8)
     end,
-    decode_token(uds, Rest9, Ver, Num-1, 
-    [#format{column_name=list_to_binary(Column),
-    data_type=DataType,data_length=Length,charset=Charset}|Acc]);
-decode_token(iov, <<?TTI_RXD, Data/bits>>, Ver, 0, RowFormat) ->
-    try decode_data(Data, RowFormat, []) of
-        {Rows, Rest2} -> decode_token(Rest2, {0, [], Rows}) %%proc_result
-    catch
-	error:_ -> decode_token(iov, Data, Ver, 1, [])      %%fetch cursor
-    end;
-decode_token(iov, Data, Ver, 1, _RowFormat) ->
-    {Rest2, RowFormat} = decode_token(dcb, decode_next(ub1,Data), Ver),
-    Cursor = decode_ub4(Rest2),
-    Rest3 = decode_next(ub4,Rest2),
-    Rest4 = decode_next(ub2,Rest3),
-    decode_token(Rest4, {Cursor, RowFormat, []}).
-
-decode_token(dcb, Data, {Ver, _RowFormat}) -> 
-    {Rest2, RowFormat} = decode_token(dcb, decode_next(Data), Ver),
-    decode_token(Rest2, {0, RowFormat, []});
-decode_token(dcb, Data, Ver) -> 
-    Rest3 = decode_next(ub4,Data),
-    Num = decode_ub4(Rest3),
-    Rest4 = decode_next(ub4,Rest3),
-    Rest5 = 
-    case Num of
-	0 -> Rest4;
-	_ -> decode_next(ub1,Rest4)
-    end,
-    {RowFormat, Rest6} = decode_token(uds, Rest5, Ver, Num, []),
-    Rest7 = decode_next(dalc,Rest6),
-    Rest8 = decode_next(ub4,Rest7),
-    Rest9 = decode_next(ub4,Rest8),
-    Rest10 = decode_next(ub4,Rest9),
-    Rest11 = decode_next(ub4,Rest10),
-    Rest12 =
-    case Ver of
-        10 -> Rest11;
-        _ -> decode_next(dalc,Rest11)
-    end,
-    {Rest12, RowFormat};
-decode_token(iov, Data, {Ver, RowFormat}) ->
-    Rest2 = decode_next(ub1,Data),
-    Num = decode_ub2(Rest2),
-    Rest3 = decode_next(rxh,Data),
-    <<Bind:Num/binary,_Rest/bits>> = Rest3,
-    Rest4 = decode_next(Num,Rest3),
-    case binary:match(Bind,<<16>>) of
-        nomatch -> decode_token(Rest4, {0, [], []});        %%affected_rows
-        _ -> decode_token(iov, Rest4, Ver, 0, RowFormat)
-    end;
+    decode_token(uds, Rest9, {Ver, [#format{column_name=list_to_binary(Column),
+    data_type=DataType,data_length=Length,charset=Charset}|RowFormat], Num-1});
 decode_token(rxh, Data, {Cursor, RowFormat, Rows}) ->
     Rest2 = decode_next(ub1,Data),
     Rest3 = decode_next(ub2,Rest2),
@@ -171,6 +147,28 @@ decode_token(rxh, Data, {Cursor, RowFormat, Rows}) ->
     end,
     Rest7 = decode_next(rxh,Data),
     decode_token(Rest7, {Cursor, RowFormat, Bvc, Rows});
+decode_token(iov, Data, {Ver, RowFormat, Type}) when is_atom(Type) ->
+    Rest2 = decode_next(ub1,Data),
+    Num = decode_ub2(Rest2),
+    Rest3 = decode_next(rxh,Data),
+    <<Bind:Num/binary, _Rest4/bits>> = Rest3,
+    Rest4 = decode_next(Num,Rest3),
+    case binary:match(Bind,<<16>>) of
+        nomatch -> decode_token(Rest4, {0, [], []}); %%proc_result
+        _ -> decode_token(Rest4, {Ver, RowFormat, Type})
+    end;
+decode_token(rxd, Data, {Ver, _RowFormat, select}) ->
+    {Rest2, RowFormat} = decode_token(dcb, decode_next(ub1,Data), Ver),
+    Cursor = decode_ub4(Rest2),
+    Rest3 = decode_next(ub4,Rest2),
+    Rest4 = decode_next(ub2,Rest3),
+    decode_token(Rest4, {Cursor, RowFormat, []}); %%fetch cursor  
+decode_token(rxd, Data, {Ver, RowFormat, Type}) ->
+    try decode_data(Data, RowFormat, [], Type) of
+        {Rows, Rest2} -> decode_token(Rest2, {0, [], Rows}) %%proc_result
+    catch
+        error:_ -> decode_token(rxd, Data, {Ver, [], select}) %%fetch cursor
+    end;    
 decode_token(rxd, Data, {Cursor, RowFormat, Bvc, Rows}) ->
     LastRow = last(Rows),
     {Rest2, Row} = decode_rxd(Data, RowFormat, 1, Bvc, LastRow, []),
@@ -188,7 +186,7 @@ decode_token(lob, Data, _Loc) ->
     end;
 decode_token(rpa, Data, []) ->
     {ok, [decode_ub4(Data)]};
-decode_token(rpa, Data, {_Ver, RowFormat}) ->
+decode_token(rpa, Data, {_Ver, RowFormat, Type}) when is_atom(Type) ->
     decode_token(rpa, Data, {0, RowFormat, []});
 decode_token(rpa, Data, {0, RowFormat, Rows}) ->
     Cursor =
@@ -359,15 +357,18 @@ decode_bvc(Data, Acc, Count, I) when is_list(Acc) ->
     Bvc = decode_bvc(decode_ub1(Data), {}, 0, I),
     decode_bvc(decode_next(ub1,Data), Acc++tuple_to_list(Bvc), Count-1, I+1).
 
-decode_data(Data, [], Values) ->
+decode_data(Data, [], Values, _Type) ->
     {lists:reverse(Values), Data};
-decode_data(Data, [#format{param=in}|RestRowFormat], Values) ->
-    decode_data(Data, RestRowFormat, Values);
-decode_data(_Data, [#format{data_type=?TNS_TYPE_REFCURSOR}|_RestRowFormat], _Values) ->
+decode_data(Data, [#format{param=in}|RestRowFormat], Values, Type) ->
+    decode_data(Data, RestRowFormat, Values, Type);
+decode_data(_Data, [#format{data_type=?TNS_TYPE_REFCURSOR}|_RestRowFormat], _Values, _Type) ->
     erlang:error(cursor);
-decode_data(Data, [ValueFormat|RestRowFormat], Values) ->
+decode_data(Data, [ValueFormat|RestRowFormat], Values, Type=return) ->
+    {Value, RestData} = decode_data(decode_next(ub4,Data), ValueFormat),
+    decode_data(decode_next(ub2,RestData), RestRowFormat, [Value|Values], Type);
+decode_data(Data, [ValueFormat|RestRowFormat], Values, Type=block) ->
     {Value, RestData} = decode_data(Data, ValueFormat),
-    decode_data(decode_next(ub2,RestData), RestRowFormat, [Value|Values]).
+    decode_data(decode_next(ub2,RestData), RestRowFormat, [Value|Values], Type).
 
 decode_data(Data, #format{data_type=DataType, data_length=0}) when ?IS_NULL_TYPE(DataType) ->
     {null, Data};
