@@ -5,7 +5,7 @@
     socket = undefined,
     conn_state = disconnected :: disconnected | connected | auth_negotiate,
     auto = 1 :: 1 | 0,
-    type = 1 :: 1 | 0 | -1,
+    type = select  :: select  | block | change | return,
     auth,
     fetch,
     server,
