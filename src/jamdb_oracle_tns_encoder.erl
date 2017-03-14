@@ -276,7 +276,7 @@ encode_token(rxd, Data) when is_list(Data); is_binary(Data) -> encode_chr(Data);
 encode_token(rxd, Data) when is_number(Data) -> encode_len(encode_number(Data));
 encode_token(rxd, Data) when is_tuple(Data) -> encode_len(encode_date(Data));
 encode_token(rxd, cursor) -> encode_sb4(0);
-encode_token(rxd, null) -> <<0>>;
+encode_token(rxd, null) -> encode_sb4(0);
 encode_token(oac, Data) when is_list(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?UTF8_CHARSET, 0);
 encode_token(oac, Data) when is_binary(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?AL16UTF16_CHARSET, 0);
 encode_token(oac, Data) when is_number(Data) -> encode_token(oac, ?TNS_TYPE_NUMBER, 22, 0, 0, 0);
