@@ -364,11 +364,18 @@ decode_data(Data, [#format{param=in}|RestRowFormat], Values, Type) ->
 decode_data(_Data, [#format{data_type=?TNS_TYPE_REFCURSOR}|_RestRowFormat], _Values, _Type) ->
     erlang:error(cursor);
 decode_data(Data, [ValueFormat|RestRowFormat], Values, Type=return) ->
-    {Value, RestData} = decode_data(decode_next(ub4,Data), ValueFormat),
-    decode_data(decode_next(ub2,RestData), RestRowFormat, [Value|Values], Type);
+    Num = decode_ub4(Data),
+    {Value, RestData} = decode_data(decode_next(ub4,Data), ValueFormat, [], Num, Type),
+    decode_data(RestData, RestRowFormat, [Value|Values], Type);    
 decode_data(Data, [ValueFormat|RestRowFormat], Values, Type=block) ->
     {Value, RestData} = decode_data(Data, ValueFormat),
     decode_data(decode_next(ub2,RestData), RestRowFormat, [Value|Values], Type).
+
+decode_data(Data, _ValueFormat, Values, 0, _Type) ->
+    {lists:reverse(Values), Data};
+decode_data(Data, ValueFormat, Values, Num, Type) ->
+    {Value, RestData} = decode_data(Data, ValueFormat),
+    decode_data(decode_next(ub2,RestData), ValueFormat, [Value|Values], Num-1, Type).    
 
 decode_data(Data, #format{data_type=DataType, data_length=0}) when ?IS_NULL_TYPE(DataType) ->
     {null, Data};
