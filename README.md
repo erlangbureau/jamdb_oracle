@@ -1,7 +1,7 @@
 JamDB Oracle
 ============
 
-Erlang driver for Oracle Database
+Erlang driver and Ecto adapter for Oracle Database
 
 Goals
 =====
@@ -47,8 +47,7 @@ Getting Started
 
 Running Tests
 ======
-First, supply connection details for your test database in test/jamdb_oracle_test.hrl. Once the connection configuration
-is saved, run the test suite with `rebar3 ct`.
+First, supply connection details for your test database in test/jamdb_oracle_test.hrl and test/jamdb_oracle_test.exs. Once the connection configuration is saved, run the test suite with `rebar3 ct` and `mix test`.
  
 Author
 ======
