@@ -604,10 +604,20 @@ decode_rowid(Data,Count,Acc) ->
 
 decode_clob(Data) ->
     Rest2 = decode_next(ub4,Data,3),
-    Rest3 = decode_next(ub1,Rest2,2),
-    Value = decode_chr(Rest3),
-    Rest4 = decode_next(chr,Rest3),
-    {Value, decode_next(Rest4)}.
+    Rest3 = decode_next(ub1,Rest2),
+    Rest4 = decode_next(ub4,Rest3),
+    Rest5 = decode_next(ub1,Rest4),
+    PreValue = decode_chr(Rest5),
+    Value = decode_utf8(PreValue),
+    Rest = decode_next(chr,Rest5),
+    {Value, decode_next(Rest)}.
+
+decode_utf8(Data) ->
+  decode_utf8(Data, []).
+decode_utf8([], Acc) ->
+  lists:reverse(Acc);
+decode_utf8([Octets, Char | Rest], Acc) ->
+  decode_utf8(Rest, [ (Octets * 256) + Char | Acc ]).
 
 decode_blob(Data) ->
     Rest2 = decode_next(ub4,Data,3),
