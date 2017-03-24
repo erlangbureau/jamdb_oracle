@@ -125,7 +125,7 @@ handle_login_resp(State = #oraclient{socket=Socket, env=Env}, Timeout) ->
             {ok, State2} = send_req(pro, State),
             handle_login_resp(State2, Timeout);
         {ok, ?TNS_MARKER, _BinaryData} ->
-            _ = send_req(marker, State, Timeout),
+            _ = send_req(marker, State, [], Timeout),
             disconnect(State, 0);
         {ok, ?TNS_REFUSE, BinaryData} ->
             _ = handle_error(remote, BinaryData, State),
@@ -164,6 +164,9 @@ handle_error(Type, Reason, State) ->
 send_req(auth, #oraclient{env=Env} = State, Sess, Salt) ->
     {Data,KeyConn} = ?ENCODER:encode_record(auth, Env, Sess, Salt),
     send(State#oraclient{auth = KeyConn}, ?TNS_DATA, Data);
+send_req(marker, State, TokensBufer, Timeout) ->
+    {ok, State2} = send(State, ?TNS_MARKER, <<1,0,2>>),
+    handle_resp(TokensBufer, State2, Timeout);
 send_req(Type, State, Request, Timeout) ->
     Data = ?ENCODER:encode_record(Type, Request),
     {ok, State2} = send(State, ?TNS_DATA, Data),
@@ -186,8 +189,8 @@ send_req(close, #oraclient{cursors=Cursors} = State, Timeout) ->
     {ok, State2} = send(State, ?TNS_DATA, Data),
     _ = handle_resp([], State2, Timeout),
     send(State2, ?TNS_DATA, <<64>>);
-send_req(marker, State, Timeout) ->
-    {ok, State2} = send(State, ?TNS_MARKER, <<1,0,2>>),
+send_req(fob, State, Timeout) ->
+    {ok, State2} = send(State, ?TNS_DATA, <<?TTI_FOB>>),
     handle_resp([], State2, Timeout);
 send_req(fetch, #oraclient{auto=Auto,server=Ver} = State, {Cursor, Def}) ->
     Data = ?ENCODER:encode_record(fetch, {Cursor, 0, [], [], Def, Auto, 0, Ver}),
@@ -210,7 +213,7 @@ handle_resp(TokensBufer, State = #oraclient{socket=Socket}, Timeout) ->
         {ok, ?TNS_DATA, Data} ->
             handle_resp(Data, TokensBufer, State, Timeout);
         {ok, ?TNS_MARKER, _Data} ->
-            send_req(marker, State, Timeout);
+            send_req(marker, State, TokensBufer, Timeout);
         {error, Type, Reason} ->
             handle_error(Type, Reason, State)
     end.
@@ -234,6 +237,8 @@ handle_resp(Data, TokensBufer, #oraclient{type=Type} = State, Timeout) ->
 	    end;
         {ok, Result} -> %tran
 	    {ok, Result, State};
+	{error, fob} -> %return
+            send_req(fob, State, Timeout);
         {error, Reason} ->
     	    handle_error(remote, Reason, State)
     end.
