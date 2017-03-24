@@ -46,8 +46,9 @@ decode_token(<<Token, Data/binary>>, TokensBufer) ->
 	?TTI_RPA -> decode_token(rpa, Data, TokensBufer);
 	?TTI_OER -> decode_token(oer, Data, TokensBufer);
 	?TTI_STA -> {ok, TokensBufer};  %tran
+	?TTI_FOB -> {error, fob};  %return
         _ -> 
-    	    {error, undefined}
+    	    {error, token}
     end;
 decode_token(net, {Data, EnvOpts}) ->
     Values = lists:map(fun(L) -> list_to_tuple(string:tokens(L, "=")) end, 
@@ -603,17 +604,28 @@ decode_rowid(Data,Count,Acc) ->
     decode_rowid(Data bsr 6 band 67108863,Count-1,[Value|Acc]).
 
 decode_clob(Data) ->
-    Rest2 = decode_next(ub4,Data,3),
-    Rest3 = decode_next(ub1,Rest2,2),
-    Value = decode_chr(Rest3),
-    Rest4 = decode_next(chr,Rest3),
-    {Value, decode_next(Rest4)}.
-
+    Rest2 = decode_next(ub4,Data),
+    Rest3 = decode_next(ub4,Rest2), %LobSize
+    Rest4 = decode_next(ub4,Rest3), %LobChunkSize
+    Vary = decode_ub1(Rest4),
+    Rest5 = decode_next(ub1,Rest4), %ClobDBVary
+    Rest6 = 
+    case Vary of
+        1 -> decode_next(ub2,Rest5); %ClobCharset
+        _ -> Rest5
+    end,
+    Rest7 = decode_next(ub1,Rest6), %ClobFormOfUse
+    Value = decode_chr(Rest7),
+    Rest8 = decode_next(chr,Rest7),
+    {Value, decode_next(Rest8)}.
+    
 decode_blob(Data) ->
-    Rest2 = decode_next(ub4,Data,3),
-    Value = decode_chr(Rest2),
-    Rest3 = decode_next(chr,Rest2),
-    {Value, decode_next(Rest3)}.
+    Rest2 = decode_next(ub4,Data),
+    Rest3 = decode_next(ub4,Rest2), %LobSize
+    Rest4 = decode_next(ub4,Rest3), %LobChunkSize
+    Value = decode_chr(Rest4),
+    Rest5 = decode_next(chr,Rest4),
+    {Value, decode_next(Rest5)}.
 
 decode_long(<<0, Rest/bits>>) ->
     {null, decode_next(ub2,Rest,2)};
