@@ -208,6 +208,8 @@ decode_token(rpa, Data, {Cursor, RowFormat, Rows}) ->
     decode_token(Rest2, {Cursor, RowFormat, Rows});
 decode_token(oer, Data, []) ->
     decode_token(oer, Data, {0, [], []});
+decode_token(oer, Data, {_Ver, RowFormat, Type}) when is_atom(Type) ->
+    decode_token(oer, Data, {0, RowFormat, []});
 decode_token(oer, Data, {Cursor, RowFormat, _Bvc, Rows}) ->
     decode_token(oer, Data, {Cursor, RowFormat, Rows});
 decode_token(oer, Data, {Cursor, RowFormat, Rows}) ->
