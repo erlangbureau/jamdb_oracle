@@ -235,12 +235,12 @@ handle_resp(Data, TokensBufer, #oraclient{type=Type} = State, Timeout) ->
                 Result ->
                     erlang:append_element(Result, State#oraclient{cursors=get_result(Cursor,Cursors)})
 	    end;
-        {ok, Result} -> %tran
+	{ok, Result} -> %tran
 	    {ok, Result, State};
 	{error, fob} -> %return
-            send_req(fob, State, Timeout);
-        {error, Reason} ->
-    	    handle_error(remote, Reason, State)
+	    send_req(fob, State, Timeout);
+	{error, Reason} ->
+	    handle_error(remote, Reason, State)
     end.
 
 get_result(change, 0, RowNumber, _RowFormat, []) ->
@@ -253,8 +253,8 @@ get_result(_Type, RetCode, _RowNumber, Reason, []) when RetCode =/= 1403 ->
 get_result(_Type, RetCode, _RowNumber, RowFormat, Rows) ->
     case RetCode of
 	1403 -> 
-            Column = [get_result(Fmt) || Fmt <- RowFormat],
-            {ok, [{result_set, Column, [], Rows}]};
+	    Column = [get_result(Fmt) || Fmt <- RowFormat],
+	    {ok, [{result_set, Column, [], Rows}]};
 	_ -> more
     end.
 
