@@ -44,19 +44,17 @@ defmodule Jamdb.Oracle.Query do
   end
 
   def insert(prefix, table, header, rows, _on_conflict, returning) do
-    if header == [] do
-      error!(nil, "not enough values for #{inspect table}")
-    else     
-      values =
-        if length(rows) > 1 do
-          [?(, insert_union(rows, 1), ?)]     
-        else
-          [" VALUES " | insert_all(rows, 1)]
-        end
+    {fields, values} = cond do
+      header == [] ->
+        {returning, [" VALUES ", ?(, intersperse_map(returning, ?,, fn _ -> "DEFAULT" end), ?)]}
+      length(rows) == 1 ->
+        {header, [" VALUES " | insert_all(rows, 1)]}
+      true ->
+        {header, [?\s, ?(, insert_union(rows, 1), ?)]}
+    end 
 
-      IO.iodata_to_binary(["INSERT INTO ", quote_table(prefix, table), ?\s, ?(, 
-                         intersperse_map(header, ?,, &quote_name/1), ?), values | returning(returning)])
-    end                         
+    IO.iodata_to_binary(["INSERT INTO ", quote_table(prefix, table), ?\s, ?(, 
+                         intersperse_map(fields, ?,, &quote_name/1), ?), values | returning(returning)])
   end
 
   defp insert_union(rows, counter) do
@@ -289,6 +287,13 @@ defmodule Jamdb.Oracle.Query do
   defp expr(%Ecto.SubQuery{query: query, fields: fields}, _sources, _query) do
     query.select.fields |> put_in(fields) |> all()
   end
+  
+  defp expr({:fragment, _, parts}, sources, query) do
+    Enum.map(parts, fn
+      {:raw, part}  -> part
+      {:expr, expr} -> expr(expr, sources, query)
+    end)
+  end
 
   defp expr({:date_add, _, [date, count, interval]}, sources, query) do
     interval(date, " + ", count, interval, sources, query)
@@ -320,11 +325,7 @@ defmodule Jamdb.Oracle.Query do
     expr(literal, sources, query)
   end
 
-  defp expr(literal, _sources, _query) when is_list(literal) do
-    ["'", escape_string(literal), "'"]
-  end
-
-  defp expr(literal, _sources, _query) when is_binary(literal) do
+  defp expr(literal, _sources, _query) when is_binary(literal) or is_list(literal) do
      ["'", escape_string(literal), "'"]
   end
 
@@ -353,14 +354,14 @@ defmodule Jamdb.Oracle.Query do
     do: []
   defp returning(%Query{select: %{fields: fields}} = query, sources) do
     [{:&, _, [_idx, returning, _counter]}] = fields
-    
     [" RETURN ", select_fields(fields, sources, query),
      " INTO ", intersperse_map(returning, ", ", &[?: | quote_name(&1)])]
   end
   
   defp returning([]),
     do: []
-  defp returning(returning) do
+  defp returning(fields) do
+    returning = fields |> Enum.filter(& is_tuple(&1) == false)
     [" RETURN ", intersperse_map(returning, ", ", &quote_name/1),
      " INTO ", intersperse_map(returning, ", ", &[?: | quote_name(&1)])]
   end   
@@ -375,6 +376,8 @@ defmodule Jamdb.Oracle.Query do
         {table, schema} ->
           name = [String.first(table) | Integer.to_string(pos)]
           {quote_table(prefix, table), name, schema}
+        {:fragment, _, _} ->
+          {nil, [?f | Integer.to_string(pos)], nil}
         %Ecto.SubQuery{} ->
           {nil, [?s | Integer.to_string(pos)], nil}
       end
@@ -384,7 +387,7 @@ defmodule Jamdb.Oracle.Query do
   defp create_names(_prefix, _sources, pos, pos) do
     []
   end
-    
+
   ## Helpers
 
   defp get_source(query, sources, ix, source) do
