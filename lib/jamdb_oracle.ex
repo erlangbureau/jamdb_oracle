@@ -89,34 +89,30 @@ defmodule Jamdb.Oracle do
   end
   
   @doc false
-  def handle_execute(query, params, opts, s) do    
+  def handle_execute(query, params, opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
-    query(s, statement |> to_charlist, params)
+    returning = Keyword.get(opts, :returning, []) |> Enum.filter(& is_tuple(&1))
+    query(s, statement |> to_charlist, Enum.concat(params, returning))
   end
 
   @doc false
   def handle_begin(opts, s) do
     case Keyword.get(opts, :mode, :transaction) do
-      :transaction -> query(s, 'COMOFF')
-      :savepoint   -> query(s, 'SAVEPOINT SVPT')
+      :transaction -> query(s, 'SAVEPOINT tran')
+      :savepoint   -> query(s, 'SAVEPOINT '++(Keyword.get(opts, :name, :svpt) |> to_charlist))
     end  
   end
 
   @doc false
   def handle_commit(opts, s) do
-    case Keyword.get(opts, :mode, :transaction) do
-      :transaction -> query(s, 'COMMIT')
-                      query(s, 'COMON')
-      :savepoint   -> query(s, 'COMMIT')
-    end
+    query(s, 'COMMIT')
   end
 
   @doc false
   def handle_rollback(opts, s) do
     case Keyword.get(opts, :mode, :transaction) do
-      :transaction -> query(s, 'ROLLBACK')
-                      query(s, 'COMON')
-      :savepoint   -> query(s, 'ROLLBACK TO SVPT')
+      :transaction -> query(s, 'ROLLBACK TO tran')
+      :savepoint   -> query(s, 'ROLLBACK TO '++(Keyword.get(opts, :name, :svpt) |> to_charlist))      
     end
   end
     
@@ -187,24 +183,20 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   def parse(query, _), do: query
   def describe(query, _), do: query
 
-  def decode(_, %{rows: nil} = result, _), do: result
   def decode(_, %{rows: []} = result, _), do: result
-  def decode(_, %{num_rows: num_rows, rows: rows}, _), do: %{num_rows: num_rows, rows: decode!(rows, 0, [])}
+  def decode(_, %{rows: rows} = result, opts) when rows != nil, 
+    do: %{result | rows: Enum.map(rows, fn row -> decode(row, opts[:decode_mapper]) end)}  
   def decode(_, result, _), do: result
-    
-  defp decode!([], _op, acc), do: :lists.reverse(acc)
-  defp decode!([row | rest], 0, acc), do: decode!(rest, 0, [for(elem <- decode!(row, 1, []), do: elem) | acc])        
-  defp decode!([elem | rest], 1, acc), do: decode!(rest, 1, [decode(elem) | acc])
+
+  defp decode(row, nil), do: Enum.map(row, fn elem -> decode(elem) end)
+  defp decode(row, mapper), do: mapper.(decode(row, nil))
 
   defp decode(:null), do: nil
   defp decode({elem}) when is_number(elem), do: elem
   defp decode(elem), do: elem
   
   def encode(_, [], _), do: []
-  def encode(_, params, _), do: encode!(params,[])
-  
-  defp encode!([], acc), do: :lists.reverse(acc)
-  defp encode!([elem | rest], acc), do: encode!(rest, [encode(elem) | acc])
+  def encode(_, params, _), do: Enum.map(params, fn elem -> encode(elem) end)
 
   defp encode(nil), do: :null
   defp encode(%Decimal{} = decimal), do: Decimal.to_float(decimal)
