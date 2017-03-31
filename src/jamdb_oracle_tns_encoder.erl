@@ -275,15 +275,15 @@ encode_token([Data|Rest], Acc) ->
 encode_token(rxd, Data) when is_list(Data); is_binary(Data) -> encode_chr(Data);
 encode_token(rxd, Data) when is_number(Data) -> encode_len(encode_number(Data));
 encode_token(rxd, Data) when is_tuple(Data) -> encode_len(encode_date(Data));
-encode_token(rxd, cursor) -> encode_sb4(0);
-encode_token(rxd, null) -> encode_sb4(0);
+encode_token(rxd, cursor) -> <<0>>;
+encode_token(rxd, null) -> <<0>>;
 encode_token(oac, Data) when is_list(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?UTF8_CHARSET, 0);
 encode_token(oac, Data) when is_binary(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?AL16UTF16_CHARSET, 0);
 encode_token(oac, Data) when is_number(Data) -> encode_token(oac, ?TNS_TYPE_NUMBER, 22, 0, 0, 0);
 encode_token(oac, {{_Year,_Mon,_Day}, {_Hour,_Min,_Sec,_Ms}}) -> encode_token(oac, ?TNS_TYPE_TIMESTAMP, 11, 0, 0, 0);
 encode_token(oac, Data) when is_tuple(Data) -> encode_token(oac, ?TNS_TYPE_DATE, 7, 0, 0, 0);
 encode_token(oac, cursor) -> encode_token(oac, ?TNS_TYPE_REFCURSOR, 1, 0, ?UTF8_CHARSET, 0);
-encode_token(oac, null) -> encode_token(oac, 0).
+encode_token(oac, null) -> encode_token(oac, []).
 
 encode_token(def, [], Acc) when is_binary(Acc) ->
     Acc;
