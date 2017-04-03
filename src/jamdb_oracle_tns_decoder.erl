@@ -409,6 +409,8 @@ decode_value(BinValue, DataType) when ?IS_ROWID_TYPE(DataType) ->
     decode_rowid(BinValue);
 decode_value(BinValue, DataType) when ?IS_LONG_TYPE(DataType) ->
     decode_long(BinValue);
+decode_value(BinValue, DataType) when DataType =:= ?TNS_TYPE_UROWID ->
+    decode_urowid(BinValue);
 decode_value(BinValue, DataType) when DataType =:= ?TNS_TYPE_CLOB  ->
     decode_clob(BinValue);
 decode_value(BinValue, DataType) when DataType =:= ?TNS_TYPE_BLOB ->
@@ -595,15 +597,28 @@ decode_rowid(Data) ->
     Rest6 = decode_next(ub4,Rest5),
     Slotnum = decode_ub2(Rest6),
     Rest7 = decode_next(ub2,Rest6),
-    {decode_rowid(Objid,6,[])++decode_rowid(Partid,3,[])++
-    decode_rowid(Blocknum,6,[])++decode_rowid(Slotnum,3,[]),Rest7}.
+    {lid(Objid,Partid,Blocknum,Slotnum),Rest7}.
+    
+decode_urowid(Data) ->
+    Rest2 = decode_next(ub4,Data),
+    Value = decode_chr(Rest2),
+    Rest3 = decode_next(chr,Rest2),
+    case hd(Value) of
+        1 ->
+            <<Objid:4/integer-unit:8,Partid:2/integer-unit:8,
+            Blocknum:4/integer-unit:8,Slotnum:2/integer-unit:8,
+            _Rest4/bits>> = list_to_binary(tl(Value)),
+            {lid(Objid,Partid,Blocknum,Slotnum),Rest3};
+        _ -> {Value, Rest3}
+    end.
+    
+lid(O,P,B,S) -> lid(O,6,[])++lid(P,3,[])++lid(B,6,[])++lid(S,3,[]).
 
-decode_rowid(_Data,0,Acc) ->
-    Acc;
-decode_rowid(Data,Count,Acc) ->
-    Value = lists:nth((Data band 63)+1,
+lid(_N,0,Acc) -> Acc;
+lid(N,I,Acc) ->
+    H = lists:nth((N band 63)+1,
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"),
-    decode_rowid(Data bsr 6 band 67108863,Count-1,[Value|Acc]).
+    lid(N bsr 6 band 67108863,I-1,[H|Acc]).
 
 decode_clob(Data) ->
     Rest2 = decode_next(ub4,Data),
