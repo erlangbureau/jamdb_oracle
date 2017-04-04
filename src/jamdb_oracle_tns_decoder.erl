@@ -385,7 +385,7 @@ decode_data(Data, #format{data_type=DataType, data_length=0}) when ?IS_NULL_TYPE
 decode_data(<<0, Rest/bits>>, #format{data_type=DataType}) when ?IS_NULL_TYPE(DataType) ->
     {null, Rest};
 decode_data(Data, #format{data_type=DataType, charset=Charset}=ValueFormat)
-    when Charset =:= ?AL16UTF16_CHARSET; Charset =/= ?UTF8_CHARSET, DataType =:= ?TNS_TYPE_CLOB ->
+    when Charset =:= ?AL16UTF16_CHARSET; Charset =:= ?AL32UTF8_CHARSET, DataType =:= ?TNS_TYPE_CLOB ->
     {Value, RestData} = decode_data(Data, ValueFormat#format{charset=?UTF8_CHARSET}),
     {xmerl_ucs:to_utf8(xmerl_ucs:from_utf16be(list_to_binary(Value))), RestData};
 decode_data(Data, #format{data_type=DataType}) when ?IS_CHAR_TYPE(DataType); ?IS_RAW_TYPE(DataType) ->
