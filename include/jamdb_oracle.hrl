@@ -83,6 +83,15 @@
     DataType =:= ?TNS_TYPE_TIMESTAMPLTZ
 ).
 
+-define(ISO_LATIN_1_CHARSET, 31).
+-define(RU8PC866_CHARSET, 152).
+-define(CL8MSWIN1251_CHARSET, 171).
+-define(ZHS16GBK_CHARSET, 852).
+-define(ZHT16BIG5_CHARSET, 865).
+-define(UTF8_CHARSET, 871).
+-define(AL32UTF8_CHARSET, 873).
+-define(AL16UTF16_CHARSET, 2000).
+
 -define(ZONEIDMAP, [
 {100, "America/New_York"},
 {101, "America/Chicago"},
