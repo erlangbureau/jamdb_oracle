@@ -193,6 +193,9 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
 
   defp decode(:null), do: nil
   defp decode({elem}) when is_number(elem), do: elem
+  defp decode({date, {hour, min, sec}}), do: {date, {hour, min, trunc(sec)}}
+  defp decode({date, {hour, min, sec}, _}), do: {date, {hour, min, trunc(sec)}}
+  defp decode(elem) when is_list(elem), do: to_string(elem)
   defp decode(elem), do: elem
   
   def encode(_, [], _), do: []
