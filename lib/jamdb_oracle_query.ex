@@ -458,12 +458,6 @@ defmodule Jamdb.Oracle.Query do
   
 end
 
-defimpl List.Chars, for: Jamdb.Oracle.Query do
-  def to_charlist(%Jamdb.Oracle.Query{statement: statement}) do
-    String.to_charlist(statement)
-  end
-end
-
 defimpl String.Chars, for: Jamdb.Oracle.Query do
   def to_string(%Jamdb.Oracle.Query{statement: statement}) do
     statement
