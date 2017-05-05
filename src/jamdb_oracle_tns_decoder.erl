@@ -416,6 +416,8 @@ decode_value(BinValue, DataType) when DataType =:= ?TNS_TYPE_CLOB  ->
     decode_clob(BinValue);
 decode_value(BinValue, DataType) when DataType =:= ?TNS_TYPE_BLOB ->
     decode_blob(BinValue);
+decode_value(BinValue, DataType) when DataType =:= ?TNS_TYPE_ADT ->
+    decode_adt(BinValue);
 decode_value(BinValue, _DataType) ->
     decode_value(BinValue).
 
@@ -644,6 +646,20 @@ decode_blob(Data) ->
     Value = decode_chr(Rest4),
     Rest5 = decode_next(chr,Rest4),
     {Value, decode_next(Rest5)}.
+
+decode_adt(Data) ->
+    Rest2 = decode_next(ub4,Data),
+    Rest3 = decode_next(chr,Rest2),
+    Rest4 = decode_next(chr,Rest3),
+    Rest5 = decode_next(chr,Rest4),
+    Rest6 = decode_next(ub2,Rest5),
+    Num = decode_ub4(Rest6),
+    Rest7 = decode_next(ub4,Rest6),
+    Rest8 = decode_next(ub2,Rest7),
+    case Num of
+        0 -> {null, Rest8};
+        _ -> {decode_chr(Rest8),decode_next(chr,Rest8)}
+    end.
 
 decode_long(<<0, Rest/bits>>) ->
     {null, decode_next(ub2,Rest,2)};
