@@ -96,6 +96,14 @@ defmodule Jamdb.Oracle do
   end
 
   @doc false
+  def handle_prepare(%Jamdb.Oracle.Query{statement: %Jamdb.Oracle.Query{} = query}, opts, s) do
+    {:ok, query, s}  
+  end
+  def handle_prepare(query, opts, s) do
+    {:ok, query, s}  
+  end
+
+  @doc false
   def handle_begin(opts, s) do
     case Keyword.get(opts, :mode, :transaction) do
       :transaction -> query(s, 'SAVEPOINT tran')
