@@ -30,6 +30,7 @@
         {password, string()} |
         {sid, string()} |
         {service_name, string()} |
+        {ssl, list()} |
         {role, non_neg_integer()} |
         {prelim, non_neg_integer()} |
         {app_name, string()}.
@@ -44,16 +45,18 @@ connect(Opts) ->
     connect(Opts, ?DEF_TIMEOUT).
 
 -spec connect([env()]) -> empty_result().
-connect(Opts, Timeout) ->
+connect(Opts, Tout) ->
     Host        = proplists:get_value(host, Opts, ?DEF_HOST), 
     Port        = proplists:get_value(port, Opts, ?DEF_PORT),
+    SslOpts     = proplists:get_value(ssl, Opts, []),
     SockOpts = [binary, {active, false}, {packet, raw}, %{recbuf, 65535},
             {nodelay, true}, {keepalive, true}],
-    case gen_tcp:connect(Host, Port, SockOpts, Timeout) of
+    case gen_tcp:connect(Host, Port, SockOpts, Tout) of
         {ok, Socket} ->
-            State = #oraclient{socket=Socket, env=Opts, auto=?DEF_AUTOCOMMIT, fetch=?DEF_FETCH},
+            {ok, Socket2} = sock_connect(Socket, SslOpts, Tout),
+            State = #oraclient{socket=Socket2, env=Opts, auto=?DEF_AUTOCOMMIT, fetch=?DEF_FETCH},
             {ok, State2} = send_req(login, State),
-            handle_login_resp(State2#oraclient{conn_state=auth_negotiate}, Timeout);
+            handle_login_resp(State2#oraclient{conn_state=auth_negotiate}, Tout);
         {error, Reason} ->
             {error, socket, Reason}
     end.
@@ -65,13 +68,13 @@ disconnect(State = #oraclient{auth=To}) ->
 
 -spec disconnect(state(), timeout()) -> {ok, [env()]}.
 disconnect(#oraclient{socket=Socket, env=Env}, 0) ->
-    gen_tcp:close(Socket),
+    sock_close(Socket),
     {ok, Env};
-disconnect(State = #oraclient{conn_state=connected, socket=Socket, env=Env}, Timeout) ->
-    _ = send_req(close, State, Timeout),
-    gen_tcp:close(Socket),
+disconnect(State = #oraclient{conn_state=connected, socket=Socket, env=Env}, Tout) ->
+    _ = send_req(close, State, Tout),
+    sock_close(Socket),
     {ok, Env};
-disconnect(#oraclient{env=Env}, _Timeout) ->
+disconnect(#oraclient{env=Env}, _Tout) ->
     {ok, Env}.
 
 -spec reconnect(state()) -> {ok, state()}.
@@ -84,21 +87,21 @@ sql_query(State, Query) ->
     sql_query(State, Query, ?DEF_TIMEOUT).
 
 -spec sql_query(state(), string() | tuple(), timeout()) -> query_result().
-sql_query(State, Query, Timeout) when is_list(Query) ->
-    sql_query(State, {Query, []}, Timeout);
-sql_query(State = #oraclient{conn_state=connected}, {Query, Bind}, Timeout) when length(Query) > 10 ->
+sql_query(State, Query, Tout) when is_list(Query) ->
+    sql_query(State, {Query, []}, Tout);
+sql_query(State = #oraclient{conn_state=connected}, {Query, Bind}, Tout) when length(Query) > 10 ->
     {ok, State2 = #oraclient{server=Ver, params=RowFormat, type=Type}} = send_req(query, State, {Query, Bind}),
-    handle_resp({Ver, RowFormat, Type}, State2, Timeout);
-sql_query(State = #oraclient{conn_state=connected, auth=To}, {Query, Bind}, Timeout) ->
+    handle_resp({Ver, RowFormat, Type}, State2, Tout);
+sql_query(State = #oraclient{conn_state=connected, auth=To}, {Query, Bind}, Tout) ->
     case lists:nth(1, string:tokens(string:to_upper(Query)," \t;")) of
-        "COMMIT" -> send_req(tran, State, ?TTI_COMMIT, Timeout);
-        "ROLLBACK" -> send_req(tran, State, ?TTI_ROLLBACK, Timeout);
-        "COMON" -> send_req(tran, State#oraclient{auto=1}, ?TTI_COMON, Timeout);
-        "COMOFF" -> send_req(tran, State#oraclient{auto=0}, ?TTI_COMOFF, Timeout);
-        "PING" -> send_req(tran, State, ?TTI_PING, Timeout);
-        "STOP" -> send_req(stop, State, hd(Bind), Timeout);
-        "START" -> send_req(spfp, State, [], Timeout), send_req(start, State, hd(Bind), Timeout);
-        "CLOSE" -> disconnect(State, Timeout), {ok, [], State#oraclient{conn_state=disconnected}};
+        "COMMIT" -> send_req(tran, State, ?TTI_COMMIT, Tout);
+        "ROLLBACK" -> send_req(tran, State, ?TTI_ROLLBACK, Tout);
+        "COMON" -> send_req(tran, State#oraclient{auto=1}, ?TTI_COMON, Tout);
+        "COMOFF" -> send_req(tran, State#oraclient{auto=0}, ?TTI_COMOFF, Tout);
+        "PING" -> send_req(tran, State, ?TTI_PING, Tout);
+        "STOP" -> send_req(stop, State, hd(Bind), Tout);
+        "START" -> send_req(spfp, State, [], Tout), send_req(start, State, hd(Bind), Tout);
+        "CLOSE" -> disconnect(State, Tout), {ok, [], State#oraclient{conn_state=disconnected}};
         "FETCH" -> {ok, [], State#oraclient{fetch=hd(Bind)}};
         "AUTH" -> To ! {get, self()}, {ok, receive Reply -> Reply end, State};
         _ -> {ok, undefined, State}
@@ -108,24 +111,28 @@ loop(Values) ->
     receive {get, From} -> From ! Values, loop(Values) end.
 
 %% internal
-handle_login_resp(State = #oraclient{socket=Socket, env=Env}, Timeout) ->
-    case recv(Socket, Timeout) of
+handle_login_resp(State = #oraclient{socket=Socket, env=Env}, Tout) ->
+    case recv(Socket, Tout) of
         {ok, ?TNS_DATA, BinaryData} ->
             case handle_token(BinaryData, State) of
-                {ok, State2} -> handle_login_resp(State2, Timeout);
+                {ok, State2} -> handle_login_resp(State2, Tout);
                 State2 -> {ok, State2}                  %connected
             end;
         {ok, ?TNS_REDIRECT, BinaryData} ->
             {ok, Opts} = ?DECODER:decode_token(net, {BinaryData, Env}),
             reconnect(State#oraclient{env=Opts});
-        {ok, ?TNS_RESEND, _BinaryData} ->
+        {ok, ?TNS_RESEND, _BinaryData} when is_port(Socket) ->
             {ok, State2} = send_req(login, State),
-            handle_login_resp(State2, Timeout);
+            handle_login_resp(State2, Tout);
+        {ok, ?TNS_RESEND, _BinaryData} ->
+            {ok, Socket2} = sock_renegotiate(Socket, Env, Tout),            
+            {ok, State2} = send_req(login, State#oraclient{socket=Socket2}),
+            handle_login_resp(State2, Tout);
         {ok, ?TNS_ACCEPT, _BinaryData} ->
             {ok, State2} = send_req(pro, State),
-            handle_login_resp(State2, Timeout);
+            handle_login_resp(State2, Tout);
         {ok, ?TNS_MARKER, _BinaryData} ->
-            _ = send_req(marker, State, [], Timeout),
+            _ = send_req(marker, State, [], Tout),
             disconnect(State, 0);
         {ok, ?TNS_REFUSE, BinaryData} ->
             _ = handle_error(remote, BinaryData, State),
@@ -164,13 +171,13 @@ handle_error(Type, Reason, State) ->
 send_req(auth, #oraclient{env=Env} = State, Sess, Salt) ->
     {Data,KeyConn} = ?ENCODER:encode_record(auth, Env, Sess, Salt),
     send(State#oraclient{auth = KeyConn}, ?TNS_DATA, Data);
-send_req(marker, State, TokensBufer, Timeout) ->
+send_req(marker, State, TokensBufer, Tout) ->
     {ok, State2} = send(State, ?TNS_MARKER, <<1,0,2>>),
-    handle_resp(TokensBufer, State2, Timeout);
-send_req(Type, State, Request, Timeout) ->
+    handle_resp(TokensBufer, State2, Tout);
+send_req(Type, State, Request, Tout) ->
     Data = ?ENCODER:encode_record(Type, Request),
     {ok, State2} = send(State, ?TNS_DATA, Data),
-    handle_resp([], State2, Timeout).
+    handle_resp([], State2, Tout).
 
 send_req(login, #oraclient{env=Env} = State) ->
     Data = ?ENCODER:encode_record(login, Env),
@@ -179,19 +186,19 @@ send_req(Type, #oraclient{env=Env} = State) ->
     Data = ?ENCODER:encode_record(Type, Env),
     send(State, ?TNS_DATA, Data).
      
-send_req(close, #oraclient{server=0} = State, _Timeout) ->
+send_req(close, #oraclient{server=0} = State, _Tout) ->
     send(State, ?TNS_DATA, <<64>>);
-send_req(close, #oraclient{auto=0} = State, Timeout) ->
-    _ = send_req(tran, State, ?TTI_ROLLBACK, Timeout),
-    send_req(close, State#oraclient{auto=1}, Timeout);
-send_req(close, #oraclient{cursors=Cursors} = State, Timeout) ->
+send_req(close, #oraclient{auto=0} = State, Tout) ->
+    _ = send_req(tran, State, ?TTI_ROLLBACK, Tout),
+    send_req(close, State#oraclient{auto=1}, Tout);
+send_req(close, #oraclient{cursors=Cursors} = State, Tout) ->
     Data = ?ENCODER:encode_record(close, Cursors),
     {ok, State2} = send(State, ?TNS_DATA, Data),
-    _ = handle_resp([], State2, Timeout),
+    _ = handle_resp([], State2, Tout),
     send(State2, ?TNS_DATA, <<64>>);
-send_req(fob, State, Timeout) ->
+send_req(fob, State, Tout) ->
     {ok, State2} = send(State, ?TNS_DATA, <<?TTI_FOB>>),
-    handle_resp([], State2, Timeout);
+    handle_resp([], State2, Tout);
 send_req(fetch, #oraclient{auto=Auto,server=Ver} = State, {Cursor, Def}) ->
     Data = ?ENCODER:encode_record(fetch, {Cursor, 0, [], [], Def, Auto, 0, Ver}),
     send(State, ?TNS_DATA, Data);
@@ -208,37 +215,37 @@ send_req(query, #oraclient{auto=Auto,fetch=Fetch,server=Ver} = State, {Query, Bi
     Data = ?ENCODER:encode_record(fetch, {0, Type2, Query, [get_param(data, B) || B <- Bind], [], Auto, Fetch2, Ver}),
     send(State#oraclient{type=Type2,params = [get_param(format, B) || B <- Bind]}, ?TNS_DATA, Data).
 
-handle_resp(TokensBufer, State = #oraclient{socket=Socket}, Timeout) ->
-    case recv(Socket, Timeout) of
+handle_resp(TokensBufer, State = #oraclient{socket=Socket}, Tout) ->
+    case recv(Socket, Tout) of
         {ok, ?TNS_DATA, Data} ->
-            handle_resp(Data, TokensBufer, State, Timeout);
+            handle_resp(Data, TokensBufer, State, Tout);
         {ok, ?TNS_MARKER, _Data} ->
-            send_req(marker, State, TokensBufer, Timeout);
+            send_req(marker, State, TokensBufer, Tout);
         {error, Type, Reason} ->
             handle_error(Type, Reason, State)
     end.
 
-handle_resp(Data, TokensBufer, #oraclient{type=Type} = State, Timeout) ->
+handle_resp(Data, TokensBufer, #oraclient{type=Type} = State, Tout) ->
     case ?DECODER:decode_token(Data, TokensBufer) of
 	{0, 0, Cursor, RowFormat, []} when Type =/= change, RowFormat =/= [] -> %defcols   
 	    {ok, State2} = send_req(fetch, State, {Cursor, RowFormat}),
-       	    handle_resp({Cursor, RowFormat, []}, State2, Timeout);
+       	    handle_resp({Cursor, RowFormat, []}, State2, Tout);
 	{0, _RowNumber, Cursor, RowFormat, []} when Type =/= change, RowFormat =/= [] -> %cursor
 	    {ok, State2} = send_req(fetch, State, {Cursor, []}),
-       	    handle_resp({Cursor, RowFormat, []}, State2, Timeout);
+       	    handle_resp({Cursor, RowFormat, []}, State2, Tout);
 	{RetCode, RowNumber, Cursor, RowFormat, Rows} ->
             #oraclient{cursors = Cursors} = State,
 	    case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
 		more ->
 		    {ok, State2} = send_req(fetch, State, Cursor),
-        	    handle_resp({Cursor, RowFormat, Rows}, State2, Timeout);
+        	    handle_resp({Cursor, RowFormat, Rows}, State2, Tout);
                 Result ->
                     erlang:append_element(Result, State#oraclient{cursors=get_result(Cursor,Cursors)})
 	    end;
 	{ok, Result} -> %tran
 	    {ok, Result, State};
 	{error, fob} -> %return
-	    send_req(fob, State, Timeout);
+	    send_req(fob, State, Tout);
 	{error, Reason} ->
 	    handle_error(remote, Reason, State)
     end.
@@ -286,31 +293,48 @@ get_param(Param, Data) ->
     ?DECODER:decode_token(oac, ?ENCODER:encode_token(oac, Data)),
     #format{param=Param,data_type=DataType,data_length=Length,charset=Charset}.
 
+sock_renegotiate(Socket, Opts, Tout) ->    
+    SslOpts = proplists:get_value(ssl, Opts, []),
+    {ok, Socket2} = ssl:close(Socket, {self(), Tout}),
+    ssl:connect(Socket2, SslOpts, Tout).
+
+sock_connect(Socket, [], _Tout) when is_port(Socket) -> {ok, Socket};
+sock_connect(Socket, SslOpts, Tout) -> ssl:connect(Socket, SslOpts, Tout).
+
+sock_close(Socket) when is_port(Socket) -> gen_tcp:close(Socket);
+sock_close(Socket) -> ssl:close(Socket).
+
+sock_send(Socket, Packet) when is_port(Socket) -> gen_tcp:send(Socket, Packet);
+sock_send(Socket, Packet) -> ssl:send(Socket, Packet).
+
+sock_recv(Socket, Length, Tout) when is_port(Socket) -> gen_tcp:recv(Socket, Length, Tout);
+sock_recv(Socket, Length, Tout) -> ssl:recv(Socket, Length, Tout).
+
 send(State, _PacketType, <<>>) ->
     {ok, State};
 send(State, PacketType, Data) ->
     #oraclient{socket=Socket} = State,
     Packet = ?ENCODER:encode_packet(PacketType, Data),
-    case gen_tcp:send(Socket, Packet) of
+    case sock_send(Socket, Packet) of
         ok ->
             send(State, PacketType, <<>>);
         {error, Reason} ->
             handle_error(socket, Reason, State)
     end.
 
-recv(Socket, Timeout) ->
-    recv(Socket, Timeout, <<>>, <<>>).
+recv(Socket, Tout) ->
+    recv(Socket, Tout, <<>>, <<>>).
 
-recv(Socket, Timeout, Buffer, Data) ->
+recv(Socket, Tout, Buffer, Data) ->
     case ?DECODER:decode_packet(Buffer) of
         {ok, Type, PacketBody, <<>>} ->
             {ok, Type, <<Data/bits, PacketBody/bits>>};
         {ok, _Type, PacketBody, Rest} ->
-            recv(Socket, Timeout, Rest, <<Data/bits, PacketBody/bits>>);
+            recv(Socket, Tout, Rest, <<Data/bits, PacketBody/bits>>);
         {error, more} ->
-            case gen_tcp:recv(Socket, 0, Timeout) of
+            case sock_recv(Socket, 0, Tout) of
                 {ok, NetworkData} ->
-                    recv(Socket, Timeout, <<Buffer/bits, NetworkData/bits>>, Data);
+                    recv(Socket, Tout, <<Buffer/bits, NetworkData/bits>>, Data);
                 {error, Reason} ->
                     {error, socket, Reason}
             end
