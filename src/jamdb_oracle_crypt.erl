@@ -22,7 +22,7 @@ o5logon(Sess, Salt, Pass, Bits) when is_list(Sess), Bits =:= 192 ->
 o5logon(Sess, KeySess, Pass, Bits) when is_binary(Sess) ->
     IVec = <<0:128>>,
     SrvSess = jose_jwa_aes:block_decrypt({aes_cbc, Bits}, KeySess, IVec, Sess),
-    CliSess = crypto:rand_bytes(Bits div 4),
+    CliSess = crypto:strong_rand_bytes(Bits div 4),
     AuthSess = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeySess, IVec, CliSess),
     CatKey = cat_key(binary:part(SrvSess,16,Bits div 8),binary:part(CliSess,16,Bits div 8),[]),
     KeyConn = conn_key(CatKey, Bits),
