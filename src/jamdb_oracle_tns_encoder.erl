@@ -54,14 +54,17 @@ encode_record(login, EnvOpts) ->
     Sid             = proplists:get_value(sid, EnvOpts, ?DEF_SID),
     ServiceName     = proplists:get_value(service_name, EnvOpts),
     AppName         = proplists:get_value(app_name, EnvOpts, "jamdb"),
+    SslOpts         = proplists:get_value(ssl, EnvOpts, []),
     Data = unicode:characters_to_binary(
     "(DESCRIPTION=(CONNECT_DATA=("++ case ServiceName of
         undefined -> "SID="++Sid;
                 _ -> "SERVICE_NAME="++ServiceName end ++
     ")(CID=(PROGRAM="++AppName++
     ")(HOST="++UserHost++")(USER="++User++
-    ")))(ADDRESS=(PROTOCOL=TCP)(HOST="++Host++
-    ")(PORT="++integer_to_list(Port)++")))"),
+    ")))(ADDRESS=(PROTOCOL="++ case SslOpts of 
+               [] -> "TCP";
+                _ -> "TCPS" end ++
+    ")(HOST="++Host++")(PORT="++integer_to_list(Port)++")))"),
     <<   
     1,57,		  % Packet version number
     1,57,		  % Lowest compatible version number
