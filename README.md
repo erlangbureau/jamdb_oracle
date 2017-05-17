@@ -24,6 +24,11 @@ Getting Started
     {password, "jamdbtest"},
     {sid, "JAMDBTEST"},
     %%{service_name, "JAMDBTEST"},
+    %%{ssl, [{ciphers,[{rsa,aes_128_cbc,sha}]},
+    %%       {signature_algs,[{sha,rsa}]},
+    %%       {certfile, "/home/jamdbtest/cert.pem"},
+    %%       {keyfile, "/home/jamdbtest/key.pem"},
+    %%       {password, "jamdbtest"}]},
     {app_name, "jamdbtest"}
 ].
 
