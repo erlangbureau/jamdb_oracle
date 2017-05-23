@@ -19,6 +19,7 @@
     param = in :: in | out,
     data_type,
     data_length,
+    data_scale,
     charset
 }).
 
