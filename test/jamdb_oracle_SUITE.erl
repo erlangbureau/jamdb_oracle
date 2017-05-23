@@ -119,7 +119,7 @@ end_per_testcase(Case, Config) ->
 select(Config) ->
     ConnRef = ?config(conn_ref, Config),
     Query = "select 1 one, 2 two, 3 three from dual",
-    Result = [{result_set, [<<"ONE">>, <<"TWO">>, <<"THREE">>], [], [ [{1},{2},{3}] ]}],
+    Result = [{result_set, [<<"ONE">>, <<"TWO">>, <<"THREE">>], [], [ [{1.0},{2.0},{3.0}] ]}],
     {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
 
 select_with_bind(Config) ->
@@ -142,17 +142,17 @@ t_number(Config) ->
     TestCases = [
         {null, null},
         {0.18446744073709, 0.18446744073709},
-        {65535, 65535},
-        {4294967295, 4294967295},
+        {65535.0, 65535.0},
+        {4294967295.0, 4294967295.0},
         {1844674407.3709551615, 1844674407.3709551615},
         {18446744073709.55, 18446744073709.55},
-        {18446744073709551615, 18446744073709551615},
+        {18446744073709551615.0, 18446744073709551615.0},
         {-0.9223372036854, -0.9223372036854},
-        {-32768, -32768},
-        {-2147483648, -2147483648},
+        {-32768.0, -32768.0},
+        {-2147483648.0, -2147483648.0},
         {-9223372036.854775808, -9223372036.854775808},
         {-9223372036854.77, -9223372036854.77},
-        {-9223372036854775808, -9223372036854775808}
+        {-9223372036854775808.0, -9223372036854775808.0}
     ],
     run_testcases(ConnRef, Table, Key, TestCases).
 
@@ -337,7 +337,7 @@ with_input_and_output_params(Config) ->
     ConnRef = ?config(conn_ref, Config),
     Query = {"begin with_input_and_output_params(:i1, :o2); end;",
              #{o2 => {out, cursor}, i1 => {in, "select 1 one, 2 two, 3 three from dual"}}},
-    Result = [{result_set, [<<"ONE">>, <<"TWO">>, <<"THREE">>], [], [ [{1},{2},{3}] ]}],
+    Result = [{result_set, [<<"ONE">>, <<"TWO">>, <<"THREE">>], [], [ [{1.0},{2.0},{3.0}] ]}],
     {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
 
 %% internal
