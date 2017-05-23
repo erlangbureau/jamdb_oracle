@@ -74,6 +74,7 @@ decode_token(oac, Data) ->
     Rest2 = decode_next(ub1,Data),	%%data type
     Rest3 = decode_next(ub1,Rest2),     %%flg
     Rest4 = decode_next(ub1,Rest3),     %%pre
+    Scale = decode_ub2(Rest4),
     Rest5 = decode_next(ub2,Rest4),	%%data scale
     Length = decode_ub4(Rest5),
     Rest6 = decode_next(ub4,Rest5),	%%max data lenght
@@ -85,7 +86,7 @@ decode_token(oac, Data) ->
     Rest11 = decode_next(ub2,Rest10),	%%charset
     Rest12 = decode_next(ub1,Rest11),	%%form of use
     Rest13 = decode_next(ub4,Rest12),   %%mxlc
-    {Rest13, DataType, Length, Charset};
+    {Rest13, DataType, Length, Scale, Charset};
 decode_token(wrn, Data) ->
     Rest2 = decode_next(ub2,Data),	%%retCode
     Rest3 = decode_next(ub2,Rest2),	%%warnLength
@@ -119,7 +120,7 @@ decode_token(dcb, Data, Ver) ->
 decode_token(uds, Data, {_Ver, RowFormat, 0}) ->
     {lists:reverse(RowFormat), Data};
 decode_token(uds, Data, {Ver, RowFormat, Num}) ->
-    {Rest2, DataType, Length, Charset} = decode_token(oac, Data),
+    {Rest2, DataType, Length, Scale, Charset} = decode_token(oac, Data),
     Rest3 = decode_next(ub1,Rest2),	%%nullable
     Rest4 = decode_next(ub1,Rest3),
     Column = decode_dalc(Rest4),
@@ -133,7 +134,7 @@ decode_token(uds, Data, {Ver, RowFormat, Num}) ->
         _ -> decode_next(ub4,Rest8)
     end,
     decode_token(uds, Rest9, {Ver, [#format{column_name=list_to_binary(Column),
-    data_type=DataType,data_length=Length,charset=Charset}|RowFormat], Num-1});
+    data_type=DataType,data_length=Length,data_scale=Scale,charset=Charset}|RowFormat], Num-1});
 decode_token(rxh, Data, {Cursor, RowFormat, Rows}) ->
     Rest2 = decode_next(ub1,Data),
     Rest3 = decode_next(ub2,Rest2),
@@ -390,6 +391,10 @@ decode_data(Data, #format{data_type=DataType, charset=Charset}=ValueFormat)
     {xmerl_ucs:to_utf8(xmerl_ucs:from_utf16be(list_to_binary(Value))), RestData};
 decode_data(Data, #format{data_type=DataType}) when ?IS_CHAR_TYPE(DataType); ?IS_RAW_TYPE(DataType) ->
     {decode_value(Data, DataType), decode_next(chr,Data)};
+decode_data(Data, #format{data_type=DataType, data_scale=0}) when ?IS_NUMBER_TYPE(DataType) ->
+    <<Length, BinValue:Length/binary, Rest/binary>> = Data,
+    {Value} = decode_value(BinValue, DataType),
+    {{round(Value)}, Rest};
 decode_data(Data, #format{data_type=DataType}) when ?IS_FIXED_TYPE(DataType) ->
     <<Length, BinValue:Length/binary, Rest/binary>> = Data,
     {decode_value(BinValue, DataType), Rest};
@@ -399,7 +404,7 @@ decode_data(Data, #format{data_type=DataType}) ->
 decode_value(BinValue, DataType) when ?IS_CHAR_TYPE(DataType); ?IS_RAW_TYPE(DataType) ->
     decode_chr(BinValue);
 decode_value(BinValue, DataType) when ?IS_NUMBER_TYPE(DataType) ->
-    {decode_number(BinValue)};
+    {decode_number(BinValue) / 1};
 decode_value(BinValue, DataType) when ?IS_BINARY_TYPE(DataType) ->
     {decode_binary(BinValue)};
 decode_value(BinValue, DataType) when ?IS_DATE_TYPE(DataType) ->
