@@ -289,9 +289,9 @@ get_param(format, {out, Data}) -> get_param(out, Data);
 get_param(format, {in, Data}) -> get_param(in, Data);
 get_param(format, Data) -> get_param(in, Data);
 get_param(Param, Data) ->
-    {<<>>, DataType, Length, Charset} = 
+    {<<>>, DataType, Length, Scale, Charset} = 
     ?DECODER:decode_token(oac, ?ENCODER:encode_token(oac, Data)),
-    #format{param=Param,data_type=DataType,data_length=Length,charset=Charset}.
+    #format{param=Param,data_type=DataType,data_length=Length,data_scale=Scale,charset=Charset}.
 
 sock_renegotiate(Socket, Opts, Tout) ->    
     SslOpts = proplists:get_value(ssl, Opts, []),
