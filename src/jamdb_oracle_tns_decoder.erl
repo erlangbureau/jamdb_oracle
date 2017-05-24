@@ -391,10 +391,9 @@ decode_data(Data, #format{data_type=DataType, charset=Charset}=ValueFormat)
     {xmerl_ucs:to_utf8(xmerl_ucs:from_utf16be(list_to_binary(Value))), RestData};
 decode_data(Data, #format{data_type=DataType}) when ?IS_CHAR_TYPE(DataType); ?IS_RAW_TYPE(DataType) ->
     {decode_value(Data, DataType), decode_next(chr,Data)};
-decode_data(Data, #format{data_type=DataType, data_scale=0}) when ?IS_NUMBER_TYPE(DataType) ->
+decode_data(Data, #format{data_type=DataType, data_scale=Scale}) when ?IS_NUMBER_TYPE(DataType) ->
     <<Length, BinValue:Length/binary, Rest/binary>> = Data,
-    {Value} = decode_value(BinValue, DataType),
-    {{round(Value)}, Rest};
+    {{lsc(decode_number(BinValue), Scale)}, Rest};
 decode_data(Data, #format{data_type=DataType}) when ?IS_FIXED_TYPE(DataType) ->
     <<Length, BinValue:Length/binary, Rest/binary>> = Data,
     {decode_value(BinValue, DataType), Rest};
@@ -404,7 +403,7 @@ decode_data(Data, #format{data_type=DataType}) ->
 decode_value(BinValue, DataType) when ?IS_CHAR_TYPE(DataType); ?IS_RAW_TYPE(DataType) ->
     decode_chr(BinValue);
 decode_value(BinValue, DataType) when ?IS_NUMBER_TYPE(DataType) ->
-    {decode_number(BinValue) / 1};
+    {decode_number(BinValue)};
 decode_value(BinValue, DataType) when ?IS_BINARY_TYPE(DataType) ->
     {decode_binary(BinValue)};
 decode_value(BinValue, DataType) when ?IS_DATE_TYPE(DataType) ->
@@ -534,6 +533,10 @@ lnxfmt([I|L]) when I band 128 > 0 ->
     {1, [((I band 127) - 65)|[ N-1 || N <- L]]};
 lnxfmt([I|L]) when I band 128 =:= 0 ->
     {-1, [(((I bxor 255) band 127) - 65)|[ 101-N || N <- lnxneg(L)]]}.
+
+lsc(I, 0) when I-trunc(I) =:= 0.0 -> trunc(I);
+lsc(I, 0) -> I;
+lsc(I, _S) -> I / 1.
 
 decode_binary(<<I,Rest/binary>> = Data) when I band 128 > 0 ->
     Length = byte_size(Data),
