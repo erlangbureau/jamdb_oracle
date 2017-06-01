@@ -53,7 +53,11 @@ Getting Started
 Running Tests
 ======
 First, supply connection details for your test database in test/jamdb_oracle_test.hrl and test/jamdb_oracle_test.exs. Once the connection configuration is saved, run the test suite with `rebar3 ct` and `mix test`.
- 
+
+SSL
+======
+During the authentication when downgrading an TLS connection to a transport connection we're NOT sending close alert to peer before releasing the transport socket. See patched [ssl](https://github.com/vstavskyi/ssl) module.
+
 Author
 ======
 Mykhailo Vstavskyi
