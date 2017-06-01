@@ -56,7 +56,7 @@ First, supply connection details for your test database in test/jamdb_oracle_tes
 
 SSL
 ======
-During the authentication when downgrading an TLS connection to a transport connection we're NOT sending close alert to peer before releasing the transport socket. See patched [ssl](https://github.com/vstavskyi/ssl) module.
+When authenticating and downgrading an TLS connection to a transport connection we're NOT sending close alert to peer before releasing the transport socket. See patched [ssl](https://github.com/vstavskyi/ssl) module.
 
 Author
 ======
