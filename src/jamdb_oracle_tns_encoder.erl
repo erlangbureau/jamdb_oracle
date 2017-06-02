@@ -273,8 +273,8 @@ encode_token(bind, Data) ->
 encode_token([], Acc) ->
     Acc;
 encode_token([Data|Rest], Acc) ->
-    BinValue = encode_token(rxd, Data),
-    encode_token(Rest, <<Acc/binary, BinValue/binary>>);    
+    Bin = encode_token(rxd, Data),
+    encode_token(Rest, <<Acc/binary, Bin/binary>>);    
 encode_token(rxd, Data) when is_list(Data); is_binary(Data) -> encode_chr(Data);
 encode_token(rxd, Data) when is_number(Data) -> encode_len(encode_number(Data));
 encode_token(rxd, Data) when is_tuple(Data) -> encode_len(encode_date(Data));
@@ -393,8 +393,8 @@ encode_chr(Data) ->
     encode_len(Data).
 
 encode_chr(Data,Acc) when byte_size(Data) > 64 ->
-    <<Prefix:64/binary,Rest/bits>> = Data,
-    encode_chr(Rest,<<Acc/binary, 64, Prefix/binary>>);
+    <<Bin:64/binary,Rest/bits>> = Data,
+    encode_chr(Rest,<<Acc/binary, 64, Bin/binary>>);
 encode_chr(Data,Acc) ->
     Length = byte_size(Data),
     <<Acc/binary, Length, Data:Length/binary, 0>>.
