@@ -171,9 +171,9 @@ handle_error(Type, Reason, State) ->
 send_req(auth, #oraclient{env=Env} = State, Sess, Salt) ->
     {Data,KeyConn} = ?ENCODER:encode_record(auth, Env, Sess, Salt),
     send(State#oraclient{auth = KeyConn}, ?TNS_DATA, Data);
-send_req(marker, State, TokensBufer, Tout) ->
+send_req(marker, State, Acc, Tout) ->
     {ok, State2} = send(State, ?TNS_MARKER, <<1,0,2>>),
-    handle_resp(TokensBufer, State2, Tout);
+    handle_resp(Acc, State2, Tout);
 send_req(Type, State, Request, Tout) ->
     Data = ?ENCODER:encode_record(Type, Request),
     {ok, State2} = send(State, ?TNS_DATA, Data),
@@ -215,18 +215,18 @@ send_req(query, #oraclient{auto=Auto,fetch=Fetch,server=Ver} = State, {Query, Bi
     Data = ?ENCODER:encode_record(fetch, {0, Type2, Query, [get_param(data, B) || B <- Bind], [], Auto, Fetch2, Ver}),
     send(State#oraclient{type=Type2,params = [get_param(format, B) || B <- Bind]}, ?TNS_DATA, Data).
 
-handle_resp(TokensBufer, State = #oraclient{socket=Socket}, Tout) ->
+handle_resp(Acc, State = #oraclient{socket=Socket}, Tout) ->
     case recv(Socket, Tout) of
         {ok, ?TNS_DATA, Data} ->
-            handle_resp(Data, TokensBufer, State, Tout);
+            handle_resp(Data, Acc, State, Tout);
         {ok, ?TNS_MARKER, _Data} ->
-            send_req(marker, State, TokensBufer, Tout);
+            send_req(marker, State, Acc, Tout);
         {error, Type, Reason} ->
             handle_error(Type, Reason, State)
     end.
 
-handle_resp(Data, TokensBufer, #oraclient{type=Type} = State, Tout) ->
-    case ?DECODER:decode_token(Data, TokensBufer) of
+handle_resp(Data, Acc, #oraclient{type=Type} = State, Tout) ->
+    case ?DECODER:decode_token(Data, Acc) of
 	{0, 0, Cursor, RowFormat, []} when Type =/= change, RowFormat =/= [] -> %defcols   
 	    {ok, State2} = send_req(fetch, State, {Cursor, RowFormat}),
        	    handle_resp({Cursor, RowFormat, []}, State2, Tout);
@@ -288,10 +288,10 @@ get_param(data, Data) -> Data;
 get_param(format, {out, Data}) -> get_param(out, Data);
 get_param(format, {in, Data}) -> get_param(in, Data);
 get_param(format, Data) -> get_param(in, Data);
-get_param(Param, Data) ->
+get_param(Type, Data) ->
     {<<>>, DataType, Length, Scale, Charset} = 
     ?DECODER:decode_token(oac, ?ENCODER:encode_token(oac, Data)),
-    #format{param=Param,data_type=DataType,data_length=Length,data_scale=Scale,charset=Charset}.
+    #format{param=Type,data_type=DataType,data_length=Length,data_scale=Scale,charset=Charset}.
 
 sock_renegotiate(Socket, Opts, Tout) ->    
     SslOpts = proplists:get_value(ssl, Opts, []),
@@ -325,8 +325,8 @@ send(State, PacketType, Data) ->
 recv(Socket, Tout) ->
     recv(Socket, Tout, <<>>, <<>>).
 
-recv(Socket, Tout, Buffer, Data) ->
-    case ?DECODER:decode_packet(Buffer) of
+recv(Socket, Tout, Acc, Data) ->
+    case ?DECODER:decode_packet(Acc) of
         {ok, Type, PacketBody, <<>>} ->
             {ok, Type, <<Data/bits, PacketBody/bits>>};
         {ok, _Type, PacketBody, Rest} ->
@@ -334,7 +334,7 @@ recv(Socket, Tout, Buffer, Data) ->
         {error, more} ->
             case sock_recv(Socket, 0, Tout) of
                 {ok, NetworkData} ->
-                    recv(Socket, Tout, <<Buffer/bits, NetworkData/bits>>, Data);
+                    recv(Socket, Tout, <<Acc/bits, NetworkData/bits>>, Data);
                 {error, Reason} ->
                     {error, socket, Reason}
             end
