@@ -35,17 +35,17 @@ decode_packet(<<PacketSize:16, 0:16, Type, _Flags:8, 0:16, Rest/bits>>) ->
 decode_packet(_) ->
     {error, more}.
 
-decode_token(<<Token, Data/binary>>, TokensBufer) ->
+decode_token(<<Token, Data/binary>>, Acc) ->
     case Token of
-	?TTI_DCB -> decode_token(dcb, Data, TokensBufer);
-	?TTI_IOV -> decode_token(iov, Data, TokensBufer);
-	?TTI_RXH -> decode_token(rxh, Data, TokensBufer);
-	?TTI_RXD -> decode_token(rxd, Data, TokensBufer);
-	?TTI_BVC -> decode_token(bvc, Data, TokensBufer);
-	?TTI_LOB -> decode_token(lob, Data, TokensBufer);
-	?TTI_RPA -> decode_token(rpa, Data, TokensBufer);
-	?TTI_OER -> decode_token(oer, Data, TokensBufer);
-	?TTI_STA -> {ok, TokensBufer};  %tran
+	?TTI_DCB -> decode_token(dcb, Data, Acc);
+	?TTI_IOV -> decode_token(iov, Data, Acc);
+	?TTI_RXH -> decode_token(rxh, Data, Acc);
+	?TTI_RXD -> decode_token(rxd, Data, Acc);
+	?TTI_BVC -> decode_token(bvc, Data, Acc);
+	?TTI_LOB -> decode_token(lob, Data, Acc);
+	?TTI_RPA -> decode_token(rpa, Data, Acc);
+	?TTI_OER -> decode_token(oer, Data, Acc);
+	?TTI_STA -> {ok, Acc};  %tran
 	?TTI_FOB -> {error, fob};  %return
         _ -> 
     	    {error, token}
@@ -392,38 +392,38 @@ decode_data(Data, #format{data_type=DataType, charset=Charset}=ValueFormat)
 decode_data(Data, #format{data_type=DataType}) when ?IS_CHAR_TYPE(DataType); ?IS_RAW_TYPE(DataType) ->
     {decode_value(Data, DataType), decode_next(chr,Data)};
 decode_data(Data, #format{data_type=DataType, data_scale=Scale}) when ?IS_NUMBER_TYPE(DataType) ->
-    <<Length, BinValue:Length/binary, Rest/binary>> = Data,
-    {{lsc(decode_number(BinValue), Scale)}, Rest};
+    <<Length, Bin:Length/binary, Rest/binary>> = Data,
+    {{lsc(decode_number(Bin), Scale)}, Rest};
 decode_data(Data, #format{data_type=DataType}) when ?IS_FIXED_TYPE(DataType) ->
-    <<Length, BinValue:Length/binary, Rest/binary>> = Data,
-    {decode_value(BinValue, DataType), Rest};
+    <<Length, Bin:Length/binary, Rest/binary>> = Data,
+    {decode_value(Bin, DataType), Rest};
 decode_data(Data, #format{data_type=DataType}) ->
     decode_value(Data, DataType).
 
-decode_value(BinValue, DataType) when ?IS_CHAR_TYPE(DataType); ?IS_RAW_TYPE(DataType) ->
-    decode_chr(BinValue);
-decode_value(BinValue, DataType) when ?IS_NUMBER_TYPE(DataType) ->
-    {decode_number(BinValue)};
-decode_value(BinValue, DataType) when ?IS_BINARY_TYPE(DataType) ->
-    {decode_binary(BinValue)};
-decode_value(BinValue, DataType) when ?IS_DATE_TYPE(DataType) ->
-    decode_date(BinValue);
-decode_value(BinValue, DataType) when ?IS_INTERVAL_TYPE(DataType) ->
-    decode_interval(BinValue);
-decode_value(BinValue, DataType) when ?IS_ROWID_TYPE(DataType) ->
-    decode_rowid(BinValue);
-decode_value(BinValue, DataType) when ?IS_LONG_TYPE(DataType) ->
-    decode_long(BinValue);
-decode_value(BinValue, DataType) when DataType =:= ?TNS_TYPE_UROWID ->
-    decode_urowid(BinValue);
-decode_value(BinValue, DataType) when DataType =:= ?TNS_TYPE_CLOB  ->
-    decode_clob(BinValue);
-decode_value(BinValue, DataType) when DataType =:= ?TNS_TYPE_BLOB ->
-    decode_blob(BinValue);
-decode_value(BinValue, DataType) when DataType =:= ?TNS_TYPE_ADT ->
-    decode_adt(BinValue);
-decode_value(BinValue, _DataType) ->
-    decode_value(BinValue).
+decode_value(Bin, DataType) when ?IS_CHAR_TYPE(DataType); ?IS_RAW_TYPE(DataType) ->
+    decode_chr(Bin);
+decode_value(Bin, DataType) when ?IS_NUMBER_TYPE(DataType) ->
+    {decode_number(Bin)};
+decode_value(Bin, DataType) when ?IS_BINARY_TYPE(DataType) ->
+    {decode_binary(Bin)};
+decode_value(Bin, DataType) when ?IS_DATE_TYPE(DataType) ->
+    decode_date(Bin);
+decode_value(Bin, DataType) when ?IS_INTERVAL_TYPE(DataType) ->
+    decode_interval(Bin);
+decode_value(Bin, DataType) when ?IS_ROWID_TYPE(DataType) ->
+    decode_rowid(Bin);
+decode_value(Bin, DataType) when ?IS_LONG_TYPE(DataType) ->
+    decode_long(Bin);
+decode_value(Bin, DataType) when DataType =:= ?TNS_TYPE_UROWID ->
+    decode_urowid(Bin);
+decode_value(Bin, DataType) when DataType =:= ?TNS_TYPE_CLOB  ->
+    decode_clob(Bin);
+decode_value(Bin, DataType) when DataType =:= ?TNS_TYPE_BLOB ->
+    decode_blob(Bin);
+decode_value(Bin, DataType) when DataType =:= ?TNS_TYPE_ADT ->
+    decode_adt(Bin);
+decode_value(Bin, _DataType) ->
+    decode_value(Bin).
 
 decode_value(Data) ->
     Rest2 = decode_next(ub4,Data),
