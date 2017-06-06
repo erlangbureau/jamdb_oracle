@@ -30,7 +30,20 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:database` - Database (Database service name or SID with colon as prefix)
     * `:username` - Username (Name for the connecting user)
     * `:password` - User password (Password for the connecting user)
+  
+  ### Primitive types
 
+  The primitive types are:
+
+  Ecto types              | Oracle types                     | Literal syntax in query
+  :---------------------- | :------------------------------- | :---------------------
+  `:id`, `:integer`       | `NUMBER (*,0)`                   | 1, 2, 3
+  `:float`                | `NUMBER`, `FLOAT`,`BINARY_FLOAT` | 1.0, 2.0, 3.0
+  `:string`, `:binary`    | `CHAR`, `VARCHAR2`, `CLOB`       | "one two three", "ett två tre"
+                          | `NCHAR`, `NVARCHAR2`, `NCLOB`    | <<0x56, 0xdb, 0x4e, 0x94, 0x51, 0x6d>>
+                          | `RAW`, `BLOB`                    | "56DB4E94516D", "E59B9BE4BA94E585AD"
+  `:naive_datetime`       | `DATE`, `TIMESTAMP`              | {2016, 8, 1}, {{2016, 8, 1}, {13, 14, 15}}
+  
   #### Examples
 
       iex> string = "one two three"
