@@ -275,7 +275,8 @@ encode_token([], Acc) ->
 encode_token([Data|Rest], Acc) ->
     Bin = encode_token(rxd, Data),
     encode_token(Rest, <<Acc/binary, Bin/binary>>);    
-encode_token(rxd, Data) when is_list(Data); is_binary(Data) -> encode_chr(Data);
+encode_token(rxd, Data) when is_list(Data) -> encode_chr(Data);
+encode_token(rxd, Data) when is_binary(Data) -> encode_chr(unicode:characters_to_binary(Data, utf8, utf16));
 encode_token(rxd, Data) when is_number(Data) -> encode_len(encode_number(Data));
 encode_token(rxd, Data) when is_tuple(Data) -> encode_len(encode_date(Data));
 encode_token(rxd, cursor) -> <<0>>;
