@@ -1,6 +1,9 @@
 defmodule Jamdb.Oracle do
   @moduledoc """
   Oracle driver for Elixir.
+
+  It relies on `DBConnection` to provide pooling, prepare, execute and more.
+
   """
   
   @behaviour DBConnection
@@ -43,38 +46,20 @@ defmodule Jamdb.Oracle do
 
   @doc """
   Runs custom SQL query on given pid.
-  
-  Terms with colon as prefix in the statement are bind variables, 
-  acting as placeholders for the parameters: `:1`, `:2`, `:3`, `:one`, `:two`, `:three`.
-  Stored procedure calls are supported inside a block.
-  Result parameter must be registered as an `out` parameter: `{:out, term}`.
-  Other parameters can be either `out` or `in`: `{:in, term}` or just `term`.
-  The returning clause retrieves `out` parameters affected by a statement. 
-  String parameter that uses the national character set must be UTF-16 binary.
-  Binary LOB and RAW parameters can be a base 16 encoded string.
-  
-  The following literals are supported in the parameters:
-
-    * Integers: `1`, `2`, `3`
-    * Floats: `1.0`, `2.0`, `3.0`
-    * Strings: `"one two three"`, `"ett två tre"`
-    * Binaries: `<<0x56, 0xdb, 0x4e, 0x94, 0x51, 0x6d>>`
-    * Tuples: `{2016, 8, 1}`, `{{2016, 8, 1}, {13, 14, 15, 160000}}`
-    * Atoms: `:cursor`, `:null`
 
   In case of success, it must return an `:ok` tuple containing result struct. Its fields are:
 
     * `:columns` - The column names
     * `:num_rows` - The number of fetched or affected rows
     * `:rows` - The result set as list
-    
+
   ## Examples
 
-      iex> Jamdb.Oracle.query(s, 'select 1, sysdate, rowid from dual where 1=:1 ',[1])
-      {:ok, %{num_rows: 1, rows: [[{1}, {{2016, 8, 1}, {13, 14, 15}}, 'AAAACOAABAAAAWJAAA']]}}
+      iex> Jamdb.Oracle.query(s, 'select 1+:1, sysdate, rowid from dual where 1=:1 ',[1])
+      {:ok, %{num_rows: 1, rows: [[{2}, {{2016, 8, 1}, {13, 14, 15}}, 'AAAACOAABAAAAWJAAA']]}}
 
   """
-  @callback query(s :: pid, sql :: String.t, params :: list | map) :: 
+  @callback query(s :: pid, sql :: String.t, params :: [term] | map) :: 
     {:ok, term} | {:error, term}  
   def query(s, sql, params \\ []) do
     case :jamdb_oracle.sql_query(s, {sql, params}) do
@@ -203,9 +188,9 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp decode({elem}) when is_number(elem), do: elem
   defp decode({date, {hour, min, sec}}), do: {date, {hour, min, trunc(sec)}}
   defp decode({date, {hour, min, sec}, _}), do: {date, {hour, min, trunc(sec)}}
-  defp decode(elem) when is_list(elem), do: to_string(elem)
+  defp decode(elem) when is_list(elem), do: to_binary(elem)
   defp decode(elem), do: elem
-  
+
   def encode(_, [], _), do: []
   def encode(_, params, _), do: Enum.map(params, fn elem -> encode(elem) end)
 
@@ -214,7 +199,25 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp encode(%Ecto.Query.Tagged{value: binary, type: :binary}), 
     do: :binary.bin_to_list(Base.encode16(binary, case: :lower))
   defp encode(%Ecto.Query.Tagged{value: elem}), do: elem
-  defp encode(elem) when is_binary(elem) , do: :binary.bin_to_list(elem)
   defp encode(elem), do: elem
-  
+
+  defp expr(list) when is_list(list) do
+    Enum.map(list, fn 
+      :null -> nil
+      elem  -> elem
+    end)    
+  end
+
+  defp to_binary(list) when is_list(list) do
+    try do 
+      :binary.list_to_bin(list)
+    rescue
+      ArgumentError ->
+        Enum.map(expr(list), fn 
+          elem when is_list(elem) -> expr(elem) 
+          other -> other
+        end) |> Enum.join
+    end        
+  end
+
 end
