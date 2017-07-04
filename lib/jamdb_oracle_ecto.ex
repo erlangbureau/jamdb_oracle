@@ -5,6 +5,14 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   It uses `Jamdb.Oracle` for communicating to the database
   and a connection pool, such as `poolboy`.
 
+  ## Features
+
+   * Using bind variables:     `"select 1+:1, sysdate, rowid from dual where 1=:1"`, `[1]`
+   * Calling stored procedure: `"begin proc(:1, :2, :3); end;"`, `[1.0, 2.0, 3.0]`
+   * Calling stored function:  `"begin :1 := func(:2); end;"`, `["", "one hundred"]`
+   * Using cursor variable:    `"begin :1 := func(:2); end;"`, `[:cursor, {2016, 8, 1}]`
+   * Using returning clause:   `"insert into tabl (id) values (:1) return id into :2"`, `[1, {:out, 0}]`
+
   ## Options
 
   Adapter options split in different categories described
@@ -30,29 +38,26 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:database` - Database (Database service name or SID with colon as prefix)
     * `:username` - Username (Name for the connecting user)
     * `:password` - User password (Password for the connecting user)
-  
+
   ### Primitive types
 
   The primitive types are:
 
-  Ecto types              | Oracle types                     | Literal syntax in query
-  :---------------------- | :------------------------------- | :---------------------
+  Ecto types              | Oracle types                     | Literal syntax in params
+  :---------------------- | :------------------------------- | :-----------------------
   `:id`, `:integer`       | `NUMBER (*,0)`                   | 1, 2, 3
-  `:float`                | `NUMBER`, `FLOAT`,`BINARY_FLOAT` | 1.0, 2.0, 3.0
-  `:string`, `:binary`    | `CHAR`, `VARCHAR2`, `CLOB`       | "one two three", "ett två tre"
-                          | `NCHAR`, `NVARCHAR2`, `NCLOB`    | <<0x56, 0xdb, 0x4e, 0x94, 0x51, 0x6d>>
-                          | `RAW`, `BLOB`                    | "56DB4E94516D", "E59B9BE4BA94E585AD"
+  `:float`                | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | 1.0, 2.0, 3.0
+  `:decimal`              | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | [`Decimal`](https://hexdocs.pm/decimal)
+  `:string`               | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
+  `:string`               | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "五百円"
+  `:binary`               | `RAW`, `BLOB`                    | "E799BE"
   `:naive_datetime`       | `DATE`, `TIMESTAMP`              | {2016, 8, 1}, {{2016, 8, 1}, {13, 14, 15}}
-  
+
   #### Examples
 
-      iex> string = "one two three"
-      iex> binary = <<0x56,0xdb,0x4e,0x94,0x51,0x6d,0x4e,0x03>>
-      iex> nls_string = %Ecto.Query.Tagged{value: binary, type: :string}    
-      iex> binary_lob = %Ecto.Query.Tagged{value: binary, type: :binary}
-      iex> Ecto.Adapters.SQL.query(Repo, "select 1, sysdate, rowid from dual where 1=:1 ", [1])
-      {:ok, %{num_rows: 1, rows: [[1, {{2016, 8, 1}, {13, 14, 15}}, 'AAAACOAABAAAAWJAAA']]}}
-            
+      iex> Ecto.Adapters.SQL.query(Repo, "select 1+:1, sysdate, rowid from dual where 1=:1 ", [1])
+      {:ok, %{num_rows: 1, rows: [[2, {{2016, 8, 1}, {13, 14, 15}}, "AAAACOAABAAAAWJAAA"]]}}
+
   """
 
   use Ecto.Adapters.SQL, Jamdb.Oracle
