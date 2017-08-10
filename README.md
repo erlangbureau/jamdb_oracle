@@ -1,7 +1,5 @@
 JamDB Oracle
 ============
-[![Hex.pm](https://img.shields.io/hexpm/v/plug.svg)](https://hex.pm/packages/jamdb_oracle)
-[![Hex.pm](https://img.shields.io/hexpm/dt/plug.svg)](https://hex.pm/packages/jamdb_oracle)
 
 Erlang driver and Ecto adapter for Oracle Database
 
