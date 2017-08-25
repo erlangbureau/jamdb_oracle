@@ -11,9 +11,8 @@ o5logon(Sess, User, Pass, Bits) when is_list(Sess), Bits =:= 128 ->
     IVec = <<0:64>>,
     CliPass = norm(User++Pass),
     Rest1 = crypto:block_encrypt(des_cbc, hexstr2bin("0123456789ABCDEF"), IVec, CliPass),
-    Rest2 = crypto:block_encrypt(des_cbc, binary:part(Rest1,24,8), IVec, CliPass),
-    Data = binary:part(Rest2,24,8),
-    KeySess = <<Data/binary,0:64>>,
+    Rest2 = crypto:block_encrypt(des_cbc, binary:part(Rest1,byte_size(Rest1),-8), IVec, CliPass),
+    KeySess = <<(binary:part(Rest2,byte_size(Rest2),-8))/binary,0:64>>,
     o5logon(hexstr2bin(Sess), KeySess, Pass, Bits);
 o5logon(Sess, Salt, Pass, Bits) when is_list(Sess), Bits =:= 192 ->
     Data = crypto:hash(sha,<<(list_to_binary(Pass))/binary,(hexstr2bin(Salt))/binary>>),
@@ -54,9 +53,14 @@ cat_key(<<H, X/bits>>,<<L, Y/bits>>,S) ->
     cat_key(X,Y,S++[H bxor L]).
 
 norm(Data) ->
+    L = length(Data) * 2,
     S = norm(list_to_binary(Data),[]),
-    N = (8 - (length(S) rem 8 )) rem 8,    
-    <<(list_to_binary(S))/binary, (binary:copy(<<0>>, N))/binary>>.
+    N = case L rem 8 > 0 of
+	true -> 1;
+	false -> 0	
+    end,
+    P = (L div 8 + N) * 8 - L,
+    <<(list_to_binary(S))/binary, (binary:copy(<<0>>, P))/binary>>.
 
 norm(<<>>,S) ->
     S;
