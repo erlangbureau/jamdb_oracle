@@ -53,14 +53,9 @@ cat_key(<<H, X/bits>>,<<L, Y/bits>>,S) ->
     cat_key(X,Y,S++[H bxor L]).
 
 norm(Data) ->
-    L = length(Data) * 2,
     S = norm(list_to_binary(Data),[]),
-    N = case L rem 8 > 0 of
-	true -> 1;
-	false -> 0	
-    end,
-    P = (L div 8 + N) * 8 - L,
-    <<(list_to_binary(S))/binary, (binary:copy(<<0>>, P))/binary>>.
+    N = (8 - (length(S) rem 8 )) rem 8,
+    <<(list_to_binary(S))/binary, (binary:copy(<<0>>, N))/binary>>.
 
 norm(<<>>,S) ->
     S;
