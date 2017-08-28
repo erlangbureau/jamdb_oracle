@@ -232,7 +232,7 @@ encode_record(fetch, {Cursor, Type, Query, Bind, Def, Auto, Fetch, Ver}) ->
     >>;
 encode_record(close, Cursors) ->
     <<
-    ?TTI_PFN,
+    ?TTI_CLOSE,
     (encode_ub2(?TTI_OCCA))/binary,
     1,
     (encode_sb4(length(Cursors)))/binary,  %cursors count
