@@ -26,11 +26,11 @@ start(Opts) when is_list(Opts) ->
 stop(Pid) ->
     call_infinity(Pid, stop).
 
+sql_query(Pid, Query, _Tout) ->
+	sql_query(Pid, Query).
+	
 sql_query(Pid, Query) ->
-    sql_query(Pid, Query, ?DEF_TIMEOUT).
-
-sql_query(Pid, Query, Timeout) ->
-    call_infinity(Pid, {sql_query, Query, Timeout}).
+    call_infinity(Pid, {sql_query, Query}).
 
 %% gen_server callbacks
 init(Opts) ->
@@ -41,8 +41,8 @@ init(Opts) ->
     end.
 
 %% Error types: socket, remote, local
-handle_call({sql_query, Query, Timeout}, _From, State) ->
-    try jamdb_oracle_conn:sql_query(State, Query, Timeout) of
+handle_call({sql_query, Query}, _From, State) ->
+    try jamdb_oracle_conn:sql_query(State, Query) of
         {ok, Result, State2} -> 
             {reply, {ok, Result}, State2};
         {error, Type, Reason, State2} ->
