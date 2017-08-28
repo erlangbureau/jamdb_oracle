@@ -6,6 +6,7 @@
     conn_state = disconnected :: disconnected | connected | auth_negotiate,
     auto = 1 :: 1 | 0,
     type = select  :: select  | block | change | return,
+    timeout,
     auth,
     fetch,
     server,
