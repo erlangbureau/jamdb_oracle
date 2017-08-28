@@ -19,6 +19,9 @@ defmodule Jamdb.Oracle do
     * `:database` - Database (Database service name or SID with colon as prefix)
     * `:username` - Username (Name for the connecting user)
     * `:password` - User password (Password for the connecting user)
+    * `:parameters` - Keyword list of connection parameters
+    * `:socket_options` - Options to be given to the underlying socket
+    * `:timeout` - The default timeout to use on queries, defaults to `15000`
 
   This callback is called in the connection process.
   """  
@@ -31,7 +34,12 @@ defmodule Jamdb.Oracle do
     |> Keyword.put_new(:port, Keyword.fetch!(opts, :port))
     |> Keyword.put_new(:user, Keyword.fetch!(opts, :username) |> to_charlist)
     |> Keyword.put_new(:password, Keyword.fetch!(opts, :password) |> to_charlist)
-    :jamdb_oracle.start(env) 
+    |> Keyword.put_new(:timeout, Keyword.fetch!(opts, :timeout))
+    params = if( Keyword.has_key?(opts, :parameters) == true,
+      do: opts[:parameters], else: [] )
+    sock_opts = if( Keyword.has_key?(opts, :socket_options) == true,
+      do: [socket_options: opts[:socket_options]], else: [] )
+    :jamdb_oracle.start(sock_opts ++ params ++ env) 
   end
 
   @doc """
