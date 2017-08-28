@@ -38,6 +38,9 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:database` - Database (Database service name or SID with colon as prefix)
     * `:username` - Username (Name for the connecting user)
     * `:password` - User password (Password for the connecting user)
+    * `:parameters` - Keyword list of connection parameters
+    * `:socket_options` - Options to be given to the underlying socket
+    * `:timeout` - The default timeout to use on queries, defaults to `15000`
 
   ### Primitive types
 
