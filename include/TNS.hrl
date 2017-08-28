@@ -63,12 +63,12 @@
 -define(TTI_OPEN, 2).
 -define(TTI_EXEC, 4).
 -define(TTI_FETCH, 5).
--define(TTI_CLOSE, 8).
 -define(TTI_LOGOFF, 9).
 -define(TTI_COMON, 12).
 -define(TTI_COMOFF, 13).
 -define(TTI_COMMIT, 14).
 -define(TTI_ROLLBACK, 15).
+-define(TTI_CLOSE, 17).
 -define(TTI_CANCEL, 20).
 -define(TTI_DSCRARR, 43).
 -define(TTI_STRT, 48).
