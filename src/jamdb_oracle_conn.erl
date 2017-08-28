@@ -31,6 +31,10 @@
         {sid, string()} |
         {service_name, string()} |
         {ssl, list()} |
+        {socket_options, list()} |
+        {timeout, non_neg_integer()} |
+        {autocommit, non_neg_integer()} |
+        {fetch, non_neg_integer()} |
         {role, non_neg_integer()} |
         {prelim, non_neg_integer()} |
         {app_name, string()}.
@@ -40,21 +44,25 @@
 -export_type([options/0]).
 
 %% API
--spec connect([env()], timeout()) -> empty_result().
-connect(Opts) ->
-    connect(Opts, ?DEF_TIMEOUT).
-
 -spec connect([env()]) -> empty_result().
+connect(Opts) ->
+    Tout        = proplists:get_value(timeout, Opts, ?DEF_TIMEOUT),
+    connect(Opts, Tout).
+
+-spec connect([env()], timeout()) -> empty_result().
 connect(Opts, Tout) ->
     Host        = proplists:get_value(host, Opts, ?DEF_HOST), 
     Port        = proplists:get_value(port, Opts, ?DEF_PORT),
     SslOpts     = proplists:get_value(ssl, Opts, []),
+    SocketOpts  = proplists:get_value(socket_options, Opts, []),
+    Auto        = proplists:get_value(autocommit, Opts, ?DEF_AUTOCOMMIT),
+    Fetch       = proplists:get_value(fetch, Opts, ?DEF_FETCH),
     SockOpts = [binary, {active, false}, {packet, raw}, %{recbuf, 65535},
-            {nodelay, true}, {keepalive, true}],
+            {nodelay, true}, {keepalive, true}]++SocketOpts,
     case gen_tcp:connect(Host, Port, SockOpts, Tout) of
         {ok, Socket} ->
             {ok, Socket2} = sock_connect(Socket, SslOpts, Tout),
-            State = #oraclient{socket=Socket2, env=Opts, auto=?DEF_AUTOCOMMIT, fetch=?DEF_FETCH},
+            State = #oraclient{socket=Socket2, env=Opts, auto=Auto, fetch=Fetch, timeout=Tout},
             {ok, State2} = send_req(login, State),
             handle_login(State2#oraclient{conn_state=auth_negotiate}, Tout);
         {error, Reason} ->
@@ -62,9 +70,9 @@ connect(Opts, Tout) ->
     end.
 
 -spec disconnect(state()) -> {ok, [env()]}.
-disconnect(State = #oraclient{auth=To}) ->
+disconnect(State = #oraclient{auth=To, timeout=Tout}) ->
     exit(To, ok),
-    disconnect(State, ?DEF_TIMEOUT).
+    disconnect(State, Tout).
 
 -spec disconnect(state(), timeout()) -> {ok, [env()]}.
 disconnect(#oraclient{socket=Socket, env=Env}, 0) ->
@@ -83,12 +91,12 @@ reconnect(State) ->
     connect(InitOpts).
 
 -spec sql_query(state(), string() | tuple()) -> query_result().
-sql_query(State, Query) ->
-    sql_query(State, Query, ?DEF_TIMEOUT).
+sql_query(State, Query) when is_list(Query) ->
+    sql_query(State, {Query, []});
+sql_query(State = #oraclient{timeout=Tout}, Query) ->
+    sql_query(State, Query, Tout).
 
 -spec sql_query(state(), string() | tuple(), timeout()) -> query_result().
-sql_query(State, Query, Tout) when is_list(Query) ->
-    sql_query(State, {Query, []}, Tout);
 sql_query(State = #oraclient{conn_state=connected}, {Query, Bind}, Tout) when length(Query) > 10 ->
     {ok, State2 = #oraclient{server=Ver, params=RowFormat, type=Type}} = send_req(query, State, {Query, Bind}),
     handle_resp({Ver, RowFormat, Type}, State2, Tout);
@@ -102,6 +110,7 @@ sql_query(State = #oraclient{conn_state=connected, auth=To}, {Query, Bind}, Tout
         "STOP" -> handle_req(stop, State, hd(Bind), Tout);
         "START" -> handle_req(spfp, State, [], Tout), handle_req(start, State, hd(Bind), Tout);
         "CLOSE" -> disconnect(State, Tout), {ok, [], State#oraclient{conn_state=disconnected}};
+        "TIMEOUT" -> {ok, [], State#oraclient{timeout=hd(Bind)}};
         "FETCH" -> {ok, [], State#oraclient{fetch=hd(Bind)}};
         "AUTH" -> To ! {get, self()}, {ok, receive Reply -> Reply end, State};
         _ -> {ok, undefined, State}
