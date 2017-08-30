@@ -42,6 +42,13 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:socket_options` - Options to be given to the underlying socket
     * `:timeout` - The default timeout to use on queries, defaults to `15000`
 
+  ### Connection parameters
+
+    * `:autocommit` - Mode that issued an automatic COMMIT operation
+    * `:fetch` - Number of rows to fetch from the server
+    * `:role` - Mode that is used in an internal logon
+    * `:prelim` - Mode that is permitted when the database is down
+
   ### Primitive types
 
   The primitive types are:
