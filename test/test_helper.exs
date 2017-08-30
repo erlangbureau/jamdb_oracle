@@ -31,6 +31,7 @@ Application.put_env(:ecto, PoolRepo,
   adapter: Ecto.Adapters.Jamdb.Oracle,
   pool: DBConnection.Poolboy,
   url: Application.get_env(:ecto, :jamdb_oracle_test_url),
+  timeout: 15000,
   pool_size: 10,
   max_restarts: 20,
   max_seconds: 10)
@@ -50,4 +51,4 @@ end
 {:ok, _pid} = TestRepo.start_link
 {:ok, _pid} = PoolRepo.start_link
 
-TestRepo.query("AUTH") |> IO.inspect
+TestRepo.query("select 1+:1, sysdate, rowid from dual where 1=:1 ", [1]) |> IO.inspect
