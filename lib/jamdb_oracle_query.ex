@@ -284,8 +284,8 @@ defmodule Jamdb.Oracle.Query do
     ["NOT (", expr(expr, sources, query), ?)]
   end
 
-  defp expr(%Ecto.SubQuery{query: query, fields: fields}, _sources, _query) do
-    query.select.fields |> put_in(fields) |> all()
+  defp expr(%Ecto.SubQuery{query: query}, _sources, _query) do
+    all(query)
   end
   
   defp expr({:fragment, _, parts}, sources, query) do
