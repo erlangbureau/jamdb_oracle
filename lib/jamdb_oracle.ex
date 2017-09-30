@@ -39,7 +39,7 @@ defmodule Jamdb.Oracle do
       do: opts[:parameters], else: [] )
     sock_opts = if( Keyword.has_key?(opts, :socket_options) == true,
       do: [socket_options: opts[:socket_options]], else: [] )
-    :jamdb_oracle.start(sock_opts ++ params ++ env) 
+    :jamdb_oracle.start_link(sock_opts ++ params ++ env) 
   end
 
   @doc """
