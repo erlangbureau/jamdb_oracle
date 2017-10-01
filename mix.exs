@@ -4,23 +4,21 @@ defmodule Jamdb.Oracle.Mixfile do
   def project do
     [app: :jamdb_oracle,
      version: "0.0.10",
-     elixir: "~> 1.0",
+     elixir: "~> 1.4",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
-     description: description,
-     package: package,
-     deps: deps]
-  end
-
-  def application do
-    [applications: [:db_connection]]
+     description: description(),
+     package: package(),
+     deps: deps()]
   end
 
   defp deps do
-    [{:jose, "~> 1.8.0"},
-     {:ecto, "~> 2.1.0"},
-     {:db_connection, "~> 1.1.0"},
-     {:ex_doc, "~> 0.16.0", only: :docs}]
+    [
+      {:jose, "~> 1.8"},
+      {:ecto, "~> 2.1"},
+      {:db_connection, "~> 1.1"},
+      {:ex_doc, "~> 0.16", only: :docs}
+    ]
   end
 
   defp description do
