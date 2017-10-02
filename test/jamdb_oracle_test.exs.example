@@ -1,3 +1,0 @@
-Application.put_env(:ecto, :jamdb_oracle_test_url,
-  "ecto://jamdbtest:jamdbtest@jamdb-oracle-dev.erlangbureau.dp.ua:1521/JAMDBTEST"
-)
