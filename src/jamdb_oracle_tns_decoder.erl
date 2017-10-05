@@ -10,6 +10,7 @@
 
 %% API
 decode_packet(<<PacketSize:16, 0:16, ?TNS_DATA, _Flags:8, 0:16, _DataFlags:16, Rest/bits>>) ->
+    erlang:md5(Rest),		%%delay
     BodySize = PacketSize-10,
     case Rest of
         <<PacketBody:BodySize/binary, Rest2/bits>> ->
