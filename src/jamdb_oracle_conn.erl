@@ -337,6 +337,10 @@ recv(Socket, Tout, Acc, Data) ->
         {ok, _Type, PacketBody, Rest} ->
             recv(Socket, Tout, Rest, <<Data/bits, PacketBody/bits>>);
         {error, more} ->
+            case byte_size(Acc) of
+                Value when Value < 1000 -> timer:sleep(1);
+                _ -> more
+            end,
             case sock_recv(Socket, 0, Tout) of
                 {ok, NetworkData} ->
                     recv(Socket, Tout, <<Acc/bits, NetworkData/bits>>, Data);
