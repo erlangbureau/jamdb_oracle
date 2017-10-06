@@ -9,13 +9,13 @@
 -include("jamdb_oracle_defaults.hrl").
 
 %% API
-decode_packet(<<PacketSize:16, 0:16, ?TNS_DATA, _Flags:8, 0:16, _DataFlags:16, Rest/bits>>) ->
+
+decode_packet(<<PacketSize:16, 0:16, ?TNS_DATA, _Flags:8, 0:16, DataFlags:16, Rest/bits>>) ->
     BodySize = PacketSize-10,
     case Rest of
         <<PacketBody:BodySize/binary, Rest2/bits>> ->
             {ok, ?TNS_DATA, PacketBody, Rest2};
         _ ->
-            erlang:md5(Rest),		%%delay
             {error, more}
     end;
 decode_packet(<<PacketSize:16, 0:16, ?TNS_REDIRECT, _Flags:8, 0:16, Length:16, Rest/bits>>) when Length > PacketSize-8 ->

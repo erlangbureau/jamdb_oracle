@@ -312,7 +312,9 @@ sock_close(Socket) -> ssl:close(Socket).
 sock_send(Socket, Packet) when is_port(Socket) -> gen_tcp:send(Socket, Packet);
 sock_send(Socket, Packet) -> ssl:send(Socket, Packet).
 
-sock_recv(Socket, Length, Tout) when is_port(Socket) -> gen_tcp:recv(Socket, Length, Tout);
+sock_recv(Socket, Length, Tout) when is_port(Socket) -> 
+  % timer:sleep(2000),
+  gen_tcp:recv(Socket, Length, Tout);
 sock_recv(Socket, Length, Tout) -> ssl:recv(Socket, Length, Tout).
 
 send(State, _PacketType, <<>>) ->
@@ -333,14 +335,28 @@ recv(Socket, Tout) ->
 recv(Socket, Tout, Acc, Data) ->
     case ?DECODER:decode_packet(Acc) of
         {ok, Type, PacketBody, <<>>} ->
-            {ok, Type, <<Data/bits, PacketBody/bits>>};
+             case Type of
+               ?TNS_DATA ->
+                   ensure_recv_all(Socket, Acc, Data, Type, PacketBody);
+               _ ->
+                   {ok, Type, <<Data/bits, PacketBody/bits>>}
+             end;
         {ok, _Type, PacketBody, Rest} ->
             recv(Socket, Tout, Rest, <<Data/bits, PacketBody/bits>>);
         {error, more} ->
-            case sock_recv(Socket, 0, Tout) of
-                {ok, NetworkData} ->
-                    recv(Socket, Tout, <<Acc/bits, NetworkData/bits>>, Data);
-                {error, Reason} ->
-                    {error, socket, Reason}
-            end
+            recv_more(Socket, Tout, Acc, Data)
+    end.
+
+recv_more(Socket, Tout, Acc, Data) ->
+    case sock_recv(Socket, 0, Tout) of
+        {ok, NetworkData} ->
+            recv(Socket, Tout, <<Acc/bits, NetworkData/bits>>, Data);
+        {error, Reason} ->
+            {error, socket, Reason}
+    end.
+
+ensure_recv_all(Socket, Acc, Data, Type, PacketBody) ->
+    case recv_more(Socket, 500, Acc, Data) of
+      {error, _socket, _Reason} -> {ok, Type, <<Data/bits, PacketBody/bits>>};
+      MoreData -> MoreData
     end.
