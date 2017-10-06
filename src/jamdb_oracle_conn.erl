@@ -313,7 +313,6 @@ sock_send(Socket, Packet) when is_port(Socket) -> gen_tcp:send(Socket, Packet);
 sock_send(Socket, Packet) -> ssl:send(Socket, Packet).
 
 sock_recv(Socket, Length, Tout) when is_port(Socket) -> 
-  % timer:sleep(2000),
   gen_tcp:recv(Socket, Length, Tout);
 sock_recv(Socket, Length, Tout) -> ssl:recv(Socket, Length, Tout).
 
