@@ -334,14 +334,14 @@ recv(Socket, Tout) ->
 
 recv(Socket, Tout, Acc, Data) ->
     case ?DECODER:decode_packet(Acc) of
-        {ok, Type, PacketBody, <<>>} ->
-             case Type of
-               ?TNS_DATA ->
+        {ok, Type, PacketSize, PacketBody, <<>>} ->
+             if
+               PacketSize == 8145 ->
                    ensure_recv_all(Socket, Acc, Data, Type, PacketBody);
-               _ ->
+               true ->
                    {ok, Type, <<Data/bits, PacketBody/bits>>}
              end;
-        {ok, _Type, PacketBody, Rest} ->
+        {ok, _Type, _PacketSize, PacketBody, Rest} ->
             recv(Socket, Tout, Rest, <<Data/bits, PacketBody/bits>>);
         {error, more} ->
             recv_more(Socket, Tout, Acc, Data)
