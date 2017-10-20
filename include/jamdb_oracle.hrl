@@ -10,7 +10,8 @@
     auth,
     fetch,
     server,
-    cursors = [],
+    cursors,
+    defcols,
     params = [],
     env = []
 }).
@@ -86,13 +87,24 @@
 ).
 
 -define(ISO_LATIN_1_CHARSET, 31).
--define(RU8PC866_CHARSET, 152).
--define(CL8MSWIN1251_CHARSET, 171).
--define(ZHS16GBK_CHARSET, 852).
--define(ZHT16BIG5_CHARSET, 865).
 -define(UTF8_CHARSET, 871).
 -define(AL32UTF8_CHARSET, 873).
 -define(AL16UTF16_CHARSET, 2000).
+
+%-define(CHARSET, [
+%{we8iso8859p1, 31},
+%{ee8iso8859p2, 32},
+%{cl8iso8859p5, 35},
+%{ee8mswin1250, 170},
+%{cl8mswin1251, 171},
+%{we8mswin1252, 178},
+%{ja16euc, 830},
+%{zhs16gbk, 852},
+%{zht16big5, 865},
+%{zht16mswin950, 867},
+%{al32utf8, 873},
+%{al16utf16, 2000}
+%]).
 
 -define(ZONEIDMAP, [
 {100, "America/New_York"},
@@ -101,7 +113,10 @@
 {250, "Asia/Shanghai"},
 {254, "Asia/Hong_Kong"},
 {267, "Asia/Tokyo"},
+{383, "Europe/Berlin"},
+{387, "Europe/Rome"},
 {402, "Europe/Moscow"},
+{404, "Europe/Madrid"},
 {405, "Europe/Stockholm"},
 {408, "Europe/Kiev"}
 ]).
