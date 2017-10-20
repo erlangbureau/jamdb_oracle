@@ -7,11 +7,27 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   ## Features
 
-   * Using bind variables:     `"select 1+:1, sysdate, rowid from dual where 1=:1"`, `[1]`
-   * Calling stored procedure: `"begin proc(:1, :2, :3); end;"`, `[1.0, 2.0, 3.0]`
-   * Calling stored function:  `"begin :1 := func(:2); end;"`, `["", "one hundred"]`
-   * Using cursor variable:    `"begin :1 := func(:2); end;"`, `[:cursor, {2016, 8, 1}]`
-   * Using returning clause:   `"insert into tabl (id) values (:1) return id into :2"`, `[1, {:out, 0}]`
+   * Using prepared statement functionality, the SQL statement you want
+     to run is precompiled and stored in a database object, and you can run it
+     as many times as required without compiling it every time it is run. If the data in the
+     statement changes, you can use bind variables as placeholders for the data and then 
+     provide literal values at run time.
+
+   * Using bind variables:
+
+      `{"select 1+:1, sysdate, rowid from dual where 1=:1"`, `[1]}`
+   * Calling stored procedure:
+
+      `{"begin proc(:1, :2, :3); end;"`, `[1.0, 2.0, 3.0]}`
+   * Calling stored function:
+
+      `{"begin :1 := func(:2); end;"`, `["", "one hundred"]}`
+   * Using cursor variable:
+
+      `{"begin open :1 for select * from tabl where dat>:2; end;"`, `[:cursor, {2016, 8, 1}]}`
+   * Using returning clause:
+
+      `{"insert into tabl values (tablid.nextval, sysdate) return id into :1"`, `[{:out, 0}]}`
 
   ## Options
 
@@ -59,7 +75,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   `:float`                | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | 1.0, 2.0, 3.0
   `:decimal`              | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | [`Decimal`](https://hexdocs.pm/decimal)
   `:string`               | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
-  `:string`               | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "五百円"
+  `:string`               | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
   `:binary`               | `RAW`, `BLOB`                    | "E799BE"
   `:naive_datetime`       | `DATE`, `TIMESTAMP`              | {2016, 8, 1}, {{2016, 8, 1}, {13, 14, 15}}
 
