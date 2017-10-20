@@ -38,7 +38,7 @@ encode_record(auth, EnvOpts, Sess, Salt) ->
     (encode_sb2(length(User)))/binary,
     (encode_sb2((Role * 32) bor (Prelim * 128) bor 1 bor 256))/binary, %logon mode
     1,
-    (encode_sb2(2))/binary,	        %keyval count
+    (encode_sb2(2))/binary,	    %keyval count
     1,1,
     (encode_chr(User))/binary,
     (encode_keyval("AUTH_PASSWORD", AuthPass))/binary,
@@ -95,7 +95,7 @@ encode_record(sess, EnvOpts) ->
     (encode_sb2(length(User)))/binary,
     (encode_sb2((Role * 32) bor (Prelim * 128) bor 1))/binary, %logon mode
     1,
-    (encode_sb2(4))/binary,	%keyval count
+    (encode_sb2(4))/binary,	   %keyval count
     1,1,
     (encode_chr(User))/binary,
     (encode_keyval("AUTH_PROGRAM_NM", AppName))/binary,
@@ -178,14 +178,30 @@ encode_record(fetch, {Cursor, Fetch}) ->
     (encode_sb4(Fetch))/binary	        %rows to fetch
     >>;
 encode_record(fetch, {Cursor, Type, Query, Bind, Def, Auto, Fetch, Ver}) ->
-    QueryLen = length(Query),
-    BindLen = length(Bind),
-    DefLen = length(Def),
-    {BindPos, Opt, [LMax, Max], All8} = 
+    QueryLen = 
     case Cursor of
-        0 when Auto =:= 1 -> setopts(Type, BindLen, 256);
-        0 when Auto =:= 0 -> setopts(Type, BindLen, 0);
-        _ -> setopts(DefLen)
+        0 -> length(Query);
+        _ -> 0
+    end,
+    BindLen = length(Bind),	
+    BindInd =
+    case {Cursor, BindLen} of 
+	{0, 0} -> 0;
+	{0, BindLen} -> 1;
+	_ -> 0
+    end,
+    DefLen = length(Def),
+    DefCol =
+    case DefLen of
+        0 -> 0;
+        _ -> 1
+    end, 
+    {Opt, LMax, Max, All8} = 
+    case {Cursor, Type} of
+        {0, Type} -> setopts(Type, BindInd, Auto * 256);
+        {Cursor, fetch} -> setopts(fetch, DefCol, Fetch);
+        {Cursor, select} -> setopts(select, cursor, Fetch);
+        {Cursor, Type} -> setopts(Type, cursor, Auto * 256)
     end,
     <<
     ?TTI_FUN,
@@ -206,13 +222,13 @@ encode_record(fetch, {Cursor, Type, Query, Bind, Def, Auto, Fetch, Ver}) ->
     (encode_sb4(LMax))/binary,		%long max value
     (encode_sb4(Fetch))/binary,		%rows to fetch
     (encode_sb4(Max))/binary,		%max value
-    BindPos,				%bindpos
-    (encode_sb4(BindLen))/binary,	%bindpos count
+    BindInd,				%bindindicator
+    (case BindInd of		        %bindcols count
+        0 -> <<0>>;
+        _ -> encode_sb4(BindLen)
+    end)/binary, 
     0,0,0,0,0,
-    case DefLen of                      %defcols is empty
-        0 -> 0;
-        _ -> 1
-    end, 
+    DefCol,                             %defcols is empty
     (encode_sb4(DefLen))/binary,        %defcols count
     0,					%registration
     0,1,
@@ -225,9 +241,11 @@ encode_record(fetch, {Cursor, Type, Query, Bind, Def, Auto, Fetch, Ver}) ->
         _ -> encode_chr(Query)
     end)/binary,
     (encode_array(All8))/binary,
-    (case DefLen of
-        0 -> encode_token(bind, Bind);
-        _ -> encode_token(def, Def, <<>>)
+    (case {BindLen, DefLen, QueryLen} of
+        {0, 0, QueryLen} -> <<>>;
+	{BindLen, 0, 0} -> encode_token(Bind, <<?TTI_RXD>>);
+	{BindLen, 0, QueryLen} -> encode_token(Bind, <<(encode_token(oac, Bind, <<>>))/binary, ?TTI_RXD>>);
+        {0, DefLen, 0} -> encode_token(oac, Def, <<>>)
     end)/binary
     >>;
 encode_record(close, Cursors) ->
@@ -241,45 +259,34 @@ encode_record(close, Cursors) ->
     (encode_ub2(?TTI_LOGOFF))/binary
     >>.
 
-setopts(all8, N) ->
-    lists:nth(N,[[1,0,0,0,0,0,0,1,0,0,0,0,0],[1,1,0,0,0,0,0,0,0,0,0,0,0],[0,10,0,0,0,0,0,1,0,0,0,0,0]]);
-setopts(max, N) ->
-    lists:nth(N,[[4294967295, 2147483647],[0, 2147483647],[0, 32760]]).
-    
-setopts(select, BindLen, _Auto) when BindLen =:= 0 ->
-    {0, 32801, setopts(max, 1), setopts(all8, 1)};
-setopts(select, BindLen, _Auto) when BindLen > 0 ->
-    {1, 32801 bor 8, setopts(max, 1), setopts(all8, 1)};
-setopts(change, BindLen, Auto) when BindLen =:= 0 ->
-    {0, 32801 bor Auto, setopts(max, 2), setopts(all8, 2)};
-setopts(change, BindLen, Auto) when BindLen > 0 ->
-    {1, 32801 bor 8 bor Auto, setopts(max, 2), setopts(all8, 2)};
-setopts(return, BindLen, Auto) when BindLen > 0 ->
-    {1, 1057 bor 8 bor Auto, setopts(max, 2), setopts(all8, 2)};
-setopts(block, BindLen, Auto) when BindLen =:= 0 ->
-    {0, 1057 bor Auto, setopts(max, 3), setopts(all8, 2)};
-setopts(block, BindLen, Auto) when BindLen > 0 ->
-    {1, 1057 bor 8 bor Auto, setopts(max, 3), setopts(all8, 2)}.
+setopts(all8, {Opts, Fetch, Type}) -> [Opts,Fetch,0,0,0,0,0,Type,0,0,0,0,0].
 
-setopts(DefLen) when DefLen =:= 0 -> %fetch cursor
-    {0, 32832, setopts(max, 2), setopts(all8, 3)};
-setopts(DefLen) when DefLen > 0 ->
-    {0, 32848, setopts(max, 2), setopts(all8, 3)}.
-    
-encode_token(bind, []) ->
-    <<>>;
-encode_token(bind, Data) ->
-    encode_token(Data, <<(encode_token(oac, Data, <<>>))/binary, ?TTI_RXD>>);
-encode_token([], Acc) ->
-    Acc;
-encode_token([Data|Rest], Acc) ->
-    Bin = encode_token(rxd, Data),
-    encode_token(Rest, <<Acc/binary, Bin/binary>>);    
+setopts(fetch, DefCol, Fetch) ->
+    {32832 bor (DefCol * 16), 0, 2147483647, setopts(all8,{0,Fetch,1})};
+setopts(select, cursor, Fetch) ->
+    {32864, 0, 2147483647, setopts(all8,{0,Fetch,1})};
+setopts(select, BindInd, _Auto) ->
+    {32801 bor (BindInd * 8), 4294967295, 2147483647, setopts(all8,{1,0,1})};
+setopts(change, cursor, Auto) ->
+    {32800 bor Auto, 0, 2147483647, setopts(all8,{0,1,0})};
+setopts(change, BindInd, Auto) ->
+    {32801 bor (BindInd * 8) bor Auto, 0, 2147483647, setopts(all8,{1,1,0})};
+setopts(return, cursor, Auto) ->
+    {1056 bor Auto, 0, 2147483647, setopts(all8,{0,1,0})};
+setopts(return, BindInd, Auto) ->
+    {1 bor 1056 bor (BindInd * 8) bor Auto, 0, 2147483647, setopts(all8,{1,1,0})};
+setopts(block, cursor, Auto) ->
+    {1056 bor Auto, 0, 32760, setopts(all8,{0,1,0})};
+setopts(block, BindInd, Auto) ->
+    {1 bor 1056 bor (BindInd * 8) bor Auto, 0, 32760, setopts(all8,{1,1,0})}.
+
+encode_token([], Acc) -> Acc;
+encode_token([Data|Rest], Acc) -> encode_token(Rest, <<Acc/binary, (encode_token(rxd, Data))/binary>>);
 encode_token(rxd, Data) when is_list(Data) -> encode_chr(Data);
 encode_token(rxd, Data) when is_binary(Data) -> encode_chr(unicode:characters_to_binary(Data, utf8, utf16));
 encode_token(rxd, Data) when is_number(Data) -> encode_len(encode_number(Data));
 encode_token(rxd, Data) when is_tuple(Data) -> encode_len(encode_date(Data));
-encode_token(rxd, cursor) -> <<0>>;
+encode_token(rxd, cursor) -> <<1,0>>;
 encode_token(rxd, null) -> <<0>>;
 encode_token(oac, Data) when is_list(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?UTF8_CHARSET, 0);
 encode_token(oac, Data) when is_binary(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?AL16UTF16_CHARSET, 0);
@@ -289,12 +296,7 @@ encode_token(oac, Data) when is_tuple(Data) -> encode_token(oac, ?TNS_TYPE_DATE,
 encode_token(oac, cursor) -> encode_token(oac, ?TNS_TYPE_REFCURSOR, 1, 0, ?UTF8_CHARSET, 0);
 encode_token(oac, null) -> encode_token(oac, []).
 
-encode_token(def, [], Acc) when is_binary(Acc) ->
-    Acc;
-encode_token(def, [ValueFormat|RestRowFormat], Acc) when is_binary(Acc) ->
-    encode_token(def, RestRowFormat, <<Acc/binary, (encode_token(oac, ValueFormat, []))/binary>>);
-encode_token(oac, [], Acc) when is_binary(Acc) ->
-    Acc;
+encode_token(oac, [], Acc) when is_binary(Acc) -> Acc;
 encode_token(oac, [Data|Rest], Acc) when is_binary(Acc) ->
     encode_token(oac, Rest, <<Acc/binary, (encode_token(oac, Data))/binary>>);
 encode_token(oac, #format{data_type=DataType,charset=Charset}, Acc) when is_list(Acc), ?IS_CHAR_TYPE(DataType) ->
