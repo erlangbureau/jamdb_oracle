@@ -355,6 +355,8 @@ recv(Socket, Tout, Acc, Data) ->
             {ok, Type, <<Data/bits, PacketBody/bits>>};
         {ok, _Type, PacketBody, Rest} ->
             recv(Socket, Tout, Rest, <<Data/bits, PacketBody/bits>>);
+        {more, _Type, PacketBody, Rest} ->
+            recv(Socket, Tout, Rest, <<Data/bits, PacketBody/bits>>);
         {error, more} ->
             case sock_recv(Socket, 0, Tout) of
                 {ok, NetworkData} ->
