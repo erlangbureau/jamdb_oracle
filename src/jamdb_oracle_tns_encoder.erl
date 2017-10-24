@@ -297,6 +297,8 @@ encode_token(oac, cursor) -> encode_token(oac, ?TNS_TYPE_REFCURSOR, 1, 0, ?UTF8_
 encode_token(oac, null) -> encode_token(oac, []).
 
 encode_token(oac, [], Acc) when is_binary(Acc) -> Acc;
+encode_token(oac, [Data|Rest], Acc) when is_record(Data, format), is_binary(Acc) ->
+    encode_token(oac, Rest, <<Acc/binary, (encode_token(oac, Data, []))/binary>>);
 encode_token(oac, [Data|Rest], Acc) when is_binary(Acc) ->
     encode_token(oac, Rest, <<Acc/binary, (encode_token(oac, Data))/binary>>);
 encode_token(oac, #format{data_type=DataType,charset=Charset}, Acc) when is_list(Acc), ?IS_CHAR_TYPE(DataType) ->
