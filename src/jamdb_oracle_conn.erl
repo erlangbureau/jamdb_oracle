@@ -338,10 +338,10 @@ sock_recv(Socket, Length, Tout) -> ssl:recv(Socket, Length, Tout).
 send(State, _PacketType, <<>>) ->
     {ok, State};
 send(#oraclient{socket=Socket} = State, PacketType, Data) ->
-    Packet = ?ENCODER:encode_packet(PacketType, Data),
+    {Packet, Rest} = ?ENCODER:encode_packet(PacketType, Data),
     case sock_send(Socket, Packet) of
         ok ->
-            send(State, PacketType, <<>>);
+            send(State, PacketType, Rest);
         {error, Reason} ->
             handle_error(socket, Reason, State)
     end.
