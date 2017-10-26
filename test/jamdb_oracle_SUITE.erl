@@ -162,7 +162,7 @@ t_float(Config) ->
     Key = <<"C_FLOAT">>,
     TestCases = [
         {null, null},
-        {0.18446744073709551615, 0.18446744073709551615},
+        {0.184467440737095, 0.184467440737095},
         {-0.9223372036854775808, -0.9223372036854775808}
     ],
     run_testcases(ConnRef, Table, Key, TestCases).
@@ -281,11 +281,14 @@ t_clob(Config) ->
     ConnRef = ?config(conn_ref, Config),
     Table = t_clob,
     Key = <<"C_CLOB">>,
+    LongValue = << << <<"abcd">> || _ <- lists:seq(1,1000)>>/binary>>,
+    LongList = binary_to_list(LongValue),
     TestCases = [
         {null, null},
         {<<"">>, null},
         {<<"a">>, "a"},
-        {<<"abcd">>, "abcd"}
+        {<<"abcd">>, "abcd"},
+	{LongValue, LongList}
     ],
     run_testcases(ConnRef, Table, Key, TestCases).
     
