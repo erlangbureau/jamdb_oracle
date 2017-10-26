@@ -12,7 +12,7 @@
 decode_packet(<<PacketSize:16, 0:16, ?TNS_DATA, _Flags:8, 0:16, _DataFlags:16, Rest/bits>>) ->
     BodySize = PacketSize-10,
     case Rest of
-        <<PacketBody:BodySize/binary, Rest2/bits>> when PacketSize =:= 8155 ->	%SDU TDU 65535
+        <<PacketBody:BodySize/binary, Rest2/bits>> when PacketSize =:= 8155; PacketSize =:= 8111 ->
             {more, ?TNS_DATA, PacketBody, Rest2};
         <<PacketBody:BodySize/binary, Rest2/bits>> ->
             {ok, ?TNS_DATA, PacketBody, Rest2};
