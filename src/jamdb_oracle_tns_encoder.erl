@@ -11,15 +11,16 @@
 -include("jamdb_oracle_defaults.hrl").
 
 %% API
+encode_packet(?TNS_DATA, Data) ->
+    Length = byte_size(Data) + 10,
+    case Data of
+        <<PacketBody:8182/binary, Rest/bits>> when Length > 8192 ->
+            {<<32:8, 0:8, 0:16, ?TNS_DATA:8, 0:8, 0:16, 0:8, 32:8, PacketBody/binary>>, Rest};
+        _ ->  {<<Length:16, 0:16, ?TNS_DATA:8, 0:8, 0:16, 0:16, Data/binary>>, <<>>}
+    end;
 encode_packet(Type, Data) ->
-    case Type of
-	?TNS_DATA ->
-	    Length = byte_size(Data) + 10,
-	    <<Length:16, 0:16, Type:8, 0:8, 0:16, 0:16, Data/binary>>;
-	_ ->
-	    Length = byte_size(Data) + 8,
-	    <<Length:16, 0:16, Type:8, 0:8, 0:16, Data/binary>>
-    end.
+    Length = byte_size(Data) + 8,
+    {<<Length:16, 0:16, Type:8, 0:8, 0:16, Data/binary>>, <<>>}.
 
 encode_record(auth, EnvOpts, Sess, Salt) ->
     User            = proplists:get_value(user, EnvOpts),
@@ -49,7 +50,7 @@ encode_record(auth, EnvOpts, Sess, Salt) ->
 encode_record(login, EnvOpts) ->
     {ok, UserHost}  = inet:gethostname(),
     User            = proplists:get_value(user, EnvOpts),
-    Host            = proplists:get_value(host, EnvOpts, ?DEF_HOST), 
+    Host            = proplists:get_value(host, EnvOpts, ?DEF_HOST),
     Port            = proplists:get_value(port, EnvOpts, ?DEF_PORT),
     Sid             = proplists:get_value(sid, EnvOpts, ?DEF_SID),
     ServiceName     = proplists:get_value(service_name, EnvOpts),
@@ -61,21 +62,21 @@ encode_record(login, EnvOpts) ->
                 _ -> "SERVICE_NAME="++ServiceName end ++
     ")(CID=(PROGRAM="++AppName++
     ")(HOST="++UserHost++")(USER="++User++
-    ")))(ADDRESS=(PROTOCOL="++ case SslOpts of 
+    ")))(ADDRESS=(PROTOCOL="++ case SslOpts of
                [] -> "TCP";
                 _ -> "TCPS" end ++
     ")(HOST="++Host++")(PORT="++integer_to_list(Port)++")))"),
-    <<   
+    <<
     1,57,		  % Packet version number
     1,57,		  % Lowest compatible version number
     0,0,		  % Global service options supported
-    255,255,		  % SDU
+    32,0,		  % SDU 8192
     255,255,		  % TDU
     79,152,		  % Protocol Characteristics
     0,0,		  % Max packets before ACK
     0,1,		  % 1 in hardware byte order
     (byte_size(Data)):16, % Connect Data length
-    0,58,		  % Connect Data offset 
+    0,58,		  % Connect Data offset
     0,0,0,0,		  % Max connect data that can be received
     132,132,		  % ANO disabled
     0:192,
@@ -85,7 +86,7 @@ encode_record(sess, EnvOpts) ->
     {ok, UserHost}  = inet:gethostname(),
     UserPID         = os:getpid(),
     User            = proplists:get_value(user, EnvOpts),
-    Role            = proplists:get_value(role, EnvOpts, 0), 
+    Role            = proplists:get_value(role, EnvOpts, 0),
     Prelim          = proplists:get_value(prelim, EnvOpts, 0),
     AppName         = proplists:get_value(app_name, EnvOpts, "jamdb"),
     <<
