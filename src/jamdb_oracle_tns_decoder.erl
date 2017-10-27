@@ -13,7 +13,7 @@ decode_packet(<<PacketSize:16, 0:16, ?TNS_DATA, _Flags:8, 0:16, _DataFlags:16, R
     BodySize = PacketSize-10,
     case Rest of
         <<PacketBody:BodySize/binary, Rest2/bits>> when PacketSize =:= 8155; PacketSize =:= 8111 ->
-            {more, ?TNS_DATA, PacketBody, Rest2};
+            {error, more, PacketBody, Rest2};
         <<PacketBody:BodySize/binary, Rest2/bits>> ->
             {ok, ?TNS_DATA, PacketBody, Rest2};
         _ ->
@@ -35,7 +35,7 @@ decode_packet(<<PacketSize:16, 0:16, Type, _Flags:8, 0:16, Rest/bits>>) ->
             {error, more}
     end;
 decode_packet(_) ->
-    {error, more}.
+    {error, socket}.
 
 decode_token(<<Token, Data/binary>>, Acc) ->
     case Token of
