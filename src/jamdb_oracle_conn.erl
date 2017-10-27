@@ -349,15 +349,30 @@ send(#oraclient{socket=Socket} = State, PacketType, Data) ->
 recv(Socket, Tout) ->
     recv(Socket, Tout, <<>>, <<>>).
 
+recv(Socket, Acc, Data) ->
+    Tout = 500,
+    case sock_recv(Socket, 0, Tout) of
+        {ok, NetworkData} ->
+            recv(Socket, Tout, <<Acc/bits, NetworkData/bits>>, Data);
+        {error, timeout} ->
+            {ok, ?TNS_DATA, Data};
+        {error, Reason} ->
+            {error, socket, Reason}
+    end.
+
 recv(Socket, Tout, Acc, Data) ->
     case ?DECODER:decode_packet(Acc) of
         {ok, Type, PacketBody, <<>>} ->
             {ok, Type, <<Data/bits, PacketBody/bits>>};
         {ok, _Type, PacketBody, Rest} ->
             recv(Socket, Tout, Rest, <<Data/bits, PacketBody/bits>>);
-        {more, _Type, PacketBody, Rest} ->
+        {error, more, PacketBody, <<>>} ->
+            recv(Socket, <<>>, <<Data/bits, PacketBody/bits>>);
+        {error, more, PacketBody, Rest} ->
             recv(Socket, Tout, Rest, <<Data/bits, PacketBody/bits>>);
         {error, more} ->
+            recv(Socket, Acc, Data);
+        {error, socket} ->
             case sock_recv(Socket, 0, Tout) of
                 {ok, NetworkData} ->
                     recv(Socket, Tout, <<Acc/bits, NetworkData/bits>>, Data);
@@ -365,3 +380,4 @@ recv(Socket, Tout, Acc, Data) ->
                     {error, socket, Reason}
             end
     end.
+
