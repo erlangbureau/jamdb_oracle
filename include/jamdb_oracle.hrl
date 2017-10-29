@@ -5,7 +5,7 @@
     socket = undefined,
     conn_state = disconnected :: disconnected | connected | auth_negotiate,
     auto = 1 :: 1 | 0,
-    type = select  :: select  | block | change | return,
+    type = select  :: select  | block | change | return | fetch,
     timeout,
     auth,
     fetch,
@@ -24,6 +24,11 @@
     data_scale,
     charset
 }).
+
+-define(IS_PACKET_SIZE(PacketSize),
+    PacketSize =:= 8155;
+    PacketSize =:= 8111
+).
 
 -define(IS_FIXED_TYPE(DataType),
     ?IS_NUMBER_TYPE(DataType);
