@@ -18,11 +18,11 @@
 -type return_status() :: non_neg_integer().
 -type out_params() :: list().  %% TODO
 -type empty_result() :: {ok, state()} | {error, error_type(), binary(), state()}.
--type fetch_rows() :: {fetch_rows, non_neg_integer(), metainfo(), rows()}.
+-type fetched_rows() :: {fetch_rows, non_neg_integer(), metainfo(), rows()}.
 -type affected_rows() :: {affected_rows, non_neg_integer()}.
 -type result_set() :: {result_set, columns(), metainfo(), rows()}.
 -type procedure_result() :: {proc_result, return_status(), out_params() | metainfo()}.
--type result() :: fetch_rows() | affected_rows() | result_set() | procedure_result().
+-type result() :: fetched_rows() | affected_rows() | result_set() | procedure_result().
 -type query_result() :: {ok, [result()], state()}.
 -type env() :: 
         {host, string()} |
@@ -247,7 +247,7 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
 	{RetCode, RowNumber, Cursor, {Cursor2, RowFormat}, Rows} ->
 	    case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
 		more when Type =:= fetch ->
-		    {ok, [{fetch_rows, Cursor, RowFormat, Rows}], State};
+		    {ok, [{fetched_rows, Cursor, RowFormat, Rows}], State};
 		more ->
 		    {ok, State2} = send_req(fetch, State, Cursor),
 		    handle_resp({Cursor, RowFormat, Rows}, State2, Tout);
