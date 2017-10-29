@@ -18,10 +18,11 @@
 -type return_status() :: non_neg_integer().
 -type out_params() :: list().  %% TODO
 -type empty_result() :: {ok, state()} | {error, error_type(), binary(), state()}.
+-type fetch_rows() :: {fetch_rows, non_neg_integer(), metainfo(), rows()}.
 -type affected_rows() :: {affected_rows, non_neg_integer()}.
 -type result_set() :: {result_set, columns(), metainfo(), rows()}.
 -type procedure_result() :: {proc_result, return_status(), out_params() | metainfo()}.
--type result() :: affected_rows() | result_set() | procedure_result().
+-type result() :: fetch_rows() | affected_rows() | result_set() | procedure_result().
 -type query_result() :: {ok, [result()], state()}.
 -type env() :: 
         {host, string()} |
@@ -100,6 +101,13 @@ sql_query(#oraclient{conn_state=connected} = State, {Query, Bind}, Tout) when le
     {ok, State2} = send_req(query, State, {Query, Bind}),
     #oraclient{server=Ver, defcols=DefCol, params=RowFormat, type=Type} = State2,
     handle_resp(get_param(defcols, {DefCol, Ver, RowFormat, Type}), State2, Tout);
+sql_query(#oraclient{conn_state=connected} = State, {fetch, Query, Bind}, Tout) ->
+    {ok, State2} = send_req(query, State, {Query, Bind}),
+    #oraclient{server=Ver, defcols=DefCol, params=RowFormat, type=Type} = State2,
+    handle_resp(get_param(defcols, {DefCol, Ver, RowFormat, Type}), State2#oraclient{type=fetch}, Tout);
+sql_query(#oraclient{conn_state=connected} = State, {fetch, Cursor, RowFormat, LastRow}, Tout) ->
+    {ok, State2} = send_req(fetch, State#oraclient{type=fetch}, Cursor),
+    handle_resp({Cursor, RowFormat, [LastRow]}, State2, Tout);
 sql_query(#oraclient{conn_state=connected} = State, {Query, Bind}, Tout) ->
     case lists:nth(1, string:tokens(string:to_upper(Query)," \t;")) of
         "COMMIT" -> handle_req(tran, State, ?TTI_COMMIT, Tout);
@@ -238,6 +246,8 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
 	    State2#oraclient{defcols=get_result(DefCol, {Cursor2, RowFormat}, Cursors)}, Tout);
 	{RetCode, RowNumber, Cursor, {Cursor2, RowFormat}, Rows} ->
 	    case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
+		more when Type =:= fetch ->
+		    {ok, [{fetch_rows, Cursor, RowFormat, Rows}], State};
 		more ->
 		    {ok, State2} = send_req(fetch, State, Cursor),
 		    handle_resp({Cursor, RowFormat, Rows}, State2, Tout);
