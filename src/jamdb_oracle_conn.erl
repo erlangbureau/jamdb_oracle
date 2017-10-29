@@ -18,7 +18,7 @@
 -type return_status() :: non_neg_integer().
 -type out_params() :: list().  %% TODO
 -type empty_result() :: {ok, state()} | {error, error_type(), binary(), state()}.
--type fetched_rows() :: {fetch_rows, non_neg_integer(), metainfo(), rows()}.
+-type fetched_rows() :: {fetched_rows, non_neg_integer(), metainfo(), rows()}.
 -type affected_rows() :: {affected_rows, non_neg_integer()}.
 -type result_set() :: {result_set, columns(), metainfo(), rows()}.
 -type procedure_result() :: {proc_result, return_status(), out_params() | metainfo()}.
