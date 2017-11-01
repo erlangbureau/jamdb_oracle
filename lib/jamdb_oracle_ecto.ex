@@ -28,6 +28,14 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
    * Using returning clause:
 
       `{"insert into tabl values (tablid.nextval, sysdate) return id into :1"`, `[{:out, 0}]}`
+   * Update batching:
+
+      `{:batch, "insert into tabl values (:1, :2, :3)"`, `[[1, 2, 3],[4, 5, 6],[7, 8, 9]]}`
+   * Row prefetching:
+
+      `{:fetch, "select * from tabl where id>:1"`, `[1]}`
+      
+      `{:fetch, cursor, rowformat, lastrow}`
 
   ## Options
 
