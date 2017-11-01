@@ -2,14 +2,17 @@ JamDB Oracle
 ============
 Erlang driver and Ecto adapter for Oracle Database
 
-Goals
+Features
 =====
 
-* No parameterized module.
-* No process dictionary.
-* No ports.
-* No NIF's.
-* All code written exclusively in Erlang.
+* Using prepared statement functionality.
+* Using bind variables.
+* Calling stored procedure.
+* Calling stored function.
+* Using cursor variable.
+* Using returning clause.
+* Update batching.
+* Row prefetching.
 
 Getting Started
 =====
