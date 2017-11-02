@@ -200,10 +200,10 @@ encode_record(fetch, {Cursor, Type, Query, Bind, Batch, Def, Auto, Fetch, Ver}) 
     end,
     {Opt, LMax, Max, All8} =
     case {Cursor, Type} of
-        {0, Type} -> setopts(Type, BindInd, BatchLen, Auto * 256);
+        {0, Type} -> setopts(Type, BindInd, BatchLen, Auto);
         {Cursor, fetch} -> setopts(fetch, DefInd, 0, Fetch);
         {Cursor, select} -> setopts(select, cursor, 0, Fetch);
-        {Cursor, Type} -> setopts(Type, cursor, BatchLen, Auto * 256)
+        {Cursor, Type} -> setopts(Type, cursor, BatchLen, Auto)
     end,
     <<
     ?TTI_FUN,
@@ -264,23 +264,23 @@ encode_record(close, Cursors) ->
 setopts(all8, {Opts, Fetch, Type}) -> [Opts,Fetch,0,0,0,0,0,Type,0,0,0,0,0].
 
 setopts(fetch, DefInd, _BatchLen, Fetch) ->
-    {32832 bor (DefInd * 16), 0, 2147483647, setopts(all8,{0,Fetch,1})};
+    {32832 bor (DefInd * 16), 0, 2147483647, setopts(all8, {0, Fetch, 1})};
 setopts(select, cursor, _BatchLen, Fetch) ->
-    {32864, 0, 2147483647, setopts(all8,{0,Fetch,1})};
+    {32864, 0, 2147483647, setopts(all8,{0, Fetch, 1})};
 setopts(select, BindInd, _BatchLen, _Auto) ->
-    {32801 bor (BindInd * 8), 4294967295, 2147483647, setopts(all8,{1,0,1})};
+    {32801 bor (BindInd * 8), 4294967295, 2147483647, setopts(all8, {1, 0, 1})};
 setopts(change, cursor, BatchLen, Auto) ->
-    {32800 bor Auto, 0, 2147483647, setopts(all8,{0,1 + BatchLen,0})};
+    {32800 bor (Auto * 256), 0, 2147483647, setopts(all8, {0, 1 + BatchLen, 0})};
 setopts(change, BindInd, BatchLen, Auto) ->
-    {32801 bor (BindInd * 8) bor Auto, 0, 2147483647, setopts(all8,{1,1 + BatchLen,0})};
+    {32801 bor (BindInd * 8) bor (Auto * 256), 0, 2147483647, setopts(all8, {1, 1 + BatchLen, 0})};
 setopts(return, cursor, _BatchLen, Auto) ->
-    {1056 bor Auto, 0, 2147483647, setopts(all8,{0,1,0})};
+    {1056 bor (Auto * 256), 0, 2147483647, setopts(all8, {0, 1, 0})};
 setopts(return, BindInd, _BatchLen, Auto) ->
-    {1 bor 1056 bor (BindInd * 8) bor Auto, 0, 2147483647, setopts(all8,{1,1,0})};
+    {1 bor 1056 bor (BindInd * 8) bor (Auto * 256), 0, 2147483647, setopts(all8, {1, 1, 0})};
 setopts(block, cursor, _BatchLen, Auto) ->
-    {1056 bor Auto, 0, 32760, setopts(all8,{0,1,0})};
+    {1056 bor (Auto * 256), 0, 32760, setopts(all8, {0, 1, 0})};
 setopts(block, BindInd, _BatchLen, Auto) ->
-    {1 bor 1056 bor (BindInd * 8) bor Auto, 0, 32760, setopts(all8,{1,1,0})}.
+    {1 bor 1056 bor (BindInd * 8) bor (Auto * 256), 0, 32760, setopts(all8, {1, 1, 0})}.
 
 encode_token([], Acc) -> Acc;
 encode_token([Data|Rest], Acc) -> encode_token(Rest, <<Acc/binary, (encode_token(rxd, Data))/binary>>);
