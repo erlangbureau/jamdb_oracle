@@ -253,23 +253,26 @@ defmodule Jamdb.Oracle.Query do
   defp expr({:&, _, [idx, fields, _counter]}, sources, query) do
     {_, name, schema} = elem(sources, idx)
     if is_nil(schema) and is_nil(fields) do
-      error!(query, "Requires a schema module when using selector " <>
-        "#{inspect name} but none was given. " <>
-        "Please specify a schema or specify exactly which fields from " <>
-        "#{inspect name} you desire")
+      error!(query, "specify a schema or specify fields")
     end
     intersperse_map(fields, ", ", &[name, ?. | quote_name(&1)])
   end
-  
-  defp expr({:in, _, [_left, []]}, _sources, _query), do: "1=2"
+
+  defp expr({:&, _, [idx]}, sources, query) do
+    {source, _name, _schema} = elem(sources, idx)
+    error!(query, "specify a schema or specify fields from #{source}")
+  end
+
+  defp expr({:in, _, [_left, []]}, _sources, _query), do: "false"
   
   defp expr({:in, _, [left, right]}, sources, query) when is_list(right) do
     args = intersperse_map(right, ?,, &expr(&1, sources, query))
     [expr(left, sources, query), " IN (", args, ?)]
   end
 
-  defp expr({:in, _, [left, {:^, _, [ix, _]}]}, sources, query) do
-    [expr(left, sources, query), " = ANY(:", Integer.to_string(ix + 1), ?)]
+  defp expr({:in, _, [left, {:^, _, [_, length]}]}, sources, query) do
+    right = Enum.map(Enum.to_list(0..length-1), fn ix -> {:^, [], [ix]} end)
+    expr({:in, [], [left, right]}, sources, query)
   end
 
   defp expr({:in, _, [left, right]}, sources, query) do
