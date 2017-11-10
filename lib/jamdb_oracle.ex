@@ -73,7 +73,7 @@ defmodule Jamdb.Oracle do
     case :jamdb_oracle.sql_query(s, {sql, params}) do
       {:ok, [{_, columns, _, rows}]} ->
         {:ok, %{num_rows: length(rows), rows: rows, columns: columns}, s}
-      {:ok, [{_, 0, rows}]} -> {:ok, %{num_rows: length(rows), rows: rows}, s}
+      {:ok, [{_, 0, rows}]} -> {:ok, %{num_rows: length(rows), rows: [rows]}, s}
       {:ok, [{_, code, msg}]} -> {:error, %{code: code, message: msg}, s}
       {:ok, [{_, num_rows}]} -> {:ok, %{num_rows: num_rows, rows: nil}, s}
       {:ok, result} -> {:ok, result, s}
@@ -117,11 +117,6 @@ defmodule Jamdb.Oracle do
     end
   end
     
-  @doc false
-  def handle_prepare(query, opts, s) do 
-    {:ok, query, s}
-  end
-
   @doc false
   def handle_declare(query, params, opts, s) do
     {:ok, params, s}
