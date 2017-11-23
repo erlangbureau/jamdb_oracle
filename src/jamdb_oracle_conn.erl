@@ -302,7 +302,7 @@ get_param([H|L], M, Acc) -> get_param(L, M, Acc++[maps:get(list_to_atom(H), M)])
 
 get_param(defcols, {Query, Cursors}) ->
     Acc = get_result(Cursors),
-    Sum = erlang:crc32(Query),
+    Sum = erlang:crc32(unicode:characters_to_binary(Query)),
     {Cursor, RowFormat} = proplists:get_value(Sum, Acc, {0,[]}),
     {Sum, {Cursor, RowFormat}};
 get_param(defcols, {{_Sum, {0, _RowFormat}}, Ver, RowFormat, Type}) ->
