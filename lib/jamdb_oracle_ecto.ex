@@ -65,6 +65,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:parameters` - Keyword list of connection parameters
     * `:socket_options` - Options to be given to the underlying socket
     * `:timeout` - The default timeout to use on queries, defaults to `15000`
+    * `:charset` - Name that is used in multibyte encoding
 
   ### Connection parameters
 
@@ -84,7 +85,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   `:decimal`              | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | [`Decimal`](https://hexdocs.pm/decimal)
   `:string`               | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
   `:string`               | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
-  `:binary`               | `RAW`, `BLOB`                    | "E799BE"
+  `{:array, :integer}`    | `RAW`, `BLOB`                    | 'E799BE'
   `:naive_datetime`       | `DATE`, `TIMESTAMP`              | {2016, 8, 1}, {{2016, 8, 1}, {13, 14, 15}}
 
   #### Examples
