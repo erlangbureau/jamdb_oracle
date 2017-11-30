@@ -22,6 +22,7 @@ defmodule Jamdb.Oracle do
     * `:parameters` - Keyword list of connection parameters
     * `:socket_options` - Options to be given to the underlying socket
     * `:timeout` - The default timeout to use on queries, defaults to `15000`
+    * `:charset` - Name that is used in multibyte encoding
 
   This callback is called in the connection process.
   """  
@@ -195,14 +196,18 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp decode(elem), do: elem
 
   def encode(_, [], _), do: []
-  def encode(_, params, _), do: Enum.map(params, fn elem -> encode(elem) end)
-
-  defp encode(nil), do: :null
-  defp encode(%Decimal{} = decimal), do: Decimal.to_float(decimal)
-  defp encode(%Ecto.Query.Tagged{value: binary, type: :binary}), 
-    do: :binary.bin_to_list(Base.encode16(binary, case: :lower))
-  defp encode(%Ecto.Query.Tagged{value: elem}), do: elem
-  defp encode(elem), do: elem
+  def encode(_, params, opts) do 
+    charset = if( Keyword.has_key?(opts, :charset) == true, 
+      do: Enum.member?(["al16utf16","ja16euc","zhs16gbk","zht16big5","zht16mswin950"], 
+        opts[:charset]), else: false )
+    Enum.map(params, fn elem -> encode(elem, charset) end)
+  end
+  
+  defp encode(nil, _), do: :null
+  defp encode(%Decimal{} = decimal, _), do: Decimal.to_float(decimal)
+  defp encode(%Ecto.Query.Tagged{value: elem}, _), do: elem
+  defp encode(elem, false) when is_binary(elem), do: elem |> to_charlist
+  defp encode(elem, _), do: elem
 
   defp expr(list) when is_list(list) do
     Enum.map(list, fn 
