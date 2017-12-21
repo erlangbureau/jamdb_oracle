@@ -130,6 +130,12 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
     DBConnection.child_spec(Jamdb.Oracle, opts)
   end
   
+  def execute(conn, %Jamdb.Oracle.Query{} = query, params, opts) do
+    case DBConnection.prepare_execute(conn, query, params, opts) do
+      {:ok, _, result} -> {:ok, result}
+      {:error, err} -> error!(err)
+    end
+  end
   def execute(conn, statement, params, opts) do
     query = %Jamdb.Oracle.Query{statement: statement}
     case DBConnection.prepare_execute(conn, query, params, opts) do
