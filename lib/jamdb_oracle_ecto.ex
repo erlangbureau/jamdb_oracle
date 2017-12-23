@@ -28,6 +28,8 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
    * Using returning clause:
 
       `{"insert into tabl values (tablid.nextval, sysdate) return id into :1"`, `[{:out, 0}]}`
+
+      `Repo.insert_all(Post,[[id: 100]], returning: [:created_at, out: {2016, 8, 1}])`
    * Update batching:
 
       `{:batch, "insert into tabl values (:1, :2, :3)"`, `[[1, 2, 3],[4, 5, 6],[7, 8, 9]]}`
@@ -83,8 +85,8 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   `:id`, `:integer`       | `NUMBER (*,0)`                   | 1, 2, 3
   `:float`                | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | 1.0, 2.0, 3.0
   `:decimal`              | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | [`Decimal`](https://hexdocs.pm/decimal)
-  `:string`               | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
-  `:string`               | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
+  `:string`, `:binary`    | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
+  `:string`, `:binary`    | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
   `{:array, :integer}`    | `RAW`, `BLOB`                    | 'E799BE'
   `:naive_datetime`       | `DATE`, `TIMESTAMP`              | {2016, 8, 1}, {{2016, 8, 1}, {13, 14, 15}}
 
