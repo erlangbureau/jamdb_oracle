@@ -272,7 +272,7 @@ get_result(change, 0, RowNumber, _RowFormat, []) ->
 get_result(return, 0, _RowNumber, _RowFormat, Rows) ->
     {ok, [{proc_result, 0, Rows}]};
 get_result(block, 0, _RowNumber, _RowFormat, Rows) ->
-    {ok, [{proc_result, 0, Rows}]};
+    {ok, [{proc_result, 0, [Rows]}]};
 get_result(_Type, 0, _RowNumber, [], Rows) ->
     {ok, [{proc_result, 0, Rows}]};
 get_result(_Type, RetCode, _RowNumber, Reason, []) when RetCode =/= 1403 ->
