@@ -16,6 +16,8 @@ Features
 
 Getting Started
 =====
+[![SlideShare](https://img.shields.io/badge/SlideShare-ElixirからOracle接続-blue.svg)](https://www.slideshare.net/YoshiiroUeno/elixiroracle)
+
 ```erl
 
 %% Set connection options
