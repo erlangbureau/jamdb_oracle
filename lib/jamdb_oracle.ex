@@ -74,14 +74,14 @@ defmodule Jamdb.Oracle do
     case :jamdb_oracle.sql_query(s, {sql, params}) do
       {:ok, [{_, columns, _, rows}]} ->
         {:ok, %{num_rows: length(rows), rows: rows, columns: columns}, s}
-      {:ok, [{_, 0, rows}]} -> {:ok, %{num_rows: length(rows), rows: [rows]}, s}
+      {:ok, [{_, 0, rows}]} -> {:ok, %{num_rows: length(rows), rows: rows}, s}
       {:ok, [{_, code, msg}]} -> {:error, %{code: code, message: msg}, s}
       {:ok, [{_, num_rows}]} -> {:ok, %{num_rows: num_rows, rows: nil}, s}
       {:ok, result} -> {:ok, result, s}
       {:error, _, err} -> {:error, err, s}
-    end    
+    end
   end
-  
+
   @doc false
   def handle_execute(query, params, opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
@@ -91,10 +91,10 @@ defmodule Jamdb.Oracle do
 
   @doc false
   def handle_prepare(%Jamdb.Oracle.Query{statement: %Jamdb.Oracle.Query{} = query}, opts, s) do
-    {:ok, query, s}  
+    {:ok, query, s}
   end
   def handle_prepare(query, opts, s) do
-    {:ok, query, s}  
+    {:ok, query, s}
   end
 
   @doc false
@@ -102,7 +102,7 @@ defmodule Jamdb.Oracle do
     case Keyword.get(opts, :mode, :transaction) do
       :transaction -> query(s, 'SAVEPOINT tran')
       :savepoint   -> query(s, 'SAVEPOINT '++(Keyword.get(opts, :name, :svpt) |> to_charlist))
-    end  
+    end
   end
 
   @doc false
@@ -114,10 +114,10 @@ defmodule Jamdb.Oracle do
   def handle_rollback(opts, s) do
     case Keyword.get(opts, :mode, :transaction) do
       :transaction -> query(s, 'ROLLBACK TO tran')
-      :savepoint   -> query(s, 'ROLLBACK TO '++(Keyword.get(opts, :name, :svpt) |> to_charlist))      
+      :savepoint   -> query(s, 'ROLLBACK TO '++(Keyword.get(opts, :name, :svpt) |> to_charlist))
     end
   end
-    
+
   @doc false
   def handle_declare(query, params, opts, s) do
     {:ok, params, s}
@@ -140,7 +140,7 @@ defmodule Jamdb.Oracle do
   def handle_deallocate(query, cursor, opts, s) do
     {:ok, nil, s}
   end
-  
+
   @doc false
   def handle_close(query, opts, s) do
     {:ok, nil, s}
@@ -166,7 +166,7 @@ defmodule Jamdb.Oracle do
     case query(s, 'PING') do
       {:ok, _, s} -> {:ok, s}
       disconnect -> disconnect
-    end    
+    end
   end
 
   defp error!(msg) do
@@ -182,7 +182,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
 
   def decode(_, %{rows: []} = result, _), do: result
   def decode(_, %{rows: rows} = result, opts) when rows != nil, 
-    do: %{result | rows: Enum.map(rows, fn row -> decode(row, opts[:decode_mapper]) end)}  
+    do: %{result | rows: Enum.map(rows, fn row -> decode(row, opts[:decode_mapper]) end)}
   def decode(_, result, _), do: result
 
   defp decode(row, nil), do: Enum.map(row, fn elem -> decode(elem) end)
@@ -190,19 +190,20 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
 
   defp decode(:null), do: nil
   defp decode({elem}) when is_number(elem), do: elem
-  defp decode({date, {hour, min, sec}}), do: {date, {hour, min, trunc(sec)}}
-  defp decode({date, {hour, min, sec}, _}), do: {date, {hour, min, trunc(sec)}}
+  defp decode({date, time}) when is_tuple(date), do: to_naive({date, time})
+  defp decode({date, time, tz}) when is_tuple(date) and is_list(tz), do: to_utc({date, time, tz})
+  defp decode({date, time, _}) when is_tuple(date), do: to_naive({date, time})
   defp decode(elem) when is_list(elem), do: to_binary(elem)
   defp decode(elem), do: elem
 
   def encode(_, [], _), do: []
   def encode(_, params, opts) do 
     charset = if( Keyword.has_key?(opts, :charset) == true, 
-      do: Enum.member?(["al16utf16","ja16euc","zhs16gbk","zht16big5","zht16mswin950"], 
+      do: Enum.member?(["al16utf16","ja16euc","zhs16gbk","zht16big5","zht16mswin950"],
         opts[:charset]), else: false )
     Enum.map(params, fn elem -> encode(elem, charset) end)
   end
-  
+
   defp encode(nil, _), do: :null
   defp encode(%Decimal{} = decimal, _), do: Decimal.to_float(decimal)
   defp encode(%Ecto.Query.Tagged{value: elem}, _), do: elem
@@ -213,19 +214,44 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
     Enum.map(list, fn 
       :null -> nil
       elem  -> elem
-    end)    
+    end)
   end
 
   defp to_binary(list) when is_list(list) do
-    try do 
+    try do
       :binary.list_to_bin(list)
     rescue
       ArgumentError ->
-        Enum.map(expr(list), fn 
-          elem when is_list(elem) -> expr(elem) 
+        Enum.map(expr(list), fn
+          elem when is_list(elem) -> expr(elem)
           other -> other
         end) |> Enum.join
-    end        
+    end
+  end
+
+  defp to_naive({{year, mon, day}, {hour, min, sec}}) when is_integer(sec),
+    do: {{year, mon, day}, {hour, min, sec}}
+  defp to_naive({{year, mon, day}, {hour, min, sec}}),
+    do: {{year, mon, day}, parse_time({hour, min, sec})}
+
+  defp to_utc({date, time, tz}) do
+    {hour, min, sec, usec} = parse_time(time)
+    offset = parse_offset(to_string(tz))
+    seconds = :calendar.datetime_to_gregorian_seconds({date, {hour, min, sec}})
+    {{year, mon, day}, {hour, min, sec}} = :calendar.gregorian_seconds_to_datetime(seconds + offset)
+
+    %DateTime{year: year, month: mon, day: day, hour: hour, minute: min, second: sec,
+     microsecond: {usec, 6}, std_offset: 0, utc_offset: 0, zone_abbr: "UTC", time_zone: to_string(tz)}
+  end
+
+  defp parse_time({hour, min, sec}),
+    do: {hour, min, trunc(sec), trunc((sec - trunc(sec)) * 1000000)}
+
+  defp parse_offset(tz) do
+    case Calendar.ISO.parse_offset(tz) do
+      {offset, ""} when is_integer(offset) -> offset
+      _ -> 0
+    end
   end
 
 end
