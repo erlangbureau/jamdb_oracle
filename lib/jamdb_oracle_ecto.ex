@@ -89,6 +89,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   `:string`, `:binary`    | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
   `{:array, :integer}`    | `RAW`, `BLOB`                    | 'E799BE'
   `:naive_datetime`       | `DATE`, `TIMESTAMP`              | {2016, 8, 1}, {{2016, 8, 1}, {13, 14, 15}}
+  `:utc_datetime`         | `TIMESTAMP WITH TIME ZONE`       | [`DateTime`](https://hexdocs.pm/elixir)
 
   #### Examples
 
