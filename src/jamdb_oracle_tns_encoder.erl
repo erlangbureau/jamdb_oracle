@@ -294,6 +294,7 @@ encode_token(oac, Data) when is_list(Data) -> encode_token(oac, ?TNS_TYPE_VARCHA
 encode_token(oac, Data) when is_binary(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?AL16UTF16_CHARSET, 0);
 encode_token(oac, Data) when is_number(Data) -> encode_token(oac, ?TNS_TYPE_NUMBER, 22, 0, 0, 0);
 encode_token(oac, {{_Year,_Mon,_Day}, {_Hour,_Min,_Sec,_Ms}}) -> encode_token(oac, ?TNS_TYPE_TIMESTAMP, 11, 0, 0, 0);
+encode_token(oac, {{_Year,_Mon,_Day}, {_Hour,_Min,_Sec,_Ms}, _}) -> encode_token(oac, ?TNS_TYPE_TIMESTAMPTZ, 13, 0, 0, 0);
 encode_token(oac, Data) when is_tuple(Data) -> encode_token(oac, ?TNS_TYPE_DATE, 7, 0, 0, 0);
 encode_token(oac, cursor) -> encode_token(oac, ?TNS_TYPE_REFCURSOR, 1, 0, ?UTF8_CHARSET, 0);
 encode_token(oac, null) -> encode_token(oac, []).
@@ -453,6 +454,10 @@ lnxfmt([I|L], Data) when Data > 0 ->
 lnxfmt([I|L], Data) when Data < 0 ->
     [(I+192+1 bxor 255)|[ 101-N || N <- L]]++[102].
 
+encode_date({{Year,Mon,Day}, {Hour,Min,Sec,Ms}, Offset}) when is_integer(Offset) ->
+    Secs = calendar:datetime_to_gregorian_seconds({{Year,Mon,Day}, {Hour,Min,Sec}}),
+    {D, T} = calendar:gregorian_seconds_to_datetime(Secs - Offset),
+    <<(encode_date({D, erlang:append_element(T,Ms)}))/binary, (Offset div 3600 + 20), 60>>;
 encode_date({Year,Mon,Day}) ->
     encode_date({{Year,Mon,Day}, {0,0,0}});
 encode_date({{Year,Mon,Day}, {Hour,Min,Sec,Ms}}) ->
