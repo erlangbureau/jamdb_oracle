@@ -50,10 +50,10 @@ decode_token(<<Token, Data/binary>>, Acc) ->
 	?TTI_STA -> {ok, Acc};  %tran
 	?TTI_FOB -> {error, fob};  %return
         _ -> 
-    	    {error, token}
+    	    {error, <<Token, (hd(binary:split(Data, <<0>>)))/binary>>}
     end;
 decode_token(net, {Data, EnvOpts}) ->
-    Values = lists:map(fun(L) -> list_to_tuple(string:tokens(L, "=")) end, 
+    Values = lists:map(fun(L) -> list_to_tuple(string:tokens(L, "=")) end,
              string:tokens(binary_to_list(Data), "()")),
     Host = proplists:get_value("HOST", Values),
     Port = proplists:get_value("PORT", Values),
@@ -96,14 +96,14 @@ decode_token(wrn, Data) ->
     Rest4 = decode_next(ub2,Rest3),	%%warnFlag
     decode_next(chr, Rest4).            %%errorMsg
 
-decode_token(dcb, Data, {Ver, _RowFormat, Type}) when is_atom(Type) -> 
+decode_token(dcb, Data, {Ver, _RowFormat, Type}) when is_atom(Type) ->
     {Rest2, RowFormat} = decode_token(dcb, decode_next(Data), Ver),
     decode_token(Rest2, {0, RowFormat, []});
-decode_token(dcb, Data, Ver) -> 
+decode_token(dcb, Data, Ver) ->
     Rest3 = decode_next(ub4,Data),
     Num = decode_ub4(Rest3),
     Rest4 = decode_next(ub4,Rest3),
-    Rest5 = 
+    Rest5 =
     case Num of
 	0 -> Rest4;
 	_ -> decode_next(ub1,Rest4)
@@ -131,7 +131,7 @@ decode_token(uds, Data, {Ver, RowFormat, Num}) ->
     Rest6 = decode_next(dalc,Rest5),	%%schema name
     Rest7 = decode_next(dalc,Rest6),	%%type name
     Rest8 = decode_next(ub2,Rest7),
-    Rest9 = 
+    Rest9 =
     case Ver of
         10 -> Rest8;
         _ -> decode_next(ub4,Rest8)
@@ -148,7 +148,7 @@ decode_token(rxh, Data, {Cursor, RowFormat, Rows}) ->
     Rest5 = decode_next(ub2,Rest4),
     Rest6 = decode_next(ub2,Rest5),
     Bitvec = decode_dalc(Rest6),
-    {Bvc, _Num} = 
+    {Bvc, _Num} =
     case length(Bitvec) of
         0 -> {[0], 0};
         _ -> decode_bvc(list_to_binary(Bitvec), RowFormat, [])
@@ -198,7 +198,7 @@ decode_token(rpa, Data, {_Ver, RowFormat, Type}) when is_atom(Type) ->
     decode_token(rpa, Data, {0, RowFormat, []});
 decode_token(rpa, Data, {0, RowFormat, Rows}) ->
     Cursor =
-    case decode_ub2(Data) of 
+    case decode_ub2(Data) of
 	0 -> 0;
 	_ ->
 	    Rest2 = decode_next(ub2,Data),
@@ -225,7 +225,7 @@ decode_token(oer, Data, {Cursor, RowFormat, Rows}) ->
     RowNumber = decode_ub4(Rest3),
     Rest4 = decode_next(ub4,Rest3),             %%Current Row Number
     RetCode = decode_ub2(Rest4),
-    RetFormat = 
+    RetFormat =
     case lists:member(RetCode, [0,1403]) of
         true ->
             Rest5 = decode_next(ub2,Rest4),
@@ -481,7 +481,7 @@ decode_ub4(<<I,Rest/bits>>) when I band 128 =:= 0 ->
     <<Data:I/binary,_Rest2/bits>> = Rest,
     binary:decode_unsigned(Data);
 decode_ub4(<<_I,N:8,_Rest/bits>>) -> -N.
-   
+
 decode_dalc(<<0,_Rest/bits>>) -> [];
 decode_dalc(<<254,Rest/bits>>) ->
     decode_chr(Rest, <<>>);
@@ -577,8 +577,8 @@ decode_interval(<<Year:4/integer-unit:8,Mon>>) ->
 decode_interval(<<Day:4/integer-unit:8,Hour,Min,Sec,Ms:4/integer-unit:8>>) ->
     lds(Day - 2147483648, Hour - 60, Min - 60, Sec - 60, (Ms - 2147483648) / 1.0e9).
 
-ltz(I) when I < 0 -> ltz(abs(I), "-"); 
-ltz(I) -> ltz(abs(I), "+"). 
+ltz(I) when I < 0 -> ltz(abs(I), "-");
+ltz(I) -> ltz(abs(I), "+").
 
 ltz(I, S) when I < 10 -> S++"0"++integer_to_list(I)++":00";
 ltz(I, S) -> S++integer_to_list(I)++":00".
@@ -586,7 +586,7 @@ ltz(I, S) -> S++integer_to_list(I)++":00".
 lym(I, M) when I < 0; M < 0 -> "-"++lym(abs(I), abs(M));
 lym(I, M) -> integer_to_list(abs(I))++"-"++integer_to_list(abs(M)).
 
-lds(I, H, M, S, Ms) when I < 0; H < 0; M < 0; S < 0; Ms < 0 -> 
+lds(I, H, M, S, Ms) when I < 0; H < 0; M < 0; S < 0; Ms < 0 ->
     {-1 * abs(I), {abs(H), abs(M), abs(S) + abs(Ms)}};
 lds(I, H, M, S, Ms) ->
     {abs(I), {abs(H), abs(M), abs(S) + abs(Ms)}}.
@@ -614,7 +614,7 @@ decode_rowid(Data) ->
     Slotnum = decode_ub2(Rest6),
     Rest7 = decode_next(ub2,Rest6),
     {lid(Objid,Partid,Blocknum,Slotnum),Rest7}.
-    
+
 decode_urowid(Data) ->
     Rest2 = decode_next(ub4,Data),
     Value = decode_chr(Rest2),
@@ -642,7 +642,7 @@ decode_clob(Data) ->
     Rest4 = decode_next(ub4,Rest3), %LobChunkSize
     Vary = decode_ub1(Rest4),
     Rest5 = decode_next(ub1,Rest4), %ClobDBVary
-    Rest6 = 
+    Rest6 =
     case Vary of
         1 -> decode_next(ub2,Rest5); %ClobCharset
         _ -> Rest5
@@ -651,7 +651,7 @@ decode_clob(Data) ->
     Value = decode_chr(Rest7),
     Rest8 = decode_next(chr,Rest7),
     {Value, decode_next(Rest8)}.
-    
+
 decode_blob(Data) ->
     Rest2 = decode_next(ub4,Data),
     Rest3 = decode_next(ub4,Rest2), %LobSize
@@ -671,7 +671,7 @@ decode_adt(Data) ->
     Rest8 = decode_next(ub2,Rest7),
     case Num of
         0 -> {null, Rest8};
-        _ -> 
+        _ ->
             Value = decode_chr(Rest8),
             Rest9 = decode_next(chr,Rest8),
             try decode_adt(list_to_binary(Value), 0) of
@@ -704,7 +704,7 @@ decode_adt(Data, Num, Acc) ->
 
 lrd(<<I,F,S,T,L, Rest/bits>>) when I > 245 -> {(F+S+T) * 256 + L, Rest};
 lrd(<<L, Rest/bits>>) -> {L, Rest}.
-    
+
 decode_long(<<0, Rest/bits>>) ->
     {null, decode_next(ub2,Rest,2)};
 decode_long(Data) ->
