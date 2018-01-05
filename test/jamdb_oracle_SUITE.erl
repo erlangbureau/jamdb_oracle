@@ -327,13 +327,13 @@ t_rowid(Config) ->
 with_input_params(Config) ->
     ConnRef = ?config(conn_ref, Config),
     Query = {"begin with_input_params(:1); end;", [0]},
-    Result = [{proc_result,0,[]}],
+    Result = [{proc_result,0,[[]]}],
     {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
 
 with_output_params(Config) ->
     ConnRef = ?config(conn_ref, Config),
     Query = {"begin with_output_params(:1, :2, :3); end;", [{out,"0"}, {out,"0"}, {out,"0"}]},    
-    Result = [{proc_result,0,["1","2","3"]}],
+    Result = [{proc_result,0,[["1","2","3"]]}],
     {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
 
 with_input_and_output_params(Config) ->
