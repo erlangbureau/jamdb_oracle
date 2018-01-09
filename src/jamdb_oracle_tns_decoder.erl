@@ -63,9 +63,10 @@ decode_token(rpa, Data) ->
     Values = decode_keyval(decode_next(Data), Num, []),
     SessKey = proplists:get_value("AUTH_SESSKEY", Values),
     Salt = proplists:get_value("AUTH_VFR_DATA", Values),
+    DerivedSalt = proplists:get_value("AUTH_PBKDF2_CSK_SALT", Values),
     case proplists:get_value("AUTH_SVR_RESPONSE", Values) of
         undefined ->
-            {?TTI_SESS, SessKey, Salt};
+            {?TTI_SESS, SessKey, Salt, DerivedSalt};
         Resp ->
             Value = proplists:get_value("AUTH_VERSION_NO", Values),
 	    SessId = proplists:get_value("AUTH_SESSION_ID", Values),
