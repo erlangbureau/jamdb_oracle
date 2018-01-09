@@ -2,7 +2,7 @@
 
 %% API
 -export([encode_packet/2]).
--export([encode_record/4]).
+-export([encode_record/5]).
 -export([encode_record/2]).
 -export([encode_token/2]).
 
@@ -22,15 +22,16 @@ encode_packet(Type, Data) ->
     Length = byte_size(Data) + 8,
     {<<Length:16, 0:16, Type:8, 0:8, 0:16, Data/binary>>, <<>>}.
 
-encode_record(auth, EnvOpts, Sess, Salt) ->
+encode_record(auth, EnvOpts, Sess, Salt, DerivedSalt) ->
     User            = proplists:get_value(user, EnvOpts),
     Pass            = proplists:get_value(password, EnvOpts),
     Role            = proplists:get_value(role, EnvOpts, 0), 
     Prelim          = proplists:get_value(prelim, EnvOpts, 0),
     {AuthPass, AuthSess, KeyConn} = 
-    case Salt of
-        undefined -> jamdb_oracle_crypt:o5logon(Sess, User, Pass, 128);
-        _ -> jamdb_oracle_crypt:o5logon(Sess, Salt, Pass, 192)
+    case {Salt, DerivedSalt} of
+        {undefined, _DerivedSalt} -> jamdb_oracle_crypt:o5logon(Sess, User, User, Pass, 128);
+        {_Salt, undefined} -> jamdb_oracle_crypt:o5logon(Sess, Salt, Salt, Pass, 192);
+        _ -> jamdb_oracle_crypt:o5logon(Sess, Salt, DerivedSalt, Pass, 256)
     end,
     {<<
     ?TTI_FUN,
@@ -110,7 +111,7 @@ encode_record(dty, _EnvOpts) ->
     (encode_ub2(?UTF8_CHARSET))/binary,	%cli in charset
     (encode_ub2(?UTF8_CHARSET))/binary,	%cli out charset
     2,
-    38,6,1,0,0,10,1,1,6,1,1,1,1,1,1,0,41,144,3,7,3,0,1,0,79,1,55,4,0,0,0,0,12,0,0,6,0,1,1,
+    38,6,1,0,0,106,1,1,6,1,1,1,1,1,1,0,41,144,3,7,3,0,1,0,79,1,55,4,0,0,0,0,12,0,0,6,0,1,1,
     7,2,0,0,0,0,0,0,
     1,1,1,0,2,2,1,0,4,4,1,0,5,5,1,0,6,6,1,0,7,7,1,0,8,8,1,0,9,9,1,0,10,10,1,0,
     11,11,1,0,12,12,1,0,13,13,1,0,14,14,1,0,15,15,1,0,16,16,1,0,17,17,1,0,18,18,1,0,
