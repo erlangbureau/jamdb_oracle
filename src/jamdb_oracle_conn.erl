@@ -163,7 +163,8 @@ handle_token(<<Token, Data/binary>>, State) ->
 	?TTI_DTY -> send_req(sess, State);
 	?TTI_RPA ->
             case ?DECODER:decode_token(rpa, Data) of
-                {?TTI_SESS, SessKey, Salt} -> send_req(auth, State#oraclient{auth={SessKey, Salt}});
+                {?TTI_SESS, SessKey, Salt, DerivedSalt} ->
+		    send_req(auth, State#oraclient{auth={SessKey, Salt, DerivedSalt}});
                 {?TTI_AUTH, Resp, Ver, SessId} ->
                     #oraclient{auth = KeyConn} = State,
                     Cursors = spawn(fun() -> loop([]) end),
@@ -198,8 +199,8 @@ handle_req(Type, State, Request, Tout) ->
 send_req(login, #oraclient{env=Env} = State) ->
     Data = ?ENCODER:encode_record(login, Env),
     send(State, ?TNS_CONNECT, Data);
-send_req(auth, #oraclient{env=Env, auth={Sess, Salt}} = State) ->
-    {Data,KeyConn} = ?ENCODER:encode_record(auth, Env, Sess, Salt),
+send_req(auth, #oraclient{env=Env, auth={Sess, Salt, DerivedSalt}} = State) ->
+    {Data,KeyConn} = ?ENCODER:encode_record(auth, Env, Sess, Salt, DerivedSalt),
     send(State#oraclient{auth=KeyConn}, ?TNS_DATA, Data);
 send_req(Type, #oraclient{env=Env} = State) ->
     Data = ?ENCODER:encode_record(Type, Env),
