@@ -7,6 +7,14 @@
 %% callbacks
 %%====================================================================
 
+%o3logon(Sess, KeySess, Pass) ->
+%    IVec = <<0:64>>,
+%    SrvSess = crypto:block_decrypt(des_cbc, binary:part(KeySess,0,8), IVec, Sess),
+%    N = (8 - (length(Pass) rem 8 )) rem 8,
+%    CliPass = <<(list_to_binary(Pass))/binary, (binary:copy(<<0>>, N))/binary>>,
+%    AuthPass = crypto:block_encrypt(des_cbc, binary:part(SrvSess,0,8), IVec, CliPass),
+%    {bin2hexstr(AuthPass)++[N], [], []}.
+
 o5logon(Sess, User, User, Pass, Bits) when is_list(Sess), Bits =:= 128 ->
     IVec = <<0:64>>,
     CliPass = norm(User++Pass),
@@ -25,12 +33,14 @@ o5logon(Sess, Salt, DerivedSalt, Pass, Bits) when is_list(Sess), Bits =:= 256 ->
 o5logon(Sess, KeySess, DerivedSalt, Pass, Bits) when is_binary(Sess) ->
     IVec = <<0:128>>,
     SrvSess = jose_jwa_aes:block_decrypt({aes_cbc, Bits}, KeySess, IVec, Sess),
-    CliSess = crypto:strong_rand_bytes(32 + (Bits div 32 rem 4) * 8),
+    CliSess = crypto:strong_rand_bytes(byte_size(SrvSess)),
     AuthSess = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeySess, IVec, CliSess),
     CatKey = cat_key(SrvSess, CliSess, Bits),
     KeyConn = conn_key(CatKey, DerivedSalt, Bits),
     AuthPass = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeyConn, IVec, pad(Pass)),
     {bin2hexstr(AuthPass), bin2hexstr(AuthSess), bin2hexstr(KeyConn)}.
+
+%    SpeedyKey = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeyConn, IVec, binary:part(Data,16,48)),
 
 validate(Resp, KeyConn) ->
     IVec = <<0:128>>,
@@ -53,7 +63,9 @@ conn_key(Data, [], Bits) when Bits =:= 192 ->
 conn_key(Data, DerivedSalt, Bits) when Bits =:= 256 ->
     pbkdf2(sha512, 3, 32, bin2hexstr(Data), hexstr2bin(DerivedSalt)).
 
-cat_key(X,Y,Bits) when Bits =:= 128; Bits =:= 192 ->
+cat_key(X,Y,Bits) when Bits =:= 128 ->
+    cat_key(binary:part(X,byte_size(X),-Bits div 8),binary:part(Y,byte_size(Y),-Bits div 8),[]);
+cat_key(X,Y,Bits) when Bits =:= 192 ->
     cat_key(binary:part(X,16,Bits div 8),binary:part(Y,16,Bits div 8),[]);
 cat_key(X,Y,Bits) when Bits =:= 256 ->
     <<Y/binary,X/binary>>;
