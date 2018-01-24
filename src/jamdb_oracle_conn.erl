@@ -182,7 +182,7 @@ handle_error(socket, Reason, State) ->
     _ = disconnect(State, 0),
     {error, socket, Reason, State#oraclient{conn_state=disconnected}};
 handle_error(Type, Reason, State) ->
-    io:format("~s~n", [Reason]),
+%    io:format("~s~n", [Reason]),
     {error, Type, Reason, State}.
 
 handle_req(marker, State, Acc, Tout) ->
@@ -277,7 +277,7 @@ get_result(block, 0, _RowNumber, _RowFormat, Rows) ->
 get_result(_Type, 0, _RowNumber, [], Rows) ->
     {ok, [{proc_result, 0, Rows}]};
 get_result(_Type, RetCode, _RowNumber, Reason, []) when RetCode =/= 1403 ->
-    io:format("~s~n", [Reason]),
+%    io:format("~s~n", [Reason]),
     {ok, [{proc_result, RetCode, Reason}]};
 get_result(_Type, RetCode, _RowNumber, RowFormat, Rows) ->
     case RetCode of
