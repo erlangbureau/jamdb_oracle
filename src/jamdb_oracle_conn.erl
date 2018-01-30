@@ -6,9 +6,7 @@
 -export([disconnect/1, disconnect/2]).
 -export([sql_query/2, sql_query/3]).
 
--include("TNS.hrl").
 -include("jamdb_oracle.hrl").
--include("jamdb_oracle_defaults.hrl").
 
 -opaque state() :: #oraclient{}.
 -type error_type() :: socket | remote | local.
@@ -24,21 +22,6 @@
 -type procedure_result() :: {proc_result, return_status(), out_params() | metainfo()}.
 -type result() :: fetched_rows() | affected_rows() | result_set() | procedure_result().
 -type query_result() :: {ok, [result()], state()}.
--type env() :: 
-        {host, string()} |
-        {port, non_neg_integer()} |
-        {user, string()} |
-        {password, string()} |
-        {sid, string()} |
-        {service_name, string()} |
-        {ssl, list()} |
-        {socket_options, list()} |
-        {timeout, non_neg_integer()} |
-        {autocommit, non_neg_integer()} |
-        {fetch, non_neg_integer()} |
-        {role, non_neg_integer()} |
-        {prelim, non_neg_integer()} |
-        {app_name, string()}.
 -type options() :: [env()].
 
 -export_type([state/0]).
