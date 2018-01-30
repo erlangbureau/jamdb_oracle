@@ -11,8 +11,6 @@
 -export([handle_call/3, handle_cast/2, handle_info/2]).
 -export([code_change/3]).
 
--include("jamdb_oracle_defaults.hrl").
-
 %% API
 -spec start_link(jamdb_oracle_conn:options()) -> {ok, pid()} | {error, term()}.
 start_link(Opts) when is_list(Opts) ->
