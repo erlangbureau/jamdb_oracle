@@ -1,5 +1,26 @@
+-ifndef(TNS_HRL).
+
+-include("TNS.hrl").
+-include("jamdb_oracle_defaults.hrl").
+
 -define(ENCODER, jamdb_oracle_tns_encoder).
 -define(DECODER, jamdb_oracle_tns_decoder).
+
+-type env() ::
+    {host, string()} |
+    {port, non_neg_integer()} |
+    {user, string()} |
+    {password, string()} |
+    {sid, string()} |
+    {service_name, string()} |
+    {ssl, list()} |
+    {socket_options, list()} |
+    {timeout, non_neg_integer()} |
+    {autocommit, non_neg_integer()} |
+    {fetch, non_neg_integer()} |
+    {role, non_neg_integer()} |
+    {prelim, non_neg_integer()} |
+    {app_name, string()}.
 
 -record(oraclient, {
     socket = undefined,
@@ -97,31 +118,35 @@
 -define(AL16UTF16_CHARSET, 2000).
 
 %-define(CHARSET, [
-%{we8iso8859p1, 31},
-%{ee8iso8859p2, 32},
-%{cl8iso8859p5, 35},
-%{ee8mswin1250, 170},
-%{cl8mswin1251, 171},
-%{we8mswin1252, 178},
-%{ja16euc, 830},
-%{zhs16gbk, 852},
-%{zht16big5, 865},
-%{zht16mswin950, 867},
-%{al32utf8, 873},
-%{al16utf16, 2000}
+%    {we8iso8859p1, 31},
+%    {ee8iso8859p2, 32},
+%    {cl8iso8859p5, 35},
+%    {ee8mswin1250, 170},
+%    {cl8mswin1251, 171},
+%    {we8mswin1252, 178},
+%    {ja16euc, 830},
+%    {zhs16gbk, 852},
+%    {zht16big5, 865},
+%    {zht16mswin950, 867},
+%    {al32utf8, 873},
+%    {al16utf16, 2000}
 %]).
 
 -define(ZONEIDMAP, [
-{100, "America/New_York"},
-{101, "America/Chicago"},
-{103, "America/Los_Angeles"},
-{250, "Asia/Shanghai"},
-{254, "Asia/Hong_Kong"},
-{267, "Asia/Tokyo"},
-{383, "Europe/Berlin"},
-{387, "Europe/Rome"},
-{402, "Europe/Moscow"},
-{404, "Europe/Madrid"},
-{405, "Europe/Stockholm"},
-{408, "Europe/Kiev"}
+    {100, "America/New_York"},
+    {101, "America/Chicago"},
+    {102, "America/Denver"},
+    {103, "America/Los_Angeles"},
+    {250, "Asia/Shanghai"},
+    {254, "Asia/Hong_Kong"},
+    {267, "Asia/Tokyo"},
+    {296, "Asia/Bangkok"},
+    {369, "Europe/London"},
+    {402, "Europe/Moscow"},
+    {405, "Europe/Stockholm"},
+    {408, "Europe/Kiev"}
 ]).
+
+-define(TNS_HRL, "11.2.0.3").
+
+-endif.
