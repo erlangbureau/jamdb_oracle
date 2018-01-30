@@ -6,9 +6,7 @@
 -export([encode_record/2]).
 -export([encode_token/2]).
 
--include("TNS.hrl").
 -include("jamdb_oracle.hrl").
--include("jamdb_oracle_defaults.hrl").
 
 %% API
 encode_packet(?TNS_DATA, Data) ->
@@ -48,7 +46,7 @@ encode_record(auth, EnvOpts, Sess, Salt, DerivedSalt) ->
     >>,
     KeyConn}.
 
-encode_record(login, EnvOpts) ->
+encode_record(description, EnvOpts) ->
     {ok, UserHost}  = inet:gethostname(),
     User            = proplists:get_value(user, EnvOpts),
     Host            = proplists:get_value(host, EnvOpts, ?DEF_HOST),
@@ -57,7 +55,7 @@ encode_record(login, EnvOpts) ->
     ServiceName     = proplists:get_value(service_name, EnvOpts),
     AppName         = proplists:get_value(app_name, EnvOpts, "jamdb"),
     SslOpts         = proplists:get_value(ssl, EnvOpts, []),
-    Data = unicode:characters_to_binary(
+    unicode:characters_to_binary(
     "(DESCRIPTION=(CONNECT_DATA=("++ case ServiceName of
         undefined -> "SID="++Sid;
                 _ -> "SERVICE_NAME="++ServiceName end ++
@@ -66,7 +64,9 @@ encode_record(login, EnvOpts) ->
     ")))(ADDRESS=(PROTOCOL="++ case SslOpts of
                [] -> "TCP";
                 _ -> "TCPS" end ++
-    ")(HOST="++Host++")(PORT="++integer_to_list(Port)++")))"),
+    ")(HOST="++Host++")(PORT="++integer_to_list(Port)++")))");
+encode_record(login, EnvOpts) ->
+    Data = encode_record(description, EnvOpts),
     <<
     1,57,		  % Packet version number
     1,57,		  % Lowest compatible version number
@@ -411,6 +411,7 @@ encode_chr(Data,Acc) ->
     Length = byte_size(Data),
     <<Acc/binary, Length, Data:Length/binary, 0>>.
 
+encode_number(0.0) -> <<128>>;
 encode_number(0) -> <<128>>;
 encode_number(Data) when is_integer(Data) ->
     list_to_binary([<<B>> || B <- lnxfmt(lnxmin(abs(Data),1,[]), Data)]);
