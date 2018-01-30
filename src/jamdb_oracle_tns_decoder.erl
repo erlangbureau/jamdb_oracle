@@ -4,12 +4,10 @@
 -export([decode_packet/1]).
 -export([decode_token/2]).
 
--include("TNS.hrl").
 -include("jamdb_oracle.hrl").
--include("jamdb_oracle_defaults.hrl").
 
 %% API
-decode_packet(<<PacketSize:16, 0:16, ?TNS_DATA, _Flags:8, 0:16, _DataFlags:16, Rest/bits>>) ->
+decode_packet(<<PacketSize:16, _PacketFlags:16, ?TNS_DATA, _Flags:8, 0:16, _DataFlags:16, Rest/bits>>) ->
     BodySize = PacketSize-10,
     case Rest of
         <<PacketBody:BodySize/binary, Rest2/bits>> when ?IS_PACKET_SIZE(PacketSize) ->
@@ -19,14 +17,14 @@ decode_packet(<<PacketSize:16, 0:16, ?TNS_DATA, _Flags:8, 0:16, _DataFlags:16, R
         _ ->
             {error, more}
     end;
-decode_packet(<<PacketSize:16, 0:16, ?TNS_REDIRECT, _Flags:8, 0:16, Length:16, Rest/bits>>) when Length > PacketSize-8 ->
-    case Rest of
-        <<>> ->
-            {error, more};
+decode_packet(<<_PacketSize:16, _PacketFlags:16, ?TNS_REDIRECT, _Flags:8, 0:16, _Length:16, Rest/bits>>) ->
+    case decode_packet(Rest) of
+        {ok, ?TNS_DATA, PacketBody, <<>>} ->
+            {ok, ?TNS_REDIRECT, PacketBody, <<>>};
         _ ->
-            {ok, ?TNS_REDIRECT, Rest, <<>>}
+            {error, more}
     end;
-decode_packet(<<PacketSize:16, 0:16, Type, _Flags:8, 0:16, Rest/bits>>) ->
+decode_packet(<<PacketSize:16, _PacketFlags:16, Type, _Flags:8, 0:16, Rest/bits>>) ->
     BodySize = PacketSize-8,
     case Rest of
         <<PacketBody:BodySize/binary, Rest2/bits>> ->
@@ -54,7 +52,7 @@ decode_token(<<Token, Data/binary>>, Acc) ->
     end;
 decode_token(net, {Data, EnvOpts}) ->
     Values = lists:map(fun(L) -> list_to_tuple(string:tokens(L, "=")) end,
-             string:tokens(binary_to_list(Data), "()")),
+             string:tokens(binary_to_list(hd(binary:split(Data, <<0>>))), "()")),
     Host = proplists:get_value("HOST", Values),
     Port = proplists:get_value("PORT", Values),
     {ok, [{host, Host}, {port, list_to_integer(Port)}]++EnvOpts};
