@@ -2,7 +2,6 @@
 
 %% API
 -export([encode_packet/2]).
--export([encode_record/5]).
 -export([encode_record/2]).
 -export([encode_token/2]).
 
@@ -20,32 +19,6 @@ encode_packet(Type, Data) ->
     Length = byte_size(Data) + 8,
     {<<Length:16, 0:16, Type:8, 0:8, 0:16, Data/binary>>, <<>>}.
 
-encode_record(auth, EnvOpts, Sess, Salt, DerivedSalt) ->
-    User            = proplists:get_value(user, EnvOpts),
-    Pass            = proplists:get_value(password, EnvOpts),
-    Role            = proplists:get_value(role, EnvOpts, 0), 
-    Prelim          = proplists:get_value(prelim, EnvOpts, 0),
-    {AuthPass, AuthSess, KeyConn} = 
-    case {Salt, DerivedSalt} of
-        {undefined, _DerivedSalt} -> jamdb_oracle_crypt:o5logon(Sess, User, User, Pass, 128);
-        {_Salt, undefined} -> jamdb_oracle_crypt:o5logon(Sess, Salt, Salt, Pass, 192);
-        _ -> jamdb_oracle_crypt:o5logon(Sess, Salt, DerivedSalt, Pass, 256)
-    end,
-    {<<
-    ?TTI_FUN,
-    (encode_ub2(?TTI_AUTH))/binary,
-    1,
-    (encode_sb2(length(User)))/binary,
-    (encode_sb2((Role * 32) bor (Prelim * 128) bor 1 bor 256))/binary, %logon mode
-    1,
-    (encode_sb2(2))/binary,	    %keyval count
-    1,1,
-    (encode_chr(User))/binary,
-    (encode_keyval("AUTH_PASSWORD", AuthPass))/binary,
-    (encode_keyval("AUTH_SESSKEY", AuthSess, 1))/binary
-    >>,
-    KeyConn}.
-
 encode_record(description, EnvOpts) ->
     {ok, UserHost}  = inet:gethostname(),
     User            = proplists:get_value(user, EnvOpts),
@@ -55,7 +28,7 @@ encode_record(description, EnvOpts) ->
     ServiceName     = proplists:get_value(service_name, EnvOpts),
     AppName         = proplists:get_value(app_name, EnvOpts, "jamdb"),
     SslOpts         = proplists:get_value(ssl, EnvOpts, []),
-    unicode:characters_to_binary(
+    encode_str(
     "(DESCRIPTION=(CONNECT_DATA=("++ case ServiceName of
         undefined -> "SID="++Sid;
                 _ -> "SERVICE_NAME="++ServiceName end ++
@@ -65,7 +38,7 @@ encode_record(description, EnvOpts) ->
                [] -> "TCP";
                 _ -> "TCPS" end ++
     ")(HOST="++Host++")(PORT="++integer_to_list(Port)++")))");
-encode_record(login, EnvOpts) ->
+encode_record(login, #oraclient{env=EnvOpts}) ->
     Data = encode_record(description, EnvOpts),
     <<
     1,57,		  % Packet version number
@@ -83,7 +56,7 @@ encode_record(login, EnvOpts) ->
     0:192,
     Data/binary
     >>;
-encode_record(sess, EnvOpts) ->
+encode_record(sess, #oraclient{env=EnvOpts,seq=Tseq}) ->
     {ok, UserHost}  = inet:gethostname(),
     UserPID         = os:getpid(),
     User            = proplists:get_value(user, EnvOpts),
@@ -92,25 +65,54 @@ encode_record(sess, EnvOpts) ->
     AppName         = proplists:get_value(app_name, EnvOpts, "jamdb"),
     <<
     ?TTI_FUN,
-    (encode_ub2(?TTI_SESS))/binary,
+    ?TTI_SESS, Tseq,
     1,
     (encode_sb2(length(User)))/binary,
     (encode_sb2((Role * 32) bor (Prelim * 128) bor 1))/binary, %logon mode
     1,
     (encode_sb2(4))/binary,	   %keyval count
     1,1,
-    (encode_chr(User))/binary,
+    (encode_str(User))/binary,
     (encode_keyval("AUTH_PROGRAM_NM", AppName))/binary,
     (encode_keyval("AUTH_MACHINE", UserHost))/binary,
     (encode_keyval("AUTH_PID", UserPID))/binary,
     (encode_keyval("AUTH_SID", User))/binary
     >>;
+encode_record(auth, #oraclient{env=EnvOpts,req={Sess, Salt, DerivedSalt},seq=Tseq}) ->
+    User            = proplists:get_value(user, EnvOpts),
+    Pass            = proplists:get_value(password, EnvOpts),
+    Role            = proplists:get_value(role, EnvOpts, 0),
+    Prelim          = proplists:get_value(prelim, EnvOpts, 0),
+    Logon = #logon{auth=Sess, user=User, password=Pass, salt=Salt, der_salt=DerivedSalt},
+    Bits =
+    case {Salt, DerivedSalt} of
+        {undefined, _DerivedSalt} -> 128;
+        {_Salt, undefined} -> 192;
+        _ -> 256
+    end,
+    {AuthPass, AuthSess, SpeedyKey, KeyConn} = jamdb_oracle_crypt:o5logon(Logon, Bits),
+    KeyInd = if length(SpeedyKey) > 0 -> 1; true -> 0 end,
+    {<<
+    ?TTI_FUN,
+    ?TTI_AUTH, Tseq,
+    1,
+    (encode_sb2(length(User)))/binary,
+    (encode_sb2((Role * 32) bor (Prelim * 128) bor 1 bor 256))/binary, %logon mode
+    1,
+    (encode_sb2(2 + KeyInd))/binary,	    %keyval count
+    1,1,
+    (encode_str(User))/binary,
+    (encode_keyval("AUTH_PASSWORD", AuthPass))/binary,
+    (if KeyInd > 0 -> encode_keyval("AUTH_PBKDF2_SPEEDY_KEY", SpeedyKey); true -> <<>> end)/binary,
+    (encode_keyval(<<"AUTH_SESSKEY">>, AuthSess, 1))/binary
+    >>,
+    KeyConn};
 encode_record(dty, _EnvOpts) ->
     <<
     ?TTI_DTY,
     (encode_ub2(?UTF8_CHARSET))/binary,	%cli in charset
     (encode_ub2(?UTF8_CHARSET))/binary,	%cli out charset
-    2,
+    1,
     38,6,1,0,0,106,1,1,6,1,1,1,1,1,1,0,41,144,3,7,3,0,1,0,79,1,55,4,0,0,0,0,12,0,0,6,0,1,1,
     7,2,0,0,0,0,0,0,
     1,1,1,0,2,2,1,0,4,4,1,0,5,5,1,0,6,6,1,0,7,7,1,0,8,8,1,0,9,9,1,0,10,10,1,0,
@@ -147,44 +149,41 @@ encode_record(pro, _EnvOpts) ->
     6,5,4,3,2,1,0,
     98,101,97,109,0
     >>;
-encode_record(spfp, _EnvOpts) ->
+encode_record(spfp, #oraclient{seq=Tseq}) ->
     <<
     ?TTI_FUN,
-    (encode_ub2(?TTI_SPFP))/binary,
+    ?TTI_SPFP, Tseq,
     1,1,100,1,1,0,0,0,0,0
     >>;
-encode_record(start, Request) ->
+encode_record(start, #oraclient{req=Request,seq=Tseq}) ->
     <<
     ?TTI_FUN,
-    (encode_ub2(?TTI_STRT))/binary,
+    ?TTI_STRT, Tseq,
     (encode_sb4(Request))/binary,   %mode 0 norestrict, 1 restrict, 16 force
     1
     >>;
-encode_record(stop, Request) ->
+encode_record(stop, #oraclient{req=Request,seq=Tseq}) ->
     <<
     ?TTI_FUN,
-    (encode_ub2(?TTI_STOP))/binary,
+    ?TTI_STOP, Tseq,
     (encode_sb4(Request))/binary,   %mode 2 immediate, 4 normal, 8 final, 64 abort, 128 tran
     1
     >>;
-encode_record(tran, Request) ->
+encode_record(tran, #oraclient{req=Request,seq=Tseq}) ->
     <<
     ?TTI_FUN,
-    (encode_ub2(Request))/binary
+    Request, Tseq
     >>;
-encode_record(fetch, {Cursor, Fetch}) ->
+encode_record(fetch, #oraclient{fetch=Fetch,req=Cursor,seq=Tseq}) ->
     <<
     ?TTI_FUN,
-    (encode_ub2(?TTI_FETCH))/binary,
+    ?TTI_FETCH, Tseq,
     (encode_sb4(Cursor))/binary,	%cursor
     (encode_sb4(Fetch))/binary	        %rows to fetch
     >>;
-encode_record(fetch, {Cursor, Type, Query, Bind, Batch, Def, Auto, Fetch, Ver}) ->
-    QueryLen =
-    case Cursor of
-        0 -> length(Query);
-        _ -> 0
-    end,
+encode_record(exec, #oraclient{type=Type,auth=Auto,fetch=Fetch,server=Ver,req={Cursor,Query,Bind,Batch,Def},seq=Tseq}) ->
+    QueryData = encode_str(Query),
+    QueryLen = if Cursor > 0 -> 0; true -> byte_size(QueryData) end,
     BindLen = length(Bind),
     BindInd =
     case {Cursor, BindLen} of
@@ -194,11 +193,7 @@ encode_record(fetch, {Cursor, Type, Query, Bind, Batch, Def, Auto, Fetch, Ver}) 
     end,
     BatchLen = length(Batch),
     DefLen = length(Def),
-    DefInd =
-    case DefLen of
-        0 -> 0;
-        _ -> 1
-    end,
+    DefInd = if DefLen > 0 -> 1; true -> 0 end,
     {Opt, LMax, Max, All8} =
     case {Cursor, Type} of
         {0, Type} -> setopts(Type, BindInd, BatchLen, Auto);
@@ -208,41 +203,26 @@ encode_record(fetch, {Cursor, Type, Query, Bind, Batch, Def, Auto, Fetch, Ver}) 
     end,
     <<
     ?TTI_FUN,
-    (encode_ub2(?TTI_ALL8))/binary,
+    ?TTI_ALL8, Tseq,
     (encode_sb4(Opt))/binary,		%options
     (encode_sb4(Cursor))/binary,	%cursor
-    case QueryLen of                    %query is empty
-        0 -> 0;
-        _ -> 1
-    end,
+    if QueryLen > 0 -> 1; true -> 0 end, %query is empty
     (encode_sb4(QueryLen))/binary,	%query length
-    case length(All8) of                %all8 is empty
-        0 -> 0;
-        _ -> 1
-    end,
+    if length(All8) > 0 -> 1; true -> 0 end, %all8 is empty
     (encode_sb4(length(All8)))/binary,  %all8 length
     0,0,
     (encode_sb4(LMax))/binary,		%long max value
     (encode_sb4(Fetch))/binary,		%rows to fetch
     (encode_sb4(Max))/binary,		%max value
     BindInd,				%bindindicator
-    (case BindInd of		        %bindcols count
-        0 -> <<0>>;
-        _ -> encode_sb4(BindLen)
-    end)/binary,
+    (if BindInd > 0 -> encode_sb4(BindLen); true -> <<0>> end)/binary, %bindcols count
     0,0,0,0,0,
     DefInd,                             %defcols is empty
     (encode_sb4(DefLen))/binary,        %defcols count
     0,					%registration
     0,1,
-    (case Ver of
-        10 -> <<>>;
-        _ -> <<0,0,0,0,0>>
-    end)/binary,
-    (case QueryLen of
-        0 -> <<>>;
-        _ -> encode_chr(Query)
-    end)/binary,
+    (if Ver > 10 -> <<0,0,0,0,0>>; true -> <<>> end)/binary,
+    (if QueryLen > 0 -> QueryData; true -> <<>> end)/binary,
     (encode_array(All8))/binary,
     (case {BindLen, DefLen, QueryLen} of
         {0, 0, QueryLen} -> <<>>;
@@ -251,15 +231,15 @@ encode_record(fetch, {Cursor, Type, Query, Bind, Batch, Def, Auto, Fetch, Ver}) 
         {0, DefLen, 0} -> encode_token(oac, Def, <<>>)
     end)/binary
     >>;
-encode_record(close, Cursors) ->
+encode_record(close, #oraclient{req={Cursors, Tseq2},seq=Tseq}) ->
     <<
     ?TTI_CLOSE,
-    (encode_ub2(?TTI_OCCA))/binary,
+    ?TTI_OCCA, Tseq2,
     1,
     (encode_sb4(length(Cursors)))/binary,  %cursors count
     (encode_array(Cursors))/binary,        %cursors
     ?TTI_FUN,
-    (encode_ub2(?TTI_LOGOFF))/binary
+    ?TTI_LOGOFF, Tseq
     >>.
 
 setopts(all8, {Opts, Fetch, Type}) -> [Opts,Fetch,0,0,0,0,0,Type,0,0,0,0,0].
@@ -346,29 +326,15 @@ encode_len(Data) ->
     Length = byte_size(Data),
     <<Length, Data:Length/binary>>.
 
-encode_keyval(Key, Value, 1) ->
-    Data = encode_keyval(Key, Value),
-    <<(binary:part(Data,0,byte_size(Data) - 1))/binary, (encode_sb4(1))/binary>>.
+encode_keyval(Key, Value) ->
+    encode_keyval(list_to_binary(Key), encode_str(Value), 0).
 
-encode_keyval(Key, Value) when is_list(Key), is_list(Value) ->
-    BinKey = unicode:characters_to_binary(Key),
-    BinValue = unicode:characters_to_binary(Value),
-    encode_keyval(BinKey, BinValue);
-encode_keyval(Key, Value) when is_binary(Key), is_binary(Value) ->
+encode_keyval(Key, Value, Data) ->
     KeyLen = byte_size(Key),
     ValueLen = byte_size(Value),
-    Data = encode_chr(Value),
-    BinKey =
-    case KeyLen of
-	0 -> <<0>>;
-	_ -> <<(encode_sb4(KeyLen))/binary, (encode_chr(Key))/binary>>
-    end,
-    BinValue =
-    case ValueLen of
-	0 -> <<0>>;
-	_ -> <<(encode_sb4(ValueLen))/binary, Data/binary>>
-    end,
-    <<BinKey/binary, BinValue/binary, 0>>.
+    BinKey = if KeyLen > 0 -> <<(encode_sb4(KeyLen))/binary, (encode_chr(Key))/binary>>; true -> <<0>> end,
+    BinValue = if ValueLen > 0 -> <<(encode_sb4(ValueLen))/binary, (encode_chr(Value))/binary>>; true -> <<0>> end,
+    <<BinKey/binary, BinValue/binary, (encode_sb4(Data))/binary>>.
 
 encode_ub1(Data) ->
     <<Data:8>>.
@@ -396,6 +362,8 @@ encode_sb4(Data) ->
 %encode_dalc(<<>>) -> <<0>>;
 %encode_dalc(Data) when byte_size(Data) > 64 -> <<(encode_chr(Data))/binary>>.
 %encode_dalc(Data) -> <<(encode_sb4(byte_size(Data)))/binary,(encode_chr(Data))/binary>>.
+
+encode_str(Data) -> unicode:characters_to_binary(Data).
 
 encode_chr(Data) when is_list(Data) ->
     encode_chr(unicode:characters_to_binary(Data));
