@@ -34,7 +34,20 @@
     cursors,
     defcols,
     params = [],
-    env = []
+    env = [],
+    req,
+    seq
+}).
+
+-record(logon, {
+    user,
+    password,
+    auth,
+    bits,
+    salt,
+    der_salt,
+    key,
+    der_key
 }).
 
 -record(format, {
