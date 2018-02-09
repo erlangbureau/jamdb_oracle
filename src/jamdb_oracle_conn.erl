@@ -90,7 +90,7 @@ sql_query(#oraclient{conn_state=connected} = State, {fetch, Cursor, RowFormat, L
     {ok, State2} = send_req(fetch, State#oraclient{type=fetch}, Cursor),
     handle_resp({Cursor, RowFormat, [LastRow]}, State2, Tout);
 sql_query(#oraclient{conn_state=connected} = State, {Query, Bind, Batch, Fetch}, Tout) ->
-    {ok, State2} = send_req(query, State, {Query, Bind, Batch}),
+    {ok, State2} = send_req(exec, State, {Query, Bind, Batch}),
     #oraclient{server=Ver, defcols=DefCol, params=RowFormat, type=Type} = State2,
     handle_resp(get_param(defcols, {DefCol, Ver, RowFormat, Type}),
     State2#oraclient{type=get_param(type, {Type, Fetch})}, Tout);
@@ -128,7 +128,8 @@ handle_login(#oraclient{socket=Socket, env=Env} = State, Tout) ->
             {ok, State2} = send_req(login, State#oraclient{socket=Socket2}),
             handle_login(State2, Tout);
         {ok, ?TNS_ACCEPT, _BinaryData} ->
-            {ok, State2} = send_req(pro, State),
+            Task = spawn(fun() -> loop(0) end),
+            {ok, State2} = send_req(pro, State#oraclient{seq=Task}),
             handle_login(State2, Tout);
         {ok, ?TNS_MARKER, _BinaryData} ->
             _ = handle_req(marker, State, [], Tout),
@@ -174,46 +175,48 @@ handle_req(marker, State, Acc, Tout) ->
 handle_req(fob, State, Acc, Tout) ->
     {ok, State2} = send(State, ?TNS_DATA, <<?TTI_FOB>>),
     handle_resp(Acc, State2, Tout);
-handle_req(Type, State, Request, Tout) ->
-    Data = ?ENCODER:encode_record(Type, Request),
+handle_req(Type, #oraclient{seq=Task} = State, Request, Tout) ->
+    Data = ?ENCODER:encode_record(Type, #oraclient{req=Request,seq=get_param(Task)}),
     {ok, State2} = send(State, ?TNS_DATA, Data),
     handle_resp([], State2, Tout).
     
 send_req(login, #oraclient{env=Env} = State) ->
-    Data = ?ENCODER:encode_record(login, Env),
+    Data = ?ENCODER:encode_record(login, #oraclient{env=Env}),
     send(State, ?TNS_CONNECT, Data);
-send_req(auth, #oraclient{env=Env, auth={Sess, Salt, DerivedSalt}} = State) ->
-    {Data,KeyConn} = ?ENCODER:encode_record(auth, Env, Sess, Salt, DerivedSalt),
+send_req(auth, #oraclient{env=Env,auth={Sess, Salt, DerivedSalt},seq=Task} = State) ->
+    {Data,KeyConn} = ?ENCODER:encode_record(auth, #oraclient{env=Env, req={Sess, Salt, DerivedSalt},seq=get_param(Task)}),
     send(State#oraclient{auth=KeyConn}, ?TNS_DATA, Data);
-send_req(Type, #oraclient{env=Env} = State) ->
-    Data = ?ENCODER:encode_record(Type, Env),
+send_req(Type, #oraclient{env=Env,seq=Task} = State) ->
+    Data = ?ENCODER:encode_record(Type, #oraclient{env=Env,seq=get_param(Task)}),
     send(State, ?TNS_DATA, Data).
 
-send_req(close, #oraclient{server=0} = State, _Tout) ->
+send_req(close, #oraclient{server=0,seq=Task} = State, _Tout) ->
+    exit(Task, ok),
     send(State, ?TNS_DATA, <<64>>);
 send_req(close, #oraclient{auto=0} = State, Tout) ->
     _ = handle_req(tran, State, ?TTI_ROLLBACK, Tout),
     send_req(close, State#oraclient{auto=1}, Tout);
-send_req(close, #oraclient{cursors=Cursors} = State, Tout) ->
-    _ = handle_req(close, State, [get_result(DefCol) || DefCol <- get_result(Cursors)], Tout),
+send_req(close, #oraclient{cursors=Cursors,seq=Task} = State, Tout) ->
+    _ = handle_req(close, State, {[get_result(DefCol) || DefCol <- get_result(Cursors)], get_param(Task)}, Tout),
     exit(Cursors, ok),
     send_req(close, State#oraclient{server=0}, Tout);
-send_req(fetch, #oraclient{auto=Auto,server=Ver,fetch=Fetch} = State, {Cursor, RowFormat}) ->
-    Data = ?ENCODER:encode_record(fetch, {Cursor, fetch, [], [], [], RowFormat, Auto, Fetch, Ver}),
+send_req(fetch, #oraclient{auto=Auto,server=Ver,fetch=Fetch,seq=Task} = State, {Cursor, RowFormat}) ->
+    Data = ?ENCODER:encode_record(exec, #oraclient{req={Cursor, [], [], [], RowFormat},
+	type=fetch, auth=Auto, fetch=Fetch, server=Ver, seq=get_param(Task)}),
     send(State, ?TNS_DATA, Data);
-send_req(fetch, #oraclient{fetch=Fetch} = State, Cursor) ->
-    Data = ?ENCODER:encode_record(fetch, {Cursor, Fetch}),
+send_req(fetch, #oraclient{fetch=Fetch,seq=Task} = State, Cursor) ->
+    Data = ?ENCODER:encode_record(fetch, #oraclient{fetch=Fetch,req=Cursor,seq=get_param(Task)}),
     send(State, ?TNS_DATA, Data);
-send_req(query, State, {Query, Bind, Batch}) when is_map(Bind) ->
+send_req(exec, State, {Query, Bind, Batch}) when is_map(Bind) ->
     Data = lists:filtermap(fun(L) -> case string:chr(L, $:) of 0 -> false; I -> {true, lists:nthtail(I, L)} end end,
         string:tokens(Query," \t;,)")),
-    send_req(query, State, {Query, get_param(Data, Bind, []), Batch});
-send_req(query, #oraclient{auto=Auto,fetch=Fetch,server=Ver,cursors=Cursors} = State, {Query, Bind, Batch}) ->
+    send_req(exec, State, {Query, get_param(Data, Bind, []), Batch});
+send_req(exec, #oraclient{auto=Auto,fetch=Fetch,server=Ver,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
     {Type, Fetch2, DefCol} = get_param(type, {Query, [B || {out, B} <- Bind], Fetch, Cursors}),
-    Data = ?ENCODER:encode_record(fetch, {get_result(DefCol), Type, Query,
-	[get_param(data, B) || B <- Bind], Batch, [], Auto, Fetch2, Ver}),
+    Data = ?ENCODER:encode_record(exec, #oraclient{req={get_result(DefCol), Query,
+	[get_param(data, B) || B <- Bind], Batch, []}, type=Type, auth=Auto, fetch=Fetch2, server=Ver, seq=get_param(Task)}),
     send(State#oraclient{type=Type,defcols=DefCol,params=[get_param(format, B) || B <- Bind]}, ?TNS_DATA, Data).
-
+	
 handle_resp(Acc, #oraclient{socket=Socket} = State, Tout) ->
     case recv(Socket, Tout) of
         {ok, ?TNS_DATA, Data} ->
@@ -274,12 +277,17 @@ get_result(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Rep
 get_result({_Sum, {Cursor, _RowFormat}}) -> Cursor;
 get_result(#format{column_name=Column}) -> Column.
 
-get_result({Sum, {0, _RowFormat}}, {Cursor, RowFormat}, Cursors) ->
+get_result({Sum, {0, _RowFormat}}, {Cursor, RowFormat}, Cursors) when is_pid(Cursors) ->
     Acc = get_result(Cursors),
     DefCol = {Sum, {Cursor, RowFormat}},
     Cursors ! {set, [DefCol|Acc]},
     DefCol;
 get_result(DefCol, {_Cursor, _RowFormat}, _Cursors) -> DefCol.
+
+get_param(Task) when is_pid(Task) ->
+    Task ! {get, self()},
+    Tseq = receive 127 -> 0; Reply -> Reply end,
+    Task ! {set, Tseq + 1}, Tseq + 1.
 
 get_param([], _M, Acc) -> Acc;
 get_param([H|L], M, Acc) -> get_param(L, M, Acc++[maps:get(list_to_atom(H), M)]).
