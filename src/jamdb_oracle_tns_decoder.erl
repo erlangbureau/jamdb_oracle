@@ -3,6 +3,7 @@
 %% API
 -export([decode_packet/1]).
 -export([decode_token/2]).
+-export([decode_helper/2]).
 
 -include("jamdb_oracle.hrl").
 
@@ -575,6 +576,8 @@ decode_interval(<<Year:4/integer-unit:8,Mon>>) ->
     lym(Year - 2147483648, Mon - 60);
 decode_interval(<<Day:4/integer-unit:8,Hour,Min,Sec,Ms:4/integer-unit:8>>) ->
     lds(Day - 2147483648, Hour - 60, Min - 60, Sec - 60, (Ms - 2147483648) / 1.0e9).
+
+decode_helper(tz, Data) -> ltz(Data).
 
 ltz(I) when I < 0 -> ltz(abs(I), "-");
 ltz(I) -> ltz(abs(I), "+").
