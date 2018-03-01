@@ -96,6 +96,7 @@ sql_query(#oraclient{conn_state=connected} = State, {Query, Bind, Batch, Fetch},
     State2#oraclient{type=get_param(type, {Type, Fetch})}, Tout);
 sql_query(#oraclient{conn_state=connected} = State, {Query, Bind}, Tout) ->
     case lists:nth(1, string:tokens(string:to_upper(Query)," \t;")) of
+        "SESSION" -> sql_query(State, {?ENCODER:encode_helper(sess, []), [], [], []}, Tout);
         "COMMIT" -> handle_req(tran, State, ?TTI_COMMIT, Tout);
         "ROLLBACK" -> handle_req(tran, State, ?TTI_ROLLBACK, Tout);
         "COMON" -> handle_req(tran, State#oraclient{auto=1}, ?TTI_COMON, Tout);
