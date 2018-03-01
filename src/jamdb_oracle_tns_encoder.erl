@@ -4,6 +4,7 @@
 -export([encode_packet/2]).
 -export([encode_record/2]).
 -export([encode_token/2]).
+-export([encode_helper/2]).
 
 -include("jamdb_oracle.hrl").
 
@@ -423,6 +424,12 @@ lnxfmt([I|L], Data) when Data > 0 ->
     [(I+192+1)|[ N+1 || N <- L]];
 lnxfmt([I|L], Data) when Data < 0 ->
     [(I+192+1 bxor 255)|[ 101-N || N <- L]]++[102].
+
+encode_helper(sess,_) -> "ALTER SESSION SET TIME_ZONE='"++encode_offset(encode_offset(now))++"'".
+
+encode_offset(Offset) when is_integer(Offset) -> ?DECODER:decode_helper(tz, Offset div 3600);
+encode_offset(now) -> encode_offset(calendar:local_time()) - encode_offset(calendar:universal_time());
+encode_offset(T) -> calendar:datetime_to_gregorian_seconds(T) - 62167219200.
 
 encode_date({{Year,Mon,Day}, {Hour,Min,Sec,Ms}, Offset}) when is_integer(Offset) ->
     Secs = calendar:datetime_to_gregorian_seconds({{Year,Mon,Day}, {Hour,Min,Sec}}),
