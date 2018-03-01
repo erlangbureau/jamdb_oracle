@@ -158,7 +158,10 @@ defmodule Jamdb.Oracle do
 
   @doc false
   def checkout(s) do
-    {:ok, s}
+    case query(s, 'SESSION') do
+      {:ok, _, s} -> {:ok, s}
+      disconnect -> disconnect
+    end
   end
 
   @doc false
