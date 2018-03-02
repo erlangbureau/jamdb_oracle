@@ -577,8 +577,6 @@ decode_interval(<<Year:4/integer-unit:8,Mon>>) ->
 decode_interval(<<Day:4/integer-unit:8,Hour,Min,Sec,Ms:4/integer-unit:8>>) ->
     lds(Day - 2147483648, Hour - 60, Min - 60, Sec - 60, (Ms - 2147483648) / 1.0e9).
 
-decode_helper(tz, Data) -> ltz(Data).
-
 ltz(I) when I < 0 -> ltz(abs(I), "-");
 ltz(I) -> ltz(abs(I), "+").
 
@@ -713,3 +711,5 @@ decode_long(Data) ->
     Value = decode_chr(Data),
     Rest2 = decode_next(chr,Data),
     {Value, decode_next(ub2,Rest2,2)}.
+
+decode_helper(tz, Data) -> ltz(Data).
