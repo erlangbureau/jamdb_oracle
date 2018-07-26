@@ -16,7 +16,6 @@ Features
 
 Getting Started
 =====
-[![SlideShare](https://img.shields.io/badge/SlideShare-ElixirからOracle接続-blue.svg)](https://www.slideshare.net/YoshiiroUeno/elixiroracle)
 
 ```erl
 
@@ -64,8 +63,6 @@ When authenticating and downgrading an TLS connection to a transport connection 
 
 Author
 ======
-[![Donate Bitcoin](https://img.shields.io/badge/donate-bitcoin-yellow.svg)](https://github.com/vstavskyi/blockchain)
-
 Mykhailo Vstavskyi
 
 Contributors
