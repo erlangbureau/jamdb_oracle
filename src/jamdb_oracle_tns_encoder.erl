@@ -222,7 +222,10 @@ encode_record(exec, #oraclient{type=Type,auth=Auto,fetch=Fetch,server=Ver,req={C
     (encode_sb4(DefLen))/binary,        %defcols count
     0,					%registration
     0,1,
-    (if Ver > 10 -> <<0,0,0,0,0>>; true -> <<>> end)/binary,
+    (case Ver of
+        10 -> <<>>;
+        _ -> <<0,0,0,0,0>>
+    end)/binary,
     (if QueryLen > 0 -> QueryData; true -> <<>> end)/binary,
     (encode_array(All8))/binary,
     (case {BindLen, DefLen, QueryLen} of
@@ -333,8 +336,8 @@ encode_keyval(Key, Value) ->
 encode_keyval(Key, Value, Data) ->
     KeyLen = byte_size(Key),
     ValueLen = byte_size(Value),
-    BinKey = if KeyLen > 0 -> <<(encode_sb4(KeyLen))/binary, (encode_chr(Key))/binary>>; true -> <<0>> end,
-    BinValue = if ValueLen > 0 -> <<(encode_sb4(ValueLen))/binary, (encode_chr(Value))/binary>>; true -> <<0>> end,
+    BinKey = if KeyLen > 0 -> <<(encode_sb4(KeyLen))/binary, (encode_len(Key))/binary>>; true -> <<0>> end,
+    BinValue = if ValueLen > 0 -> <<(encode_sb4(ValueLen))/binary, (encode_len(Value))/binary>>; true -> <<0>> end,
     <<BinKey/binary, BinValue/binary, (encode_sb4(Data))/binary>>.
 
 encode_ub1(Data) ->
