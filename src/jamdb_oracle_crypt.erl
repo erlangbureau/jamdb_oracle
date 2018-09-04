@@ -37,7 +37,11 @@ o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits)
 o5logon(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey, password=Pass, bits=Bits}) ->
     IVec = <<0:128>>,
     SrvSess = jose_jwa_aes:block_decrypt({aes_cbc, Bits}, KeySess, IVec, Sess),
-    CliSess = crypto:strong_rand_bytes(byte_size(SrvSess)),
+    CliSess =
+    case binary:match(SrvSess,pad(8,<<>>)) of
+        {40,8} -> <<(crypto:strong_rand_bytes(40))/binary, (pad(8,<<>>))/binary>>;
+        _ -> crypto:strong_rand_bytes(byte_size(SrvSess))
+    end,
     AuthSess = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeySess, IVec, CliSess),
     CatKey = cat_key(SrvSess, CliSess, Bits),
     KeyConn = conn_key(CatKey, DerivedSalt, Bits),
