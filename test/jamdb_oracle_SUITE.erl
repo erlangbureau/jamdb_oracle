@@ -58,7 +58,8 @@ groups() ->
         {procedure_operations, [sequence], [
             with_input_params,
             with_output_params,
-            with_input_and_output_params
+            with_input_and_output_params,
+            with_multi_output_params
         ]}
     ].
 
@@ -345,6 +346,13 @@ with_input_and_output_params(Config) ->
     Result = [{result_set, [<<"ONE">>, <<"TWO">>, <<"THREE">>], [], [ [{1.0},{2.0},{3.0}] ]}],
     {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
 
+with_multi_output_params(Config) ->
+    ConnRef = ?config(conn_ref, Config),
+    Query = {"begin with_multi_output_params(:i1, :o1, :o2); end;",
+             #{o2 => {out, cursor}, i1 => {in, "select 1 one, 2 two, 3 three from dual"}, o1 => {out, "0"}}},
+    Result = [{result_set, [<<"ONE">>, <<"TWO">>, <<"THREE">>], [], [ [{1.0},{2.0},{3.0}] ]}],
+    {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
+
 %% internal
 table_desc(t_number) ->
     "C_NUMBER NUMBER";
@@ -402,6 +410,15 @@ procedure_desc(with_input_and_output_params) ->
     ") is "
     "begin "
         "open o1 for i1; "
+    "end;";
+procedure_desc(with_multi_output_params) ->
+    "( "
+        "i1 in varchar2, "
+        "o1 out varchar2, "
+        "o2 out sys_refcursor "
+    ") is "
+    "begin "
+        "open o2 for i1; "
     "end;".
 
 run_testcases(ConnRef, Table, Key, Cases) ->
