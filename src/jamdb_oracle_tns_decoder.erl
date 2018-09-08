@@ -166,18 +166,14 @@ decode_token(iov, Data, {Ver, RowFormat, Type}) when is_atom(Type) ->
 	    decode_token(Rest3, {Ver, [decode_param(B) || B <- Bind], Type})
     end;
 decode_token(rxd, Data, {Ver, _RowFormat, fetch}) ->
-    {Rest2, RowFormat} = decode_token(dcb, decode_next(ub1,Data), Ver),
+    {Rest2, CursorRowFormat} = decode_token(dcb, decode_next(ub1,Data), Ver),
     Cursor = decode_ub4(Rest2),
     Rest3 = decode_next(ub4,Rest2),
-    {Cursor, RowFormat, decode_next(ub2,Rest3)};
+    {{Cursor, CursorRowFormat}, decode_next(ub2,Rest3)};
 decode_token(rxd, Data, {Ver, RowFormat, Type}) when is_atom(Type) ->
-    case decode_data(Data, RowFormat, [], Type) of
-        {Rows, RestRowFormat, Rest2} ->                              %%fetch cursor
-	    {Cursor, CursorRowFormat, Rest3} = decode_token(rxd, Rest2, {Ver, [], fetch}),
-	    case decode_data(Rest3, RestRowFormat, Rows, Type) of
-		{_Rows, _RestRowFormat, _Rest4} -> erlang:error(cursor);
-		{_Rows, Rest4} -> decode_token(Rest4, {Cursor, CursorRowFormat, []})
-	    end;
+    case decode_data(Data, [], {[], RowFormat, Ver, Type}) of
+    	{{Cursor, CursorRowFormat}, Rest2} ->
+	    decode_token(Rest2, {Cursor, CursorRowFormat, []});      %%fetch cursor
         {Rows, Rest2} -> decode_token(Rest2, {0, RowFormat, Rows})   %%proc_result
     end;
 decode_token(rxd, Data, {Cursor, RowFormat, Bvc, Rows}) ->
@@ -371,19 +367,22 @@ decode_bvc(Data, Acc, Num, I) when is_list(Acc) ->
     Bvc = decode_bvc(decode_ub1(Data), {}, 0, I),
     decode_bvc(decode_next(ub1,Data), Acc++tuple_to_list(Bvc), Num-1, I+1).
 
-decode_data(Data, [], Values, _Type) ->
+decode_data(Data, Values, {[], [], _Ver, _Type}) ->
     {lists:reverse(Values), Data};
-decode_data(Data, [#format{param=in}|RestRowFormat], Values, Type) ->
-    decode_data(Data, RestRowFormat, Values, Type);
-decode_data(_Data, [#format{data_type=?TNS_TYPE_REFCURSOR}|RestRowFormat], Values, _Type) ->
-    {Values, RestRowFormat, Data};
-decode_data(Data, [ValueFormat|RestRowFormat], Values, Type=return) ->
+decode_data(Data, _Values, {DefCol, [], _Ver, _Type}) ->
+    {DefCol, Data};
+decode_data(Data, Values, {DefCol, [#format{param=in}|RestRowFormat], Ver, Type}) ->
+    decode_data(Data, Values, {DefCol, RestRowFormat, Ver, Type});
+decode_data(Data, Values, {_DefCol, [#format{data_type=?TNS_TYPE_REFCURSOR}|RestRowFormat], Ver, Type}) ->
+    {DefCol, Rest2} = decode_token(rxd, Data, {Ver, [], fetch}),
+    decode_data(Rest2, Values, {DefCol, RestRowFormat, Ver, Type});
+decode_data(Data, Values, {DefCol, [ValueFormat|RestRowFormat], Ver, Type=return}) ->
     Num = decode_ub4(Data),
     {Value, RestData} = decode_data(decode_next(ub4,Data), ValueFormat, [], Num, Type),
-    decode_data(RestData, RestRowFormat, [Value|Values], Type);    
-decode_data(Data, [ValueFormat|RestRowFormat], Values, Type=block) ->
+    decode_data(RestData, [Value|Values], {DefCol, RestRowFormat, Ver, Type});
+decode_data(Data, Values, {DefCol, [ValueFormat|RestRowFormat], Ver, Type=block}) ->
     {Value, RestData} = decode_data(Data, ValueFormat),
-    decode_data(decode_next(ub2,RestData), RestRowFormat, [Value|Values], Type).
+    decode_data(decode_next(ub2,RestData), [Value|Values], {DefCol, RestRowFormat, Ver, Type}).
 
 decode_data(Data, _ValueFormat, Values, 0, _Type) ->
     {lists:reverse(Values), Data};
