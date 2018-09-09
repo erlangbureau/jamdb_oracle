@@ -714,4 +714,5 @@ decode_long(Data) ->
     Rest2 = decode_next(chr,Data),
     {Value, decode_next(ub2,Rest2,2)}.
 
+decode_helper(param, Data) -> decode_token(oac, ?ENCODER:encode_token(oac, Data));
 decode_helper(tz, Data) -> ltz(Data).
