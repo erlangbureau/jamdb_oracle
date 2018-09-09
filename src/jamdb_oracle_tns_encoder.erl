@@ -447,6 +447,15 @@ encode_date({{Year,Mon,Day}, {Hour,Min,Sec}}) ->
     (Sec + 1)
     >>.
 
+encode_helper(param, Data) ->
+    Values =
+    [
+    {number, 0}, {integer, 0}, {float, 0}, {decimal, 0},
+    {varchar, []}, {char, []}, {string, []},
+    {nvarchar, <<>>}, {nchar, <<>>}, {binary, <<>>},
+    {date, {1900,1,1}}, {timestamp, {{1900,1,1}, {0,0,0,0}}}, {timestamptz, {{1900,1,1}, {0,0,0,0}, 0}}
+    ],
+    proplists:get_value(Data, Values, Data);
 encode_helper(sess, _) ->
     Secs = calendar:datetime_to_gregorian_seconds(calendar:local_time()),
     USecs = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
