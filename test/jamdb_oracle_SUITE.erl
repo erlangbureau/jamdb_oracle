@@ -335,8 +335,8 @@ with_input_params(Config) ->
 
 with_output_params(Config) ->
     ConnRef = ?config(conn_ref, Config),
-    Query = {"begin with_output_params(:1, :2, :3); end;", [{out,"0"}, {out,"0"}, {out,"0"}]},    
-    Result = [{proc_result,0,[["1","2","3"]]}],
+    Query = {"begin with_output_params(:1, :2, :3); end;", [{out,varchar}, {out,number}, {out,date}]},    
+    Result = [{proc_result,0,[["1",{2},{{2016,8,1},{1,2,3}}]]}]
     {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
 
 with_input_and_output_params(Config) ->
@@ -397,11 +397,11 @@ procedure_desc(with_input_params) ->
 procedure_desc(with_output_params) ->
     "( "
         "o1 out varchar2, "
-        "o2 out varchar2, "
-        "o3 out varchar2 "
+        "o2 out number, "
+        "o3 out date "
     ") is "
     "begin "
-        "select '1', '2', '3' into o1, o2, o3 from dual; "
+        "select '1', 2, to_date('2016-08-01 01:02:03','YYYY-MM-DD HH24:MI:SS') into o1, o2, o3 from dual; "
     "end;";
 procedure_desc(with_input_and_output_params) ->
     "( "
