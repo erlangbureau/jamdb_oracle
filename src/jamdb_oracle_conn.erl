@@ -314,15 +314,14 @@ get_param(type, {_Value, [], _Fetch}) -> {change, 0};
 get_param(type, {_Value, _Bind, _Fetch}) -> {return, 0};
 get_param(type, {_Type, fetch}) -> fetch;
 get_param(type, {Type, []}) -> Type;
-get_param(data, {out, Data}) -> Data;
+get_param(data, {out, Data}) -> ?ENCODER:encode_helper(param, Data);
 get_param(data, {in, Data}) -> Data;
 get_param(data, Data) -> Data;
-get_param(format, {out, Data}) -> get_param(out, Data);
+get_param(format, {out, Data}) -> get_param(out, ?ENCODER:encode_helper(param, Data));
 get_param(format, {in, Data}) -> get_param(in, Data);
 get_param(format, Data) -> get_param(in, Data);
 get_param(Type, Data) ->
-    {<<>>, DataType, Length, Scale, Charset} = 
-    ?DECODER:decode_token(oac, ?ENCODER:encode_token(oac, Data)),
+    {<<>>, DataType, Length, Scale, Charset} = ?DECODER:decode_helper(param, Data),
     #format{param=Type,data_type=DataType,data_length=Length,data_scale=Scale,charset=Charset}.
 
 sock_renegotiate(Socket, _Opts, _Tout) when is_port(Socket) -> {ok, Socket};
