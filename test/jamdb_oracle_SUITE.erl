@@ -336,7 +336,7 @@ with_input_params(Config) ->
 with_output_params(Config) ->
     ConnRef = ?config(conn_ref, Config),
     Query = {"begin with_output_params(:1, :2, :3); end;", [{out,varchar}, {out,number}, {out,date}]},    
-    Result = [{proc_result,0,[["1",{2},{{2016,8,1},{1,2,3}}]]}]
+    Result = [{proc_result,0,[["1",{2},{{2016,8,1},{1,2,3}}]]}],
     {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
 
 with_input_and_output_params(Config) ->
