@@ -1,31 +1,31 @@
 -module(jamdb_oracle_tns_decoder).
 
 %% API
--export([decode_packet/1]).
+-export([decode_packet/2]).
 -export([decode_token/2]).
 -export([decode_helper/2]).
 
 -include("jamdb_oracle.hrl").
 
 %% API
-decode_packet(<<PacketSize:16, _PacketFlags:16, ?TNS_DATA, _Flags:8, 0:16, _DataFlags:16, Rest/bits>>) ->
+decode_packet(<<PacketSize:16, _PacketFlags:16, ?TNS_DATA, _Flags:8, 0:16, _DataFlags:16, Rest/bits>>, Length) ->
     BodySize = PacketSize-10,
     case Rest of
-        <<PacketBody:BodySize/binary, Rest2/bits>> when ?IS_PACKET_SIZE(PacketSize) ->
+        <<PacketBody:BodySize/binary, Rest2/bits>> when PacketSize =:= Length-37; PacketSize =:= Length-81 ->
             {error, more, PacketBody, Rest2};
         <<PacketBody:BodySize/binary, Rest2/bits>> ->
             {ok, ?TNS_DATA, PacketBody, Rest2};
         _ ->
             {error, more}
     end;
-decode_packet(<<_PacketSize:16, _PacketFlags:16, ?TNS_REDIRECT, _Flags:8, 0:16, _Length:16, Rest/bits>>) ->
-    case decode_packet(Rest) of
+decode_packet(<<_PacketSize:16, _PacketFlags:16, ?TNS_REDIRECT, _Flags:8, 0:16, _Length:16, Rest/bits>>, Length) ->
+    case decode_packet(Rest, Length) of
         {ok, ?TNS_DATA, PacketBody, <<>>} ->
             {ok, ?TNS_REDIRECT, PacketBody, <<>>};
         _ ->
             {error, more}
     end;
-decode_packet(<<PacketSize:16, _PacketFlags:16, Type, _Flags:8, 0:16, Rest/bits>>) ->
+decode_packet(<<PacketSize:16, _PacketFlags:16, Type, _Flags:8, 0:16, Rest/bits>>, _Length) ->
     BodySize = PacketSize-8,
     case Rest of
         <<PacketBody:BodySize/binary, Rest2/bits>> ->
@@ -33,7 +33,7 @@ decode_packet(<<PacketSize:16, _PacketFlags:16, Type, _Flags:8, 0:16, Rest/bits>
         _ ->
             {error, more}
     end;
-decode_packet(_) ->
+decode_packet(_,_) ->
     {error, socket}.
 
 decode_token(<<Token, Data/binary>>, Acc) ->
