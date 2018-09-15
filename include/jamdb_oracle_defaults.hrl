@@ -5,4 +5,5 @@
 -define(DEF_SID, "").
 -define(DEF_AUTOCOMMIT, 1).
 -define(DEF_FETCH, 15).
+-define(DEF_SDU, 8192).
 -define(DEF_TIMEOUT, 15000).
