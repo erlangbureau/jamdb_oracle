@@ -41,12 +41,13 @@ connect(Opts, Tout) ->
     SocketOpts  = proplists:get_value(socket_options, Opts, []),
     Auto        = proplists:get_value(autocommit, Opts, ?DEF_AUTOCOMMIT),
     Fetch       = proplists:get_value(fetch, Opts, ?DEF_FETCH),
+    Sdu         = proplists:get_value(sdu, Opts, ?DEF_SDU),
     SockOpts = [binary, {active, false}, {packet, raw}, %{recbuf, 65535},
             {nodelay, true}, {keepalive, true}]++SocketOpts,
     case gen_tcp:connect(Host, Port, SockOpts, Tout) of
         {ok, Socket} ->
             {ok, Socket2} = sock_connect(Socket, SslOpts, Tout),
-            State = #oraclient{socket=Socket2, env=Opts, auto=Auto, fetch=Fetch, timeout=Tout},
+            State = #oraclient{socket=Socket2, env=Opts, auto=Auto, fetch=Fetch, sdu=Sdu, timeout=Tout},
             {ok, State2} = send_req(login, State),
             handle_login(State2#oraclient{conn_state=auth_negotiate}, Tout);
         {error, Reason} ->
@@ -114,8 +115,8 @@ loop(Values) ->
     receive {get, From} -> From ! Values, loop(Values); {set, Values2} -> loop(Values2) end.
 
 %% internal
-handle_login(#oraclient{socket=Socket, env=Env} = State, Tout) ->
-    case recv(Socket, Tout) of
+handle_login(#oraclient{socket=Socket, env=Env, sdu=Length} = State, Tout) ->
+    case recv(Socket, Length, Tout) of
         {ok, ?TNS_DATA, BinaryData} ->
             case handle_token(BinaryData, State) of
                 {ok, State2} -> handle_login(State2, Tout);
@@ -128,9 +129,9 @@ handle_login(#oraclient{socket=Socket, env=Env} = State, Tout) ->
             {ok, Socket2} = sock_renegotiate(Socket, Env, Tout),
             {ok, State2} = send_req(login, State#oraclient{socket=Socket2}),
             handle_login(State2, Tout);
-        {ok, ?TNS_ACCEPT, _BinaryData} ->
+        {ok, ?TNS_ACCEPT, <<_Ver:16,_Opts:16,Sdu:16,_Rest/bits>> = _BinaryData} ->
             Task = spawn(fun() -> loop(0) end),
-            {ok, State2} = send_req(pro, State#oraclient{seq=Task}),
+            {ok, State2} = send_req(pro, State#oraclient{seq=Task,sdu=Sdu}),
             handle_login(State2, Tout);
         {ok, ?TNS_MARKER, _BinaryData} ->
             _ = handle_req(marker, State, [], Tout),
@@ -181,8 +182,8 @@ handle_req(Type, #oraclient{seq=Task} = State, Request, Tout) ->
     {ok, State2} = send(State, ?TNS_DATA, Data),
     handle_resp([], State2, Tout).
     
-send_req(login, #oraclient{env=Env} = State) ->
-    Data = ?ENCODER:encode_record(login, #oraclient{env=Env}),
+send_req(login, #oraclient{env=Env,sdu=Sdu} = State) ->
+    Data = ?ENCODER:encode_record(login, #oraclient{env=Env,sdu=Sdu}),
     send(State, ?TNS_CONNECT, Data);
 send_req(auth, #oraclient{env=Env,auth={Sess, Salt, DerivedSalt},seq=Task} = State) ->
     {Data,KeyConn} = ?ENCODER:encode_record(auth, #oraclient{env=Env, req={Sess, Salt, DerivedSalt},seq=get_param(Task)}),
@@ -218,8 +219,8 @@ send_req(exec, #oraclient{auto=Auto,fetch=Fetch,server=Ver,cursors=Cursors,seq=T
 	[get_param(data, B) || B <- Bind], Batch, []}, type=Type, auth=Auto, fetch=Fetch2, server=Ver, seq=get_param(Task)}),
     send(State#oraclient{type=Type,defcols=DefCol,params=[get_param(format, B) || B <- Bind]}, ?TNS_DATA, Data).
 	
-handle_resp(Acc, #oraclient{socket=Socket} = State, Tout) ->
-    case recv(Socket, Tout) of
+handle_resp(Acc, #oraclient{socket=Socket, sdu=Length} = State, Tout) ->
+    case recv(Socket, Length, Tout) of
         {ok, ?TNS_DATA, Data} ->
             handle_resp(Data, Acc, State, Tout);
         {ok, ?TNS_MARKER, _Data} ->
@@ -353,36 +354,36 @@ send(#oraclient{socket=Socket} = State, PacketType, Data) ->
             handle_error(socket, Reason, State)
     end.
 
-recv(Socket, Tout) ->
-    recv(Socket, Tout, <<>>, <<>>).
+recv(Socket, Length, Tout) ->
+    recv(Socket, Length, Tout, <<>>, <<>>).
 
-recv(Socket, Acc, Data) ->
+recv(Socket, Length, Acc, Data) ->
     Tout = 500,
     case sock_recv(Socket, 0, Tout) of
         {ok, NetworkData} ->
-            recv(Socket, Tout, <<Acc/bits, NetworkData/bits>>, Data);
+            recv(Socket, Length, Tout, <<Acc/bits, NetworkData/bits>>, Data);
         {error, timeout} ->
             {ok, ?TNS_DATA, Data};
         {error, Reason} ->
             {error, socket, Reason}
     end.
 
-recv(Socket, Tout, Acc, Data) ->
-    case ?DECODER:decode_packet(Acc) of
+recv(Socket, Length, Tout, Acc, Data) ->
+    case ?DECODER:decode_packet(Acc, Length) of
         {ok, Type, PacketBody, <<>>} ->
             {ok, Type, <<Data/bits, PacketBody/bits>>};
         {ok, _Type, PacketBody, Rest} ->
-            recv(Socket, Tout, Rest, <<Data/bits, PacketBody/bits>>);
+            recv(Socket, Length, Tout, Rest, <<Data/bits, PacketBody/bits>>);
         {error, more, PacketBody, <<>>} ->
-            recv(Socket, <<>>, <<Data/bits, PacketBody/bits>>);
+            recv(Socket, Length, <<>>, <<Data/bits, PacketBody/bits>>);
         {error, more, PacketBody, Rest} ->
-            recv(Socket, Tout, Rest, <<Data/bits, PacketBody/bits>>);
+            recv(Socket, Length, Tout, Rest, <<Data/bits, PacketBody/bits>>);
         {error, more} ->
-            recv(Socket, Acc, Data);
+            recv(Socket, Length, Acc, Data);
         {error, socket} ->
             case sock_recv(Socket, 0, Tout) of
                 {ok, NetworkData} ->
-                    recv(Socket, Tout, <<Acc/bits, NetworkData/bits>>, Data);
+                    recv(Socket, Length, Tout, <<Acc/bits, NetworkData/bits>>, Data);
                 {error, Reason} ->
                     {error, socket, Reason}
             end
