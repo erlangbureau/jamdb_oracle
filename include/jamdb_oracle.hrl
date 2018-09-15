@@ -30,14 +30,14 @@
     timeout,
     auth,
     fetch,
+    sdu,
     server,
     cursors,
     defcols,
     params = [],
     env = [],
     req,
-    seq,
-    sdu
+    seq
 }).
 
 -record(logon, {
