@@ -39,13 +39,13 @@ encode_record(description, EnvOpts) ->
                [] -> "TCP";
                 _ -> "TCPS" end ++
     ")(HOST="++Host++")(PORT="++integer_to_list(Port)++")))");
-encode_record(login, #oraclient{env=EnvOpts}) ->
+encode_record(login, #oraclient{env=EnvOpts,sdu=Sdu}) ->
     Data = encode_record(description, EnvOpts),
     <<
     1,57,		  % Packet version number
     1,57,		  % Lowest compatible version number
     0,0,		  % Global service options supported
-    32,0,		  % SDU 8192
+    Sdu:16,		  % SDU
     255,255,		  % TDU
     79,152,		  % Protocol Characteristics
     0,0,		  % Max packets before ACK
