@@ -36,7 +36,8 @@
     params = [],
     env = [],
     req,
-    seq
+    seq,
+    sdu
 }).
 
 -record(logon, {
