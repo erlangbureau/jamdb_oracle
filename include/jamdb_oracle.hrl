@@ -60,11 +60,6 @@
     charset
 }).
 
--define(IS_PACKET_SIZE(PacketSize),
-    PacketSize =:= 8155;
-    PacketSize =:= 8111
-).
-
 -define(IS_FIXED_TYPE(DataType),
     ?IS_NUMBER_TYPE(DataType);
     ?IS_BINARY_TYPE(DataType);
