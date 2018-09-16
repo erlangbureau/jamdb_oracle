@@ -1,7 +1,7 @@
 -module(jamdb_oracle_tns_encoder).
 
 %% API
--export([encode_packet/2]).
+-export([encode_packet/3]).
 -export([encode_record/2]).
 -export([encode_token/2]).
 -export([encode_helper/2]).
@@ -9,16 +9,17 @@
 -include("jamdb_oracle.hrl").
 
 %% API
-encode_packet(?TNS_DATA, Data) ->
-    Length = byte_size(Data) + 10,
+encode_packet(?TNS_DATA, Data, Length) ->
+    PacketSize = byte_size(Data) + 10,
+    BodySize = Length - 10,
     case Data of
-        <<PacketBody:8182/binary, Rest/bits>> when Length > 8192 ->
-            {<<32:8, 0:8, 0:16, ?TNS_DATA:8, 0:8, 0:16, 0:8, 32:8, PacketBody/binary>>, Rest};
-        _ ->  {<<Length:16, 0:16, ?TNS_DATA:8, 0:8, 0:16, 0:16, Data/binary>>, <<>>}
+        <<PacketBody:BodySize/binary, Rest/bits>> when PacketSize > Length ->
+            {<<Length:16, 0:16, ?TNS_DATA:8, 0:8, 0:16, 0:8, 32:8, PacketBody/binary>>, Rest};
+        _ ->  {<<PacketSize:16, 0:16, ?TNS_DATA:8, 0:8, 0:16, 0:16, Data/binary>>, <<>>}
     end;
-encode_packet(Type, Data) ->
-    Length = byte_size(Data) + 8,
-    {<<Length:16, 0:16, Type:8, 0:8, 0:16, Data/binary>>, <<>>}.
+encode_packet(Type, Data, _Length) ->
+    PacketSize = byte_size(Data) + 8,
+    {<<PacketSize:16, 0:16, Type:8, 0:8, 0:16, Data/binary>>, <<>>}.
 
 encode_record(description, EnvOpts) ->
     {ok, UserHost}  = inet:gethostname(),
