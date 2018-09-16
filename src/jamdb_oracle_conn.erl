@@ -42,12 +42,13 @@ connect(Opts, Tout) ->
     Auto        = proplists:get_value(autocommit, Opts, ?DEF_AUTOCOMMIT),
     Fetch       = proplists:get_value(fetch, Opts, ?DEF_FETCH),
     Sdu         = proplists:get_value(sdu, Opts, ?DEF_SDU),
+    Charset     = proplists:get_value(charset, Opts, utf8),
     SockOpts = [binary, {active, false}, {packet, raw}, %{recbuf, 65535},
             {nodelay, true}, {keepalive, true}]++SocketOpts,
     case gen_tcp:connect(Host, Port, SockOpts, Tout) of
         {ok, Socket} ->
             {ok, Socket2} = sock_connect(Socket, SslOpts, Tout),
-            State = #oraclient{socket=Socket2, env=Opts, auto=Auto, fetch=Fetch, sdu=Sdu, timeout=Tout},
+            State = #oraclient{socket=Socket2, env=Opts, auto=Auto, fetch=Fetch, sdu=Sdu, req=Charset, timeout=Tout},
             {ok, State2} = send_req(login, State),
             handle_login(State2#oraclient{conn_state=auth_negotiate}, Tout);
         {error, Reason} ->
@@ -188,8 +189,8 @@ send_req(login, #oraclient{env=Env,sdu=Sdu} = State) ->
 send_req(auth, #oraclient{env=Env,auth={Sess, Salt, DerivedSalt},seq=Task} = State) ->
     {Data,KeyConn} = ?ENCODER:encode_record(auth, #oraclient{env=Env, req={Sess, Salt, DerivedSalt},seq=get_param(Task)}),
     send(State#oraclient{auth=KeyConn}, ?TNS_DATA, Data);
-send_req(Type, #oraclient{env=Env,seq=Task} = State) ->
-    Data = ?ENCODER:encode_record(Type, #oraclient{env=Env,seq=get_param(Task)}),
+send_req(Type, #oraclient{env=Env,req=Request,seq=Task} = State) ->
+    Data = ?ENCODER:encode_record(Type, #oraclient{env=Env,req=Request,seq=get_param(Task)}),
     send(State, ?TNS_DATA, Data).
 
 send_req(close, #oraclient{server=0,seq=Task} = State, _Tout) ->
