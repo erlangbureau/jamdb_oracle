@@ -183,8 +183,8 @@ handle_req(Type, #oraclient{seq=Task} = State, Request, Tout) ->
     {ok, State2} = send(State, ?TNS_DATA, Data),
     handle_resp([], State2, Tout).
     
-send_req(login, #oraclient{env=Env,sdu=Sdu} = State) ->
-    Data = ?ENCODER:encode_record(login, #oraclient{env=Env,sdu=Sdu}),
+send_req(login, #oraclient{env=Env,sdu=Length} = State) ->
+    Data = ?ENCODER:encode_record(login, #oraclient{env=Env,sdu=Length}),
     send(State, ?TNS_CONNECT, Data);
 send_req(auth, #oraclient{env=Env,auth={Sess, Salt, DerivedSalt},seq=Task} = State) ->
     {Data,KeyConn} = ?ENCODER:encode_record(auth, #oraclient{env=Env, req={Sess, Salt, DerivedSalt},seq=get_param(Task)}),
@@ -346,8 +346,8 @@ sock_recv(Socket, Length, Tout) -> ssl:recv(Socket, Length, Tout).
 
 send(State, _PacketType, <<>>) ->
     {ok, State};
-send(#oraclient{socket=Socket} = State, PacketType, Data) ->
-    {Packet, Rest} = ?ENCODER:encode_packet(PacketType, Data),
+send(#oraclient{socket=Socket,sdu=Length} = State, PacketType, Data) ->
+    {Packet, Rest} = ?ENCODER:encode_packet(PacketType, Data, Length),
     case sock_send(Socket, Packet) of
         ok ->
             send(State, PacketType, Rest);
