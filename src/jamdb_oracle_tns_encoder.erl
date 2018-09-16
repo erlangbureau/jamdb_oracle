@@ -108,11 +108,12 @@ encode_record(auth, #oraclient{env=EnvOpts,req={Sess, Salt, DerivedSalt},seq=Tse
     (encode_keyval(<<"AUTH_SESSKEY">>, AuthSess, 1))/binary
     >>,
     KeyConn};
-encode_record(dty, _EnvOpts) ->
+encode_record(dty, #oraclient{req=Request}) ->
+    Charset = proplists:get_value(Request, ?CHARSET, ?UTF8_CHARSET),
     <<
     ?TTI_DTY,
-    (encode_ub2(?UTF8_CHARSET))/binary,	%cli in charset
-    (encode_ub2(?UTF8_CHARSET))/binary,	%cli out charset
+    (encode_ub2(Charset))/binary,	%cli in charset
+    (encode_ub2(Charset))/binary,	%cli out charset
     1,
     38,6,1,0,0,106,1,1,6,1,1,1,1,1,1,0,41,144,3,7,3,0,1,0,79,1,55,4,0,0,0,0,12,0,0,6,0,1,1,
     7,2,0,0,0,0,0,0,
