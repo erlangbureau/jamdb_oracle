@@ -17,13 +17,13 @@
 %    AuthPass = crypto:block_encrypt(des_cbc, binary:part(SrvSess,0,8), IVec, CliPass),
 %    {bin2hexstr(AuthPass)++[N], [], []}.
 
-o5logon(#logon{auth=Sess, user=User, password=Pass}, Bits) when Bits =:= 128 ->
+o5logon(#logon{auth=Sess, der_salt=DerivedSalt, user=User, password=Pass}, Bits) when Bits =:= 128 ->
     IVec = <<0:64>>,
     CliPass = norm(User++Pass),
     Rest1 = crypto:block_encrypt(des_cbc, hexstr2bin("0123456789ABCDEF"), IVec, CliPass),
     Rest2 = crypto:block_encrypt(des_cbc, binary:part(Rest1,byte_size(Rest1),-8), IVec, CliPass),
     KeySess = <<(binary:part(Rest2,byte_size(Rest2),-8))/binary,0:64>>,
-    o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits});
+    o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
 o5logon(#logon{auth=Sess, salt=Salt, password=Pass}, Bits) when Bits =:= 192 ->
     Data = crypto:hash(sha,<<(list_to_binary(Pass))/binary,(hexstr2bin(Salt))/binary>>),
     KeySess = <<Data/binary,0:32>>,
@@ -32,18 +32,18 @@ o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits)
     Data = pbkdf2(sha512, 4096, 64, Pass, <<(hexstr2bin(Salt))/binary,"AUTH_PBKDF2_SPEEDY_KEY">>),
     KeySess = binary:part(crypto:hash(sha512, <<Data/binary, (hexstr2bin(Salt))/binary>>),0,32),
     o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits,
-    der_salt=DerivedSalt, der_key = <<(pad(16,<<>>))/binary, Data/binary>>}).
+    der_salt=DerivedSalt, der_key = <<(crypto:strong_rand_bytes(16))/binary, Data/binary>>}).
 
 o5logon(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey, password=Pass, bits=Bits}) ->
     IVec = <<0:128>>,
     SrvSess = jose_jwa_aes:block_decrypt({aes_cbc, Bits}, KeySess, IVec, Sess),
     CliSess =
-    case binary:match(SrvSess,pad(8,<<>>)) of
-        {40,8} -> <<(crypto:strong_rand_bytes(40))/binary, (pad(8,<<>>))/binary>>;
+    case binary:match(SrvSess,pad(8, <<>>)) of
+        {40,8} -> pad(8, crypto:strong_rand_bytes(40));
         _ -> crypto:strong_rand_bytes(byte_size(SrvSess))
     end,
     AuthSess = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeySess, IVec, CliSess),
-    CatKey = cat_key(SrvSess, CliSess, Bits),
+    CatKey = cat_key(SrvSess, CliSess, DerivedSalt, Bits),
     KeyConn = conn_key(CatKey, DerivedSalt, Bits),
     AuthPass = jose_jwa_aes:block_encrypt({aes_cbc, Bits}, KeyConn, IVec, pad(Pass)),
     SpeedyKey =
@@ -71,15 +71,18 @@ conn_key(Data, undefined, Bits) when Bits =:= 128 ->
 conn_key(Data, undefined, Bits) when Bits =:= 192 ->
     <<(erlang:md5(binary:part(Data,0,16)))/binary,
       (binary:part(erlang:md5(binary:part(Data,16,8)),0,8))/binary>>;
-conn_key(Data, DerivedSalt, Bits) when Bits =:= 256 ->
-    pbkdf2(sha512, 3, 32, bin2hexstr(Data), hexstr2bin(DerivedSalt)).
+conn_key(Data, DerivedSalt, Bits) when Bits =:= 256; Bits =:= 128 ->
+    pbkdf2(sha512, 3, Bits div 8, bin2hexstr(Data), hexstr2bin(DerivedSalt)).
 
-cat_key(X,Y,Bits) when Bits =:= 128 ->
+cat_key(X,Y,undefined,Bits) when Bits =:= 128 ->
     cat_key(binary:part(X,byte_size(X),-16),binary:part(Y,byte_size(Y),-16),[]);
-cat_key(X,Y,Bits) when Bits =:= 192 ->
+cat_key(X,Y,_DerivedSalt,Bits) when Bits =:= 128 ->
+    <<(binary:part(Y,0,16))/binary,(binary:part(X,0,16))/binary>>;
+cat_key(X,Y,undefined,Bits) when Bits =:= 192 ->
     cat_key(binary:part(X,16,24),binary:part(Y,16,24),[]);
-cat_key(X,Y,Bits) when Bits =:= 256 ->
-    <<Y/binary,X/binary>>;
+cat_key(X,Y,_DerivedSalt,Bits) when Bits =:= 256 ->
+    <<Y/binary,X/binary>>.
+
 cat_key(<<>>,<<>>,S) ->
     list_to_binary(S);
 cat_key(<<H, X/bits>>,<<L, Y/bits>>,S) ->
