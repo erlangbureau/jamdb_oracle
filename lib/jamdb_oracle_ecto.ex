@@ -27,9 +27,9 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
       `{"begin open :1 for select * from tabl where dat>:2; end;"`, `[:cursor, {2016, 8, 1}]}`
    * Using returning clause:
 
-      `{"insert into tabl values (tablid.nextval, sysdate) return id into :1"`, `[{:out, 0}]}`
+      `{"insert into tabl values (tablid.nextval, sysdate) return id into :1"`, `[{:out, :number}]}`
 
-      `Repo.insert_all(Post,[[id: 100]], returning: [:created_at, out: {2016, 8, 1}])`
+      `Repo.insert_all(Post,[[id: 100]], returning: [:created_at, out: :date])`
    * Update batching:
 
       `{:batch, "insert into tabl values (:1, :2, :3)"`, `[[1, 2, 3],[4, 5, 6],[7, 8, 9]]}`
