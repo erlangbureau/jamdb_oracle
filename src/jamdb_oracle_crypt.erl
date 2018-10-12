@@ -75,7 +75,7 @@ conn_key(Data, DerivedSalt, Bits) when Bits =:= 256; Bits =:= 128 ->
     pbkdf2(sha512, 3, Bits div 8, bin2hexstr(Data), hexstr2bin(DerivedSalt)).
 
 cat_key(X,Y,undefined,Bits) when Bits =:= 128 ->
-    cat_key(binary:part(X,byte_size(X),-16),binary:part(Y,byte_size(Y),-16),[]);
+    cat_key(binary:part(X,16,16),binary:part(Y,16,16),[]);
 cat_key(X,Y,_DerivedSalt,Bits) when Bits =:= 128 ->
     <<(binary:part(Y,0,16))/binary,(binary:part(X,0,16))/binary>>;
 cat_key(X,Y,undefined,Bits) when Bits =:= 192 ->
