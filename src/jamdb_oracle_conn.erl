@@ -371,6 +371,8 @@ recv(Socket, Length, Acc, Data) ->
 
 recv(Socket, Length, Tout, Acc, Data) ->
     case ?DECODER:decode_packet(Acc, Length) of
+        {ok, ?TNS_MARKER, _PacketBody, _Rest} ->
+            {ok, ?TNS_MARKER, <<>>};
         {ok, Type, PacketBody, <<>>} ->
             {ok, Type, <<Data/bits, PacketBody/bits>>};
         {ok, _Type, PacketBody, Rest} ->
