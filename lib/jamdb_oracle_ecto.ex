@@ -77,6 +77,20 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:role` - Mode that is used in an internal logon
     * `:prelim` - Mode that is permitted when the database is down
 
+  ### Output parameters
+  
+  Using syntax for keyword lists: `[{:out, :cursor}]`, `[out: :cursor]`
+
+  Oracle types                     | Literal syntax in params
+  :------------------------------- | :-----------------------
+  `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | `:number`, `:integer`, `:float`, `:decimal`
+  `CHAR`, `VARCHAR2`               | `:varchar`, `:char`, `:string`
+  `NCHAR`, `NVARCHAR2`             | `:nvarchar`, `:nchar`, `:binary`
+  `DATE`                           | `:date`
+  `TIMESTAMP`                      | `:timestamp`
+  `TIMESTAMP WITH TIME ZONE`       | `:timestamptz`
+  `SYS_REFCURSOR`                  | `:cursor`
+  
   ### Primitive types
 
   The primitive types are:
