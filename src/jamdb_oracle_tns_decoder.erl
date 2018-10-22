@@ -162,8 +162,11 @@ decode_token(iov, Data, {Ver, RowFormat, Type}) when is_atom(Type) ->
     case binary:matches(Mode,[<<16>>,<<48>>]) of
         [] -> decode_token(Rest3, {0, [], []});                      %%proc_result
         _ ->
-	    Bind = lists:zip(binary_to_list(Mode), RowFormat),
-	    decode_token(Rest3, {Ver, [decode_param(B) || B <- Bind], Type})
+            try lists:zip(binary_to_list(Mode), RowFormat) of
+                Bind -> decode_token(Rest3, {Ver, [decode_param(B) || B <- Bind], Type})
+            catch
+                error:_ -> decode_token(Rest3, {Ver, [#format{param=out,data_type=?TNS_TYPE_REFCURSOR}], Type})
+            end
     end;
 decode_token(rxd, Data, {Ver, _RowFormat, fetch}) ->
     {Rest2, CursorRowFormat} = decode_token(dcb, decode_next(ub1,Data), Ver),
