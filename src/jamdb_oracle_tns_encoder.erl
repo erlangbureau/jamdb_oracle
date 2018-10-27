@@ -237,13 +237,16 @@ encode_record(exec, #oraclient{type=Type,auth=Auto,fetch=Fetch,server=Ver,req={C
         {0, DefLen, 0} -> encode_token(oac, Def, <<>>)
     end)/binary
     >>;
-encode_record(close, #oraclient{req={Cursors, Tseq2},seq=Tseq}) ->
+encode_record(pig, #oraclient{req={Request,Cursors},seq=Tseq}) ->
     <<
-    ?TTI_CLOSE,
-    ?TTI_OCCA, Tseq2,
+    ?TTI_PFN,
+    Request, Tseq,
     1,
     (encode_sb4(length(Cursors)))/binary,  %cursors count
-    (encode_array(Cursors))/binary,        %cursors
+    (encode_array(Cursors))/binary         %cursors
+    >>;
+encode_record(close, #oraclient{seq=Tseq}) ->
+    <<
     ?TTI_FUN,
     ?TTI_LOGOFF, Tseq
     >>.
