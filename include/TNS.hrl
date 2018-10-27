@@ -68,7 +68,6 @@
 -define(TTI_COMOFF, 13).
 -define(TTI_COMMIT, 14).
 -define(TTI_ROLLBACK, 15).
--define(TTI_CLOSE, 17).
 -define(TTI_CANCEL, 20).
 -define(TTI_DSCRARR, 43).
 -define(TTI_STRT, 48).
