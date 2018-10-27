@@ -200,7 +200,11 @@ send_req(close, #oraclient{auto=0} = State, Tout) ->
     _ = handle_req(tran, State, ?TTI_ROLLBACK, Tout),
     send_req(close, State#oraclient{auto=1}, Tout);
 send_req(close, #oraclient{cursors=Cursors,seq=Task} = State, Tout) ->
-    _ = handle_req(close, State, {[get_result(DefCol) || DefCol <- get_result(Cursors)], get_param(Task)}, Tout),
+    Pig = ?ENCODER:encode_record(pig, #oraclient{req={?TTI_OCCA,
+	[get_result(DefCol) || DefCol <- get_result(Cursors)]},seq=get_param(Task)}),
+    Data = ?ENCODER:encode_record(close, #oraclient{seq=get_param(Task)}),
+    {ok, State2} = send(State, ?TNS_DATA, <<Pig/binary, Data/binary>>),
+    _ = handle_resp([], State2, Tout),
     exit(Cursors, ok),
     send_req(close, State#oraclient{server=0}, Tout);
 send_req(fetch, #oraclient{auto=Auto,server=Ver,fetch=Fetch,seq=Task} = State, {Cursor, RowFormat}) ->
@@ -215,10 +219,22 @@ send_req(exec, State, {Query, Bind, Batch}) when is_map(Bind) ->
         string:tokens(Query," \t;,)")),
     send_req(exec, State, {Query, get_param(Data, Bind, []), Batch});
 send_req(exec, #oraclient{auto=Auto,fetch=Fetch,server=Ver,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
-    {Type, Fetch2, DefCol} = get_param(type, {Query, [B || {out, B} <- Bind], Fetch, Cursors}),
-    Data = ?ENCODER:encode_record(exec, #oraclient{req={get_result(DefCol), Query,
+	{Type, Fetch2} =
+	get_param(type, {lists:nth(1, string:tokens(string:to_upper(Query)," \t")), [B || {out, B} <- Bind], Fetch}),
+	DefCol = get_param(defcols, {Query, Cursors}),
+	{LCursor, Cursor} = get_param(defcols, DefCol),
+	{Query2, Pig, Pig2} =
+    case Cursor of
+        0 when LCursor > 0 -> {[],<<>>,<<>>};
+        0 -> {Query,<<>>,<<>>};
+        _ ->
+			{[],?ENCODER:encode_record(pig, #oraclient{req={?TTI_CANA,[Cursor]},seq=get_param(Task)}),
+			    ?ENCODER:encode_record(pig, #oraclient{req={?TTI_OCCA,[Cursor]},seq=get_param(Task)})}
+    end,
+    Data = ?ENCODER:encode_record(exec, #oraclient{req={LCursor, Query2,
 	[get_param(data, B) || B <- Bind], Batch, []}, type=Type, auth=Auto, fetch=Fetch2, server=Ver, seq=get_param(Task)}),
-    send(State#oraclient{type=Type,defcols=DefCol,params=[get_param(format, B) || B <- Bind]}, ?TNS_DATA, Data).
+	send(State#oraclient{type=Type,defcols=DefCol,params=[get_param(format, B) || B <- Bind]},
+    ?TNS_DATA, <<Pig/binary, Pig2/binary, Data/binary>>).
 	
 handle_resp(Acc, #oraclient{socket=Socket, sdu=Length} = State, Tout) ->
     case recv(Socket, Length, Tout) of
@@ -232,12 +248,12 @@ handle_resp(Acc, #oraclient{socket=Socket, sdu=Length} = State, Tout) ->
 
 handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
     case ?DECODER:decode_token(Data, Acc) of
-	{0, RowNumber, Cursor, {Cursor2, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->          %defcols
+	{0, RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->          %defcols
 	    {ok, State2} = send_req(fetch, State, {Cursor, case RowNumber of 0 -> RowFormat; _ -> [] end}),
 	    #oraclient{defcols=DefCol} = State2,
-       	    handle_resp({Cursor, RowFormat, []},
-	    State2#oraclient{defcols=get_result(DefCol, {Cursor2, RowFormat}, Cursors)}, Tout);
-	{RetCode, RowNumber, Cursor, {Cursor2, RowFormat}, Rows} ->
+        handle_resp({Cursor, RowFormat, []},
+	    State2#oraclient{defcols=get_result(DefCol, {LCursor, Cursor, RowFormat}, Cursors)}, Tout);
+	{RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
 	    case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
 		more when Type =:= fetch ->
 		    {ok, [{fetched_rows, Cursor, RowFormat, Rows}], State};
@@ -246,7 +262,7 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
 		    handle_resp({Cursor, RowFormat, Rows}, State2, Tout);
 		Result ->
 		    #oraclient{defcols=DefCol} = State,
-		    _ = get_result(DefCol, {Cursor2, RowFormat}, Cursors),
+		    _ = get_result(DefCol, {LCursor, Cursor, RowFormat}, Cursors),
 		    erlang:append_element(Result, State)
 	    end;
 	{ok, Result} -> %tran
@@ -277,15 +293,15 @@ get_result(_Type, RetCode, _RowNumber, RowFormat, Rows) ->
     end.
 
 get_result(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply -> Reply end;
-get_result({_Sum, {Cursor, _RowFormat}}) -> Cursor;
+get_result({_Sum, {LCursor, _Cursor, _RowFormat}}) -> LCursor;
 get_result(#format{column_name=Column}) -> Column.
 
-get_result({Sum, {0, _RowFormat}}, {Cursor, RowFormat}, Cursors) when is_pid(Cursors) ->
+get_result({Sum, {0, _Cursor, _RowFormat}}, Result, Cursors) when is_pid(Cursors) ->
     Acc = get_result(Cursors),
-    DefCol = {Sum, {Cursor, RowFormat}},
+    DefCol = {Sum, Result},
     Cursors ! {set, [DefCol|Acc]},
     DefCol;
-get_result(DefCol, {_Cursor, _RowFormat}, _Cursors) -> DefCol.
+get_result(DefCol, _Result, _Cursors) -> DefCol.
 
 get_param(Task) when is_pid(Task) ->
     Task ! {get, self()},
@@ -295,21 +311,20 @@ get_param(Task) when is_pid(Task) ->
 get_param([], _M, Acc) -> Acc;
 get_param([H|L], M, Acc) -> get_param(L, M, Acc++[maps:get(list_to_atom(H), M)]).
 
-get_param(defcols, {Query, Cursors}) ->
+get_param(defcols, {Query, Cursors}) when is_pid(Cursors) ->
     Acc = get_result(Cursors),
     Sum = erlang:crc32(unicode:characters_to_binary(Query)),
-    {Cursor, RowFormat} = proplists:get_value(Sum, Acc, {0,[]}),
-    {Sum, {Cursor, RowFormat}};
-get_param(defcols, {{_Sum, {0, _RowFormat}}, Ver, RowFormat, Type}) ->
+    {Sum, proplists:get_value(Sum, Acc, {0,0,[]})};
+get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) when LCursor =:= Cursor -> {LCursor, 0};
+get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) -> {LCursor, Cursor};
+get_param(defcols, {{_Sum, {LCursor, Cursor, _RowFormat}}, Ver, RowFormat, Type})
+    when LCursor =:= 0; LCursor =/= Cursor ->
     {Ver, RowFormat, Type};
-get_param(defcols, {{_Sum, {_Cursor, RowFormat}} , Ver, _RowFormat, Type}) when Type =/= select ->
+get_param(defcols, {{_Sum, {_LCursor, _Cursor, RowFormat}}, Ver, _RowFormat, Type}) when Type =/= select ->
     {Ver, RowFormat, Type};
-get_param(defcols, {{_Sum, {Cursor, RowFormat}} , _Ver, _RowFormat, Type}) ->
-    {Cursor, RowFormat, Type};
-get_param(type, {Query, Bind, Fetch, Cursors}) ->
-    Value = lists:nth(1, string:tokens(string:to_upper(Query)," \t")),
-    DefCol = get_param(defcols, {Query, Cursors}),
-    erlang:append_element(get_param(type, {Value, Bind, Fetch}), DefCol);
+get_param(defcols, {{_Sum, {LCursor, _Cursor, RowFormat}}, _Ver, _RowFormat, Type}) ->
+    {LCursor, RowFormat, Type};
+get_param(type, {"ALTER", _Bind, _Fetch}) -> {block, 0};
 get_param(type, {"BEGIN", _Bind, _Fetch}) -> {block, 0};
 get_param(type, {"SELECT", [], Fetch}) -> {select, Fetch};
 get_param(type, {_Value, [], _Fetch}) -> {change, 0};
@@ -391,4 +406,3 @@ recv(Socket, Length, Tout, Acc, Data) ->
                     {error, socket, Reason}
             end
     end.
-
