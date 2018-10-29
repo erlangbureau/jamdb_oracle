@@ -255,8 +255,8 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
     case ?DECODER:decode_token(Data, Acc) of
 	{0, RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->          %defcols
 	    {ok, State2} = send_req(fetch, State, {Cursor, if RowNumber =:= 0 -> RowFormat; true -> [] end}),
-	    #oraclient{defcols=DefCol} = State2,
-	    {_, Result} = get_result(DefCol, {LCursor, Cursor, RowFormat}, Cursors),
+	    #oraclient{auto=Auto, defcols=DefCol} = State2,
+	    {_, Result} = get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
         handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=Result}, Tout);
 	{RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
 	    case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
@@ -266,8 +266,8 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
 		    {ok, State2} = send_req(fetch, State, Cursor),
 		    handle_resp({Cursor, RowFormat, Rows}, State2, Tout);
 		Result ->
-		    #oraclient{defcols=DefCol} = State,
-		    case get_result(DefCol, {LCursor, Cursor, RowFormat}, Cursors) of
+		    #oraclient{auto=Auto, defcols=DefCol} = State,
+		    case get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors) of
 			{reset, _} -> send_req(reset, State, Tout);
 			_ -> more
 		    end,
@@ -303,14 +303,14 @@ get_result(_Type, RetCode, _RowNumber, RowFormat, Rows) ->
 get_result(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply -> Reply end;
 get_result(#format{column_name=Column}) -> Column.
 
-get_result({Sum, {0, _Cursor, _RowFormat}}, Result, Cursors) when is_pid(Cursors) ->
+get_result(Auto, {Sum, {0, _Cursor, _RowFormat}}, Result, Cursors) when is_pid(Cursors) ->
     Acc = get_result(Cursors),
     DefCol = {Sum, Result},
-    case length(Acc) of
-	127 -> {reset, DefCol};
+    case length(Acc) > 127 of
+	true when Auto =:= 1  -> {reset, DefCol};
 	_ -> Cursors ! {set, [DefCol|Acc]}, {more, DefCol}
     end;
-get_result(DefCol, _Result, _Cursors) -> {more, DefCol}.
+get_result(_Auto, DefCol, _Result, _Cursors) -> {more, DefCol}.
 
 get_param(Task) when is_pid(Task) ->
     Task ! {get, self()},
