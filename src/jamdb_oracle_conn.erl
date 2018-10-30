@@ -253,11 +253,16 @@ handle_resp(Acc, #oraclient{socket=Socket, sdu=Length} = State, Tout) ->
 
 handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
     case ?DECODER:decode_token(Data, Acc) of
-	{0, RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->          %defcols
-	    {ok, State2} = send_req(fetch, State, {Cursor, if RowNumber =:= 0 -> RowFormat; true -> [] end}),
+	{0, RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->
+	    {Type2, Request} =
+	    case LCursor =:= Cursor of
+	       true -> {Type, {Cursor, if RowNumber =:= 0 -> RowFormat; true -> [] end}};
+	       _ -> {cursor, Cursor}
+	    end,
+	    {ok, State2} = send_req(fetch, State, Request),
 	    #oraclient{auto=Auto, defcols=DefCol} = State2,
 	    {_, Result} = get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
-        handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=Result}, Tout);
+            handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=Result, type=Type2}, Tout);
 	{RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
 	    case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
 		more when Type =:= fetch ->
@@ -281,6 +286,8 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
 	    handle_error(remote, Reason, State)
     end.
 
+get_result(cursor, 0, _RowNumber, _RowFormat, _Rows) ->
+    more;
 get_result(change, 0, RowNumber, _RowFormat, []) ->
     {ok, [{affected_rows, RowNumber}]};
 get_result(return, 0, _RowNumber, _RowFormat, Rows) ->
@@ -307,7 +314,7 @@ get_result(Auto, {Sum, {0, _Cursor, _RowFormat}}, Result, Cursors) when is_pid(C
     Acc = get_result(Cursors),
     DefCol = {Sum, Result},
     case length(Acc) > 127 of
-	true when Auto =:= 1  -> {reset, DefCol};
+	true when Auto =:= 1 -> {reset, DefCol};
 	_ -> Cursors ! {set, [DefCol|Acc]}, {more, DefCol}
     end;
 get_result(_Auto, DefCol, _Result, _Cursors) -> {more, DefCol}.
