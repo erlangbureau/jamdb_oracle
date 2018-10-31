@@ -25,7 +25,8 @@ groups() ->
         {basic_operations, [sequence], [
             select,
             select_with_bind,
-            select_with_named_bind
+            select_with_named_bind,
+            select_multi
         ]},
         {number_datatypes, [sequence], [
             t_number,
@@ -135,7 +136,14 @@ select_with_named_bind(Config) ->
                 #{fmt => "'YYYY-MM-DD HH24:MI:SS'", one => 1, str => "'2016-08-01 01:02:03'" }},
     Result = [{result_set, [<<"TO_DATE">>], [], [ [{{2016,8,1},{1,2,3}}] ]}],
     {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
-    
+
+select_multi(Config) ->
+    ConnRef = ?config(conn_ref, Config),
+    LongList = [ ["abcd"] || _N <- lists:seq(1,99) ],
+    Query = {"select 'abcd' C_CHAR from dual connect by level <= :1 ", [99]},
+    Result = [{result_set, [<<"C_CHAR">>], [], LongList}],
+    {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
+
 t_number(Config) ->
     ConnRef = ?config(conn_ref, Config),
     Table = t_number,
@@ -341,9 +349,10 @@ with_output_params(Config) ->
 
 with_input_and_output_params(Config) ->
     ConnRef = ?config(conn_ref, Config),
+    LongList = [ ["abcd"] || _N <- lists:seq(1,99) ],
     Query = {"begin with_input_and_output_params(:i1, :o2); end;",
-             #{o2 => {out, cursor}, i1 => {in, "select 1 one, 2 two, 3 three from dual"}}},
-    Result = [{result_set, [<<"ONE">>, <<"TWO">>, <<"THREE">>], [], [ [{1.0},{2.0},{3.0}] ]}],
+             #{o2 => {out, cursor}, i1 => {in, "select 'abcd' C_CHAR from dual connect by level <= 99"}}},
+    Result = [{result_set, [<<"C_CHAR">>], [], LongList}],
     {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query).
 
 with_multi_output_params(Config) ->
@@ -504,4 +513,3 @@ encode_data(Data) when is_float(Data) ->
     encode_data(List);
 encode_data({_, List}) when is_list(List) ->
     encode_data(List).
-    
