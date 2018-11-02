@@ -175,7 +175,51 @@ defmodule Jamdb.Oracle do
   defp error!(msg) do
     DBConnection.ConnectionError.exception("#{inspect msg}")
   end
-  
+
+  ## Functions
+
+  @typedoc false
+  @type conn :: DBConnection.conn
+
+  @doc """
+  Connect to the database.
+  """
+  @spec start_link(Keyword.t) :: {:ok, pid}
+  def start_link(opts) do
+    DBConnection.start_link(Jamdb.Oracle, opts)
+  end
+
+  @doc """
+  Execute a query with a database connection and return the result.
+  """
+  @spec query!(conn, String.t, [term] | map, Keyword.t) ::
+    {:ok, term} | {:error, term}
+  def query!(conn, statement, params \\ [], opts \\ []) do
+    DBConnection.prepare_execute!(
+      conn, %Jamdb.Oracle.Query{statement: statement}, params, opts)
+  end
+
+  @doc """
+  Acquire a lock on a connection and run a series of requests inside a
+  transaction.
+
+  To use the locked connection call the request with the connection
+  reference passed as the single argument to the `fun`.
+  """
+  @spec transaction(conn, ((DBConnection.t) -> result), Keyword.t) ::
+    {:ok, result} | {:error, any} when result: var
+  def transaction(conn, fun, opts \\ []) do
+    DBConnection.transaction(conn, fun, opts)
+  end
+
+  @doc """
+  Rollback a transaction, does not return.
+
+  Aborts the current transaction fun.
+  """
+  @spec rollback(DBConnection.t, any) :: no_return()
+  defdelegate rollback(conn, any), to: DBConnection
+
 end
 
 defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
