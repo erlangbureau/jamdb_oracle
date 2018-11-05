@@ -220,6 +220,16 @@ defmodule Jamdb.Oracle do
   @spec rollback(DBConnection.t, any) :: no_return()
   defdelegate rollback(conn, any), to: DBConnection
 
+  @doc """
+  Returns a supervisor child specification for a DBConnection pool.
+  """
+  @spec child_spec(Keyword.t) :: Supervisor.Spec.spec
+  def child_spec(opts) do
+	  pool_opts = if( Keyword.has_key?(opts, :pool_size) == true,
+      do: [pool_size: opts[:pool_size]], else: [] )
+	  DBConnection.Poolboy.child_spec(Jamdb.Oracle, opts, pool_opts)
+  end
+
 end
 
 defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
