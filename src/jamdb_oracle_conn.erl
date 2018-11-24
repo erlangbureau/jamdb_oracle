@@ -135,8 +135,7 @@ handle_login(#oraclient{socket=Socket, env=Env, sdu=Length} = State, Tout) ->
             {ok, State2} = send_req(pro, State#oraclient{seq=Task,sdu=Sdu}),
             handle_login(State2, Tout);
         {ok, ?TNS_MARKER, _BinaryData} ->
-            _ = handle_req(marker, State, [], Tout),
-            disconnect(State, 0);
+            handle_req(marker, State, [], Tout);
         {ok, ?TNS_REFUSE, BinaryData} ->
             _ = handle_error(remote, BinaryData, State),
             disconnect(State, 0);
@@ -266,7 +265,7 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
 	{RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
 	    case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
 		more when Type =:= fetch ->
-		    {ok, [{fetched_rows, Cursor, RowFormat, Rows}], State};
+		    {ok, [{fetched_rows, Cursor, RowFormat, tl(Rows)}], State};
 		more ->
 		    {ok, State2} = send_req(fetch, State, Cursor),
 		    handle_resp({Cursor, RowFormat, Rows}, State2, Tout);
@@ -296,16 +295,17 @@ get_result(block, 0, _RowNumber, _RowFormat, Rows) ->
     {ok, [{proc_result, 0, [Rows]}]};
 get_result(_Type, 0, _RowNumber, [], Rows) ->
     {ok, [{proc_result, 0, Rows}]};
-get_result(_Type, RetCode, _RowNumber, Reason, []) when RetCode =/= 1403 ->
+get_result(fetch, 1403, _RowNumber, RowFormat, Rows) ->
+    Column = [get_result(Fmt) || Fmt <- RowFormat],
+    {ok, [{result_set, Column, [], tl(Rows)}]};
+get_result(_Type, 1403, _RowNumber, RowFormat, Rows) ->
+    Column = [get_result(Fmt) || Fmt <- RowFormat],
+    {ok, [{result_set, Column, [], Rows}]};
+get_result(_Type, RetCode, _RowNumber, Reason, []) ->
 %    io:format("~s~n", [Reason]),
     {ok, [{proc_result, RetCode, Reason}]};
-get_result(_Type, RetCode, _RowNumber, RowFormat, Rows) ->
-    case RetCode of
-	1403 -> 
-	    Column = [get_result(Fmt) || Fmt <- RowFormat],
-	    {ok, [{result_set, Column, [], Rows}]};
-	_ -> more
-    end.
+get_result(_Type, _RetCode, _RowNumber, _RowFormat, _Rows) ->
+    more.
 
 get_result(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply -> Reply end;
 get_result(#format{column_name=Column}) -> Column.
