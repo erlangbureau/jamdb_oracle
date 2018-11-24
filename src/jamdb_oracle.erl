@@ -32,10 +32,14 @@ sql_query(Pid, Query) ->
 
 %% gen_server callbacks
 init(Opts) ->
-    {ok, State} = jamdb_oracle_conn:connect(Opts),
-    case State of
-        Opts -> {stop, Opts};
-        _ -> {ok, State}
+    case jamdb_oracle_conn:connect(Opts) of
+        {ok, State} ->
+            case State of
+                Opts -> {stop, Opts};
+                _ -> {ok, State}
+            end;
+        {ok, Result, _State} ->
+            {stop, Result}
     end.
 
 %% Error types: socket, remote, local
