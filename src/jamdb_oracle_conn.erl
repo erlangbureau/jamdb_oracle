@@ -265,7 +265,7 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
 	{RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
 	    case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
 		more when Type =:= fetch ->
-		    {ok, [{fetched_rows, Cursor, RowFormat, tl(Rows)}], State};
+		    {ok, [{fetched_rows, Cursor, RowFormat, Rows}], State};
 		more ->
 		    {ok, State2} = send_req(fetch, State, Cursor),
 		    handle_resp({Cursor, RowFormat, Rows}, State2, Tout);
@@ -295,9 +295,6 @@ get_result(block, 0, _RowNumber, _RowFormat, Rows) ->
     {ok, [{proc_result, 0, [Rows]}]};
 get_result(_Type, 0, _RowNumber, [], Rows) ->
     {ok, [{proc_result, 0, Rows}]};
-get_result(fetch, 1403, _RowNumber, RowFormat, Rows) ->
-    Column = [get_result(Fmt) || Fmt <- RowFormat],
-    {ok, [{result_set, Column, [], tl(Rows)}]};
 get_result(_Type, 1403, _RowNumber, RowFormat, Rows) ->
     Column = [get_result(Fmt) || Fmt <- RowFormat],
     {ok, [{result_set, Column, [], Rows}]};
