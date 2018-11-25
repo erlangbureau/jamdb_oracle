@@ -1,3 +1,8 @@
+```diff
++ version 0.3.x from master branch is compatible with ecto 3.0
++ version 0.2.x from ecto-2.1 branch is compatible with ecto 2.1 and 2.2
+```
+
 JamDB Oracle
 ============
 Erlang driver and Ecto adapter for Oracle Database
