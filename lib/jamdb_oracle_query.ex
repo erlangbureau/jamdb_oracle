@@ -534,6 +534,6 @@ end
 
 defimpl String.Chars, for: Jamdb.Oracle.Query do
   def to_string(%Jamdb.Oracle.Query{statement: statement}) do
-    statement
+    IO.iodata_to_binary(statement)
   end
 end
