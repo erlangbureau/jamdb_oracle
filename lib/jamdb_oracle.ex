@@ -28,17 +28,13 @@ defmodule Jamdb.Oracle do
   @doc """
   Runs the SQL statement.
 
+  See `DBConnection` for functions examples.
+
   In case of success, it must return an `:ok` tuple containing
   a map with at least two keys:
 
     * `:num_rows` - the number of rows affected
-    * `:rows` - the result set as a list
-  
-  ## Examples
-
-      iex> Jamdb.Oracle.query(conn, 'select 1+:1, sysdate, rowid from dual where 1=:1 ',[1])
-      {:ok, %{num_rows: 1, rows: [[2, ~N[2016-08-01 13:14:15], "AAAACOAABAAAAWJAAA"]]}}
-
+    * `:rows` - the result set as a list  
   """
   @spec query(conn :: any(), sql :: any(), params :: any()) ::
     {:ok, any()} | {:error | :disconnect, any()}
@@ -76,7 +72,7 @@ defmodule Jamdb.Oracle do
       do: [socket_options: opts[:socket_options]], else: [] )
     case :jamdb_oracle.start_link(sock_opts ++ params ++ env) do
       {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle}}
-      {:error, [{:proc_result, code, msg}]} -> {:error, error!(code, msg)}
+      {:error, [{:proc_result, _, msg}]} -> {:error, error!(msg)}
       {:error, err} -> {:error, error!(err)}
     end
   end
@@ -92,14 +88,14 @@ defmodule Jamdb.Oracle do
     returning = Keyword.get(opts, :returning, []) |> Enum.filter(& is_tuple(&1))
 	case query(s, statement |> to_charlist, Enum.concat(params, returning)) do
       {:ok, result} -> {:ok, query, result, s}
-      {:error, [{:proc_result, code, msg}]} -> {:error, error!(code, msg), s}
+      {:error, [{:proc_result, _, msg}]} -> {:error, error!(msg), s}
 	  {:error, err} -> {:error, error!(err), s}
 	  {:disconnect, err} -> {:disconnect, error!(err), s}
     end
   end
 
   @impl true
-  def handle_prepare(query, opts, s) do
+  def handle_prepare(query, _opts, s) do
     {:ok, query, s}
   end
 
@@ -148,18 +144,18 @@ defmodule Jamdb.Oracle do
   defp handle_transaction(statement, opts, s) do
 	case query(s, statement |> to_charlist) do
       {:ok, result} -> {:ok, result, s}
-	  {:error, err} -> {:error, error!(nil, :error), s}
+	  {:error, err} -> {:error, error!(err), s}
 	  {:disconnect, err} -> {:disconnect, error!(err), s}
     end
   end
 
   @impl true
-  def handle_declare(query, params, opts, s) do
+  def handle_declare(query, params, _opts, s) do
     {:ok, query, %{params: params}, s}
   end
 
   @impl true
-  def handle_fetch(query, %{params: params} = cursor, opts, %{cursors: nil} = s) do
+  def handle_fetch(query, %{params: params} = cursor, _opts, %{cursors: nil} = s) do
     %Jamdb.Oracle.Query{statement: statement} = query
 	case query(s, {:fetch, statement |> to_charlist, params}) do
       {:cont, {_, cursor, row_format, rows}} ->
@@ -171,7 +167,7 @@ defmodule Jamdb.Oracle do
 	  {:disconnect, err} -> {:disconnect, error!(err), s}
     end
   end
-  def handle_fetch(query, cursor, opts, %{cursors: cursors} = s) do
+  def handle_fetch(query, cursor, _opts, %{cursors: cursors} = s) do
     %{cursor: cursor, row_format: row_format, last_row: last_row} = cursors
     %Jamdb.Oracle.Query{statement: statement} = query
 	case query(s, {:fetch, cursor, row_format, last_row}) do
@@ -188,17 +184,17 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def handle_deallocate(query, cursor, opts, s) do
+  def handle_deallocate(_query, _cursor, _opts, s) do
     {:ok, nil, %{s | cursors: nil}}
   end
 
   @impl true
-  def handle_close(query, opts, s) do
+  def handle_close(_query, _opts, s) do
     {:ok, nil, s}
   end
 
   @impl true
-  def handle_status(opts, %{mode: mode} = s) do
+  def handle_status(_opts, %{mode: mode} = s) do
     {mode, s}
   end
 
@@ -227,13 +223,6 @@ defmodule Jamdb.Oracle do
   end
 
   defp error!(msg) do
-    DBConnection.ConnectionError.exception("#{inspect msg}")
-  end
-
-  defp error!(nil, status) do
-    DBConnection.TransactionError.exception(status)
-  end
-  defp error!(code, msg) do
     DBConnection.ConnectionError.exception("#{inspect msg}")
   end
 
