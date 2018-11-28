@@ -1,10 +1,16 @@
 defmodule Jamdb.Oracle.Query do
-  @moduledoc false
+  @moduledoc """
+  Adapter module for Oracle. `DBConnection.Query` protocol implementation.
+
+  See `DBConnection.prepare_execute/4`.
+
+  """
 
   defstruct [:statement, :name]  
 
   alias Ecto.Query.{BooleanExpr, JoinExpr, QueryExpr}
 
+  @doc false
   def all(query) do
     sources = create_names(query)
 
@@ -23,6 +29,7 @@ defmodule Jamdb.Oracle.Query do
     [select, from, join, where, group_by, having, combinations, order_by, offset, limit | lock]
   end
 
+  @doc false
   def update_all(%{from: %{source: source}} = query, prefix \\ nil) do
     sources = create_names(query)
     {from, name} = get_source(query, sources, 0, source)
@@ -34,6 +41,7 @@ defmodule Jamdb.Oracle.Query do
     [prefix, fields, where | returning(query, sources)]
   end
 
+  @doc false
   def delete_all(%{from: from} = query) do
     sources = create_names(query)
     {from, name} = get_source(query, sources, 0, from)
@@ -43,6 +51,7 @@ defmodule Jamdb.Oracle.Query do
     ["DELETE FROM ", from, ?\s, name, where | returning(query, sources)]
   end
 
+  @doc false
   def insert(prefix, table, header, rows, on_conflict, returning) do
     values =
       if header == [] do
@@ -71,6 +80,7 @@ defmodule Jamdb.Oracle.Query do
     end)
   end
 
+  @doc false
   def update(prefix, table, fields, filters, returning) do
     {fields, count} = intersperse_reduce(fields, ", ", 1, fn field, acc ->
       {[quote_name(field), " = :" | Integer.to_string(acc)], acc + 1}
@@ -88,6 +98,7 @@ defmodule Jamdb.Oracle.Query do
      fields, " WHERE ", filters | returning(returning)]
   end
 
+  @doc false
   def delete(prefix, table, filters, returning) do
     {filters, _} = intersperse_reduce(filters, " AND ", 1, fn
       {field, nil}, acc ->
