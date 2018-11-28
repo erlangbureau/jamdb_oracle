@@ -13,7 +13,7 @@ defmodule Jamdb.Oracle do
   @doc """
   Starts and links to a database connection process.
 
-  See `Ecto.Adapters.Jamdb.Oracle` for connection options.
+  See [`Ecto.Adapters.Jamdb.Oracle`](Ecto.Adapters.Jamdb.Oracle.html#module-connection-options).
 
   By default the `DBConnection` starts a pool with a single connection.
   The size of the pool can be increased with `:pool_size`. The ping interval 
@@ -28,7 +28,7 @@ defmodule Jamdb.Oracle do
   @doc """
   Runs the SQL statement.
 
-  See `DBConnection` for functions examples.
+  See `DBConnection.prepare_execute/4`.
 
   In case of success, it must return an `:ok` tuple containing
   a map with at least two keys:
