@@ -1,6 +1,10 @@
 -module(jamdb_oracle).
 -behaviour(gen_server).
 
+-ifdef(OTP_RELEASE).
+-compile({nowarn_deprecated_function, [{erlang, get_stacktrace, 0}]}).
+-endif.
+
 %% API
 -export([start_link/1, start/1]).
 -export([stop/1]).
