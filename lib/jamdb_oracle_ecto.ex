@@ -110,7 +110,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   """
 
-  use Ecto.Adapters.SQL, Jamdb.Oracle
+  use Ecto.Adapters.SQL, driver: Jamdb.Oracle, migration_lock: nil
 
   @behaviour Ecto.Adapter.Storage
   @behaviour Ecto.Adapter.Structure
