@@ -52,7 +52,7 @@ defmodule Jamdb.Oracle.Query do
   end
 
   @doc false
-  def insert(prefix, table, header, rows, on_conflict, returning) do
+  def insert(prefix, table, header, rows, _on_conflict, returning) do
     values =
       if header == [] do
         [" VALUES " | intersperse_map(rows, ?,, fn _ -> "(DEFAULT)" end)]
