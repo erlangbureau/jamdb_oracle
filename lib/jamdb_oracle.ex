@@ -141,7 +141,7 @@ defmodule Jamdb.Oracle do
     end
   end
 
-  defp handle_transaction(statement, opts, s) do
+  defp handle_transaction(statement, _opts, s) do
 	case query(s, statement |> to_charlist) do
       {:ok, result} -> {:ok, result, s}
 	  {:error, err} -> {:error, error!(err), s}
@@ -155,7 +155,7 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def handle_fetch(query, %{params: params} = cursor, _opts, %{cursors: nil} = s) do
+  def handle_fetch(query, %{params: params}, _opts, %{cursors: nil} = s) do
     %Jamdb.Oracle.Query{statement: statement} = query
 	case query(s, {:fetch, statement |> to_charlist, params}) do
       {:cont, {_, cursor, row_format, rows}} ->
@@ -167,9 +167,8 @@ defmodule Jamdb.Oracle do
 	  {:disconnect, err} -> {:disconnect, error!(err), s}
     end
   end
-  def handle_fetch(query, cursor, _opts, %{cursors: cursors} = s) do
+  def handle_fetch(_query, _cursor, _opts, %{cursors: cursors} = s) do
     %{cursor: cursor, row_format: row_format, last_row: last_row} = cursors
-    %Jamdb.Oracle.Query{statement: statement} = query
 	case query(s, {:fetch, cursor, row_format, last_row}) do
       {:cont, {_, _, _, rows}} ->
 	    rows = tl(rows)
