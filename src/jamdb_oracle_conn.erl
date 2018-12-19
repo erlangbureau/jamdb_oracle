@@ -287,6 +287,8 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
 
 get_result(cursor, 0, _RowNumber, _RowFormat, _Rows) ->
     more;
+get_result(cursor, 1405, _RowNumber, _Reason, Rows) ->
+    {ok, [{proc_result, 1405, Rows}]};
 get_result(change, 0, RowNumber, _RowFormat, []) ->
     {ok, [{affected_rows, RowNumber}]};
 get_result(return, 0, _RowNumber, _RowFormat, Rows) ->
