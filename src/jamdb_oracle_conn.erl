@@ -269,13 +269,19 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State, Tout) ->
 		more ->
 		    {ok, State2} = send_req(fetch, State, Cursor),
 		    handle_resp({Cursor, RowFormat, Rows}, State2, Tout);
-		Result ->
+		{ok, _} = Result ->
 		    #oraclient{auto=Auto, defcols=DefCol} = State,
 		    case get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors) of
 			{reset, _} -> send_req(reset, State, Tout);
 			_ -> more
 		    end,
-		    erlang:append_element(Result, State)
+		    erlang:append_element(Result, State);
+		{error, Result} ->
+		    case get_result(Cursors) of
+			[] -> more;
+			_ -> send_req(reset, State, Tout)
+		    end,
+		    {ok, Result, State}
 	    end;
 	{ok, Result} -> %tran
 	    {ok, Result, State};
@@ -302,7 +308,7 @@ get_result(_Type, 1403, _RowNumber, RowFormat, Rows) ->
     {ok, [{result_set, Column, [], Rows}]};
 get_result(_Type, RetCode, _RowNumber, Reason, []) ->
 %    io:format("~s~n", [Reason]),
-    {ok, [{proc_result, RetCode, Reason}]};
+    {error, [{proc_result, RetCode, Reason}]};
 get_result(_Type, _RetCode, _RowNumber, _RowFormat, _Rows) ->
     more.
 
