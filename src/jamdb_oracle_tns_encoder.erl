@@ -184,7 +184,7 @@ encode_record(fetch, #oraclient{fetch=Fetch,req=Cursor,seq=Tseq}) ->
     (encode_sb4(Cursor))/binary,	%cursor
     (encode_sb4(Fetch))/binary	        %rows to fetch
     >>;
-encode_record(exec, #oraclient{type=Type,auth=Auto,fetch=Fetch,server=Ver,req={Cursor,Query,Bind,Batch,Def},seq=Tseq}) ->
+encode_record(exec, #oraclient{type=Type,auto=Auto,fetch=Fetch,server=Ver,req={Cursor,Query,Bind,Batch,Def},seq=Tseq}) ->
     QueryData = encode_str(Query),
     QueryLen = if Cursor > 0 -> 0; true -> byte_size(QueryData) end,
     BindLen = length(Bind),
