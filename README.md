@@ -1,8 +1,3 @@
-```diff
-+ version 0.3.x from master branch is compatible with ecto 3.0
-+ version 0.2.x from ecto-2.1 branch is compatible with ecto 2.1 and 2.2
-```
-
 JamDB Oracle
 ============
 Erlang driver and Ecto adapter for Oracle Database
@@ -32,11 +27,6 @@ Getting Started
     {password, "jamdbtest"},
     {sid, "JAMDBTEST"},
     %%{service_name, "JAMDBTEST"},
-    %%{ssl, [{ciphers,[{rsa,aes_128_cbc,sha}]},
-    %%       {signature_algs,[{sha,rsa}]},
-    %%       {certfile, "/home/jamdbtest/cert.pem"},
-    %%       {keyfile, "/home/jamdbtest/key.pem"},
-    %%       {password, "jamdbtest"}]},
     {app_name, "jamdbtest"}
 ].
 
@@ -62,12 +52,10 @@ Running Tests
 ======
 First, supply connection details for your test database in test/jamdb_oracle_test.hrl or config/test.exs. Once the connection configuration is saved, run the test suite with `rebar3 ct` or `mix test`.
 
-SSL
-======
-When authenticating and downgrading an TLS connection to a transport connection we're NOT sending close alert to peer before releasing the transport socket. See patched [ssl](https://github.com/vstavskyi/ssl) module.
-
 Author
 ======
+ [![Donate Bitcoin](https://img.shields.io/badge/donate-bitcoin-yellow.svg)](https://www.blockchain.com/btc/payment_request?address=1Am6cPsSMZLwHQbQ5AXQQhpSMMoxgRHQit)
+ 
 Mykhailo Vstavskyi
 
 Contributors
