@@ -227,7 +227,7 @@ send_req(fetch, #oraclient{seq=Task} = State, Cursor) ->
 send_req(exec, State, {Query, Bind, Batch}) when is_map(Bind) ->
     Data = lists:filtermap(fun(L) -> case string:chr(L, $:) of 0 -> false; I -> {true, lists:nthtail(I, L)} end end,
         string:tokens(Query," \t;,)")),
-    send_req(exec, State, {Query, get_param(Data, Bind, []), Batch});
+    send_req(exec, State, {Query, get_param(Data, Bind, []), [get_param(Data, B, []) || B <- Batch]});
 send_req(exec, #oraclient{fetch=Fetch,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
     {Type, Fetch2} = get_param(type, {lists:nth(1, string:tokens(string:to_upper(Query)," \t")), [B || {out, B} <- Bind], Fetch}),
     DefCol = get_param(defcols, {Query, Cursors}),
