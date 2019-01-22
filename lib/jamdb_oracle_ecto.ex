@@ -63,7 +63,6 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 	
     * `:pool` - The connection pool module, defaults to `DBConnection.ConnectionPool`
     * `:pool_size` - The size of the pool, defaults to `1`
-    * `:pool_timeout` - The default timeout to use on pool calls, defaults to `5000`
     * `:idle_interval` - The ping interval to validate an idle connection, defaults to `1000`	
 
   ### Connection parameters
