@@ -16,6 +16,7 @@ defmodule Jamdb.Oracle.Query do
 
     from     = from(query, sources)
     select   = select(query, sources)
+    window   = window(query, sources)
     join     = join(query, sources)
     where    = where(query, sources)
     group_by = group_by(query, sources)
@@ -26,7 +27,7 @@ defmodule Jamdb.Oracle.Query do
     offset   = offset(query, sources)
     lock     = lock(query.lock)
 
-    [select, from, join, where, group_by, having, combinations, order_by, offset, limit | lock]
+    [select, window, from, join, where, group_by, having, combinations, order_by, offset, limit | lock]
   end
 
   @doc false
@@ -142,6 +143,7 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp distinct(nil, _, _), do: []
+  defp distinct(%QueryExpr{expr: []}, _, _), do: {[], []}
   defp distinct(%QueryExpr{expr: true}, _, _), do: "DISTINCT "
   defp distinct(%QueryExpr{expr: false}, _, _), do: []
   defp distinct(%QueryExpr{expr: exprs}, _, _) when is_list(exprs), do: "DISTINCT "
@@ -213,6 +215,14 @@ defmodule Jamdb.Oracle.Query do
        %QueryExpr{expr: expr} ->
          intersperse_map(expr, ", ", &expr(&1, sources, query))
      end)]
+  end
+
+  defp window(%{windows: []}, _sources), do: []
+  defp window(%{windows: windows} = query, sources) do
+    intersperse_map(windows, ", ", fn
+      {_, %{expr: kw}} ->
+        window_exprs(kw, sources, query)
+    end)
   end
 
   defp window_exprs(kw, sources, query) do
@@ -322,8 +332,9 @@ defmodule Jamdb.Oracle.Query do
     [expr(left, sources, query), " IN (", args, ?)]
   end
 
-  defp expr({:in, _, [left, {:^, _, [ix, _]}]}, sources, query) do
-    [expr(left, sources, query), " = ANY(:", Integer.to_string(ix + 1), ?)]
+  defp expr({:in, _, [left, {:^, _, [_, length]}]}, sources, query) do
+    right = for ix <- 1..length, do: {:^, [], [ix]}
+    expr({:in, [], [left, right]}, sources, query)
   end
 
   defp expr({:in, _, [left, right]}, sources, query) do
@@ -368,6 +379,11 @@ defmodule Jamdb.Oracle.Query do
 
   defp expr({:ago, _, [count, interval]}, sources, query) do
     interval(DateTime.utc_now, " - ", count, interval, sources, query)
+  end
+
+  defp expr({:over, _, [agg, name]}, sources, query) when is_atom(name) do
+    aggregate = expr(agg, sources, query)
+    [aggregate, " OVER "]
   end
 
   defp expr({:over, _, [agg, kw]}, sources, query) do
