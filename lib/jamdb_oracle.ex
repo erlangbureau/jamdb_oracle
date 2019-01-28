@@ -85,7 +85,7 @@ defmodule Jamdb.Oracle do
   @impl true
   def handle_execute(query, params, opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
-    returning = Keyword.get(opts, :returning, []) |> Enum.filter(& is_tuple(&1))
+    returning = Enum.map(Keyword.get(opts, :out, []), fn elem -> {:out, elem} end)
     case query(s, statement |> to_charlist, Enum.concat(params, returning)) do
       {:ok, result} -> {:ok, query, result, s}
       {:error, [{:proc_result, _, msg}]} -> {:error, error!(msg), s}
