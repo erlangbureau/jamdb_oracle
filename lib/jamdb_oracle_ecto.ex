@@ -20,7 +20,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
       `{"begin proc(:1, :2, :3); end;"`, `[1.0, 2.0, 3.0]}`
    * Calling stored function:
 
-      `{"begin :1 := func(:2); end;"`, `["", "one hundred"]}`
+      `{"begin :1 := func(:2); end;"`, `[{:out, :varchar}, "one hundred"]}`
    * Using cursor variable:
 
       `{"begin open :1 for select * from tabl where dat>:2; end;"`, `[:cursor, {2016, 8, 1}]}`
@@ -28,7 +28,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
       `{"insert into tabl values (tablid.nextval, sysdate) return id into :1"`, `[{:out, :number}]}`
 
-      `Repo.insert_all(Post,[[id: 100]], returning: [:created_at, out: :date])`
+      `Repo.insert_all(Post,[[id: 100]], [returning: [:created_at], out: [:date]])`
    * Update batching:
 
       `{:batch, "insert into tabl values (:1, :2, :3)"`, `[[1, 2, 3],[4, 5, 6],[7, 8, 9]]}`
