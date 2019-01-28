@@ -58,7 +58,7 @@ defmodule Jamdb.Oracle.Query do
       if header == [] do
         [" VALUES " | intersperse_map(rows, ?,, fn _ -> "(DEFAULT)" end)]
       else
-        [?\s, ?(, intersperse_map(header, ?,, &quote_name/1), ") VALUES " | insert_all(rows, 1)]
+        [?\s, ?(, intersperse_map(header, ?,, &quote_name/1), ") VALUES " | insert_all([header], 1)]
       end
 
     ["INSERT INTO ", quote_table(prefix, table), values | returning(returning)]
