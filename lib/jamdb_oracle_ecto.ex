@@ -28,7 +28,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
       `{"insert into tabl values (tablid.nextval, sysdate) return id into :1"`, `[{:out, :number}]}`
 
-      `Repo.insert_all(Post,[[id: 100]], [returning: [:created_at], out: [:date]])`
+      `YourApp.Repo.insert_all(Post,[[id: 100]], [returning: [:created_at], out: [:date]])`
    * Update batching:
 
       `{:batch, "insert into tabl values (:1, :2, :3)"`, `[[1, 2, 3],[4, 5, 6],[7, 8, 9]]}`
