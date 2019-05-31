@@ -229,7 +229,7 @@ send_req(exec, State, {Query, Bind, Batch}) when is_map(Bind) ->
         string:tokens(Query," \t;,)")),
     send_req(exec, State, {Query, get_param(Data, Bind, []), [get_param(Data, B, []) || B <- Batch]});
 send_req(exec, #oraclient{fetch=Fetch,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
-    {Type, Fetch2} = get_param(type, {lists:nth(1, string:tokens(string:to_upper(Query)," \t")), [B || {out, B} <- Bind], Fetch}),
+    {Type, Fetch2} = get_param(type, {lists:nth(1, string:tokens(string:to_upper(Query)," \t\r\n")), [B || {out, B} <- Bind], Fetch}),
     DefCol = get_param(defcols, {Query, Cursors}),
     {LCursor, Cursor} = get_param(defcols, DefCol),
     Pig = if Cursor > 0 -> get_record(pig, [], {?TTI_CANA, [Cursor]}, Task); true -> <<>> end,
