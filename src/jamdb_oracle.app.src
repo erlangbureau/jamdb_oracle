@@ -4,7 +4,6 @@
     {modules, []},
     {registered, []},
     {applications, [kernel,stdlib]},
-    {included_applications, [jose]},
     {files, [src,include,lib,"mix.exs"]},
     {maintainers, ["Mykhailo Vstavskyi","Sergiy Kostyushkin"]},
     {licenses, ["MIT"]},
