@@ -3,7 +3,7 @@ defmodule Jamdb.Oracle.Mixfile do
 
   def project do
     [app: :jamdb_oracle,
-     version: "0.3.2",
+     version: "0.3.3",
      elixir: "~> 1.5",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
@@ -14,7 +14,6 @@ defmodule Jamdb.Oracle.Mixfile do
 
   defp deps do
     [
-      {:jose, "~> 1.9"},
       {:ecto_sql, "~> 3.0"},
       {:ex_doc, "~> 0.19", only: :docs}
     ]
