@@ -64,9 +64,10 @@ decode_token(rpa, Data) ->
     Salt = get_value("AUTH_VFR_DATA", Values),
     Type = get_value("AUTH_VFR_DATA", Values, 3),
     DerivedSalt = get_value("AUTH_PBKDF2_CSK_SALT", Values),
+    Logon = #logon{type=Type, auth=SessKey, salt=Salt, der_salt=DerivedSalt},
     case get_value("AUTH_SVR_RESPONSE", Values) of
         undefined ->
-            {?TTI_SESS, Type, SessKey, Salt, DerivedSalt};
+            {?TTI_SESS, Logon};
         Resp ->
             Value = get_value("AUTH_VERSION_NO", Values),
             SessId = get_value("AUTH_SESSION_ID", Values),
