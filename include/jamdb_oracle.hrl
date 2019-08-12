@@ -43,6 +43,7 @@
 -record(logon, {
     user,
     password,
+    type,
     auth,
     bits,
     salt,
