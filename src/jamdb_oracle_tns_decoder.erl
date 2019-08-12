@@ -60,15 +60,16 @@ decode_token(net, {Data, EnvOpts}) ->
 decode_token(rpa, Data) ->
     Num = decode_ub4(Data),
     Values = decode_keyval(decode_next(Data), Num, []),
-    SessKey = proplists:get_value("AUTH_SESSKEY", Values),
-    Salt = proplists:get_value("AUTH_VFR_DATA", Values),
-    DerivedSalt = proplists:get_value("AUTH_PBKDF2_CSK_SALT", Values),
-    case proplists:get_value("AUTH_SVR_RESPONSE", Values) of
+    SessKey = get_value("AUTH_SESSKEY", Values),
+    Salt = get_value("AUTH_VFR_DATA", Values),
+    Type = get_value("AUTH_VFR_DATA", Values, 3),
+    DerivedSalt = get_value("AUTH_PBKDF2_CSK_SALT", Values),
+    case get_value("AUTH_SVR_RESPONSE", Values) of
         undefined ->
-            {?TTI_SESS, SessKey, Salt, DerivedSalt};
+            {?TTI_SESS, Type, SessKey, Salt, DerivedSalt};
         Resp ->
-            Value = proplists:get_value("AUTH_VERSION_NO", Values),
-	    SessId = proplists:get_value("AUTH_SESSION_ID", Values),
+            Value = get_value("AUTH_VERSION_NO", Values),
+            SessId = get_value("AUTH_SESSION_ID", Values),
             Ver = decode_version(Value),
             {?TTI_AUTH, Resp, Ver, SessId}
     end;
@@ -469,8 +470,9 @@ decode_keyval(Data,Num,Acc) ->
 	    Rest5 = decode_next(Rest2),
 	    {decode_chr(Rest5), decode_next(chr,Rest5)}
     end,
+    NbPair = decode_ub4(Rest4),
     Rest6 = decode_next(Rest4),
-    decode_keyval(Rest6,Num-1,[{Key,Value}|Acc]).
+    decode_keyval(Rest6,Num-1,[{Key,Value,NbPair}|Acc]).
 
 decode_ub1(<<Data:8,_Rest/bits>>) ->
     Data.
@@ -598,6 +600,13 @@ last([E|Es]) -> last(E, Es).
 
 last(_, [E|Es]) -> last(E, Es);
 last(E, []) -> E.
+
+get_value(Key, L) -> get_value(Key, L, 2).
+
+get_value(_Key, [], _N) ->
+    undefined;
+get_value(Key, [P | Ps], N) ->
+    if element(1, P) =:= Key -> element(N, P); true -> get_value(Key, Ps, N) end.
 
 %decode_version(I) when is_integer(I) ->
 %    {(I band 4278190080) bsr 24 band 255, (I band 15728640) bsr 20 band 255,
