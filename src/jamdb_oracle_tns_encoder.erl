@@ -80,16 +80,17 @@ encode_record(sess, #oraclient{env=EnvOpts,seq=Tseq}) ->
     (encode_keyval("AUTH_PID", UserPID))/binary,
     (encode_keyval("AUTH_SID", User))/binary
     >>;
-encode_record(auth, #oraclient{env=EnvOpts,req={Sess, Salt, DerivedSalt},seq=Tseq}) ->
+encode_record(auth, #oraclient{env=EnvOpts,req={Type, Sess, Salt, DerivedSalt},seq=Tseq}) ->
     User            = proplists:get_value(user, EnvOpts),
     Pass            = proplists:get_value(password, EnvOpts),
     Role            = proplists:get_value(role, EnvOpts, 0),
     Prelim          = proplists:get_value(prelim, EnvOpts, 0),
-    Logon = #logon{auth=Sess, user=User, password=Pass, salt=Salt, der_salt=DerivedSalt},
+    Logon = #logon{type=Type, auth=Sess, user=User, password=Pass, salt=Salt, der_salt=DerivedSalt},
     Bits =
     case {Salt, DerivedSalt} of
         {undefined, _DerivedSalt} -> 128;
         {_Salt, undefined} -> 192;
+        {_Salt, _DerivedSalt} when Type =:= 6949 -> 192;
         _ -> 256
     end,
     {AuthPass, AuthSess, SpeedyKey, KeyConn} = jamdb_oracle_crypt:o5logon(Logon, Bits),
