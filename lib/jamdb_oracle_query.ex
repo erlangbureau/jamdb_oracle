@@ -112,6 +112,11 @@ defmodule Jamdb.Oracle.Query do
     ["DELETE FROM ", quote_table(prefix, table), " WHERE ", filters | returning(returning)]
   end
 
+  @doc false
+  def table_exists_query(table) do
+    {"SELECT count(*) FROM user_tables WHERE table_name = :1 ", [table]}
+  end
+
   ## Query generation
 
   binary_ops =
