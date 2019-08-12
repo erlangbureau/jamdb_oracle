@@ -149,8 +149,8 @@ handle_token(<<Token, Data/binary>>, State) ->
 	?TTI_DTY -> send_req(sess, State);
 	?TTI_RPA ->
             case ?DECODER:decode_token(rpa, Data) of
-                {?TTI_SESS, Type, SessKey, Salt, DerivedSalt} ->
-		    send_req(auth, State#oraclient{auth={Type, SessKey, Salt, DerivedSalt}});
+                {?TTI_SESS, Request} ->
+		    send_req(auth, State#oraclient{auth=Request});
                 {?TTI_AUTH, Resp, Ver, SessId} ->
                     #oraclient{auth = KeyConn} = State,
                     Cursors = spawn(fun() -> loop([]) end),
