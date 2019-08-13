@@ -1,6 +1,6 @@
 -module(jamdb_oracle_crypt).
 
--export([o5logon/2]).
+-export([generate/1]).
 -export([validate/2]).
 
 -include("jamdb_oracle.hrl").
@@ -52,6 +52,15 @@ o5logon(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey,
         _ -> crypto:block_encrypt(aes_cbc, KeyConn, IVec, DerivedKey)
     end,
     {bin2hexstr(AuthPass), bin2hex(AuthSess), bin2hexstr(SpeedyKey), KeyConn}.
+
+generate(#logon{type=Type} = Logon) ->
+    Bits =
+    case Type of
+        2361 -> 128;
+        6949 -> 192;
+        18453 -> 256
+    end,
+    o5logon(Logon, Bits).
 
 validate(Resp, KeyConn) ->
     IVec = <<0:128>>,
