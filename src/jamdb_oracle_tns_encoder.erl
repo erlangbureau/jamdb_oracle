@@ -86,13 +86,7 @@ encode_record(auth, #oraclient{env=EnvOpts,req=Request,seq=Tseq}) ->
     Role            = proplists:get_value(role, EnvOpts, 0),
     Prelim          = proplists:get_value(prelim, EnvOpts, 0),
     Logon = Request#logon{user=User, password=Pass},
-    Bits =
-    case Logon#logon.type of
-        2361 -> 128;
-        6949 -> 192;
-        18453 -> 256
-    end,
-    {AuthPass, AuthSess, SpeedyKey, KeyConn} = jamdb_oracle_crypt:o5logon(Logon, Bits),
+    {AuthPass, AuthSess, SpeedyKey, KeyConn} = jamdb_oracle_crypt:generate(Logon),
     KeyInd = if length(SpeedyKey) > 0 -> 1; true -> 0 end,
     {<<
     ?TTI_FUN,
