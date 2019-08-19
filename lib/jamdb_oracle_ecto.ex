@@ -70,6 +70,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:autocommit` - Mode that issued an automatic COMMIT operation
     * `:fetch` - Number of rows to fetch from the server
     * `:sdu` - Size of session data unit
+    * `:read_timeout` - Read timeout while reading from the socket, defaults to `500`
     * `:role` - Mode that is used in an internal logon
     * `:prelim` - Mode that is permitted when the database is down
 
