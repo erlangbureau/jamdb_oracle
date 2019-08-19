@@ -16,8 +16,10 @@
     {ssl, list()} |
     {socket_options, list()} |
     {timeout, non_neg_integer()} |
+    {read_timeout, non_neg_integer()} |
     {autocommit, non_neg_integer()} |
     {fetch, non_neg_integer()} |
+    {sdu, non_neg_integer()} |
     {role, non_neg_integer()} |
     {prelim, non_neg_integer()} |
     {app_name, string()}.
@@ -27,11 +29,11 @@
     conn_state = disconnected :: disconnected | connected | auth_negotiate,
     auto = 1 :: 1 | 0,
     type = select  :: select  | block | change | return | fetch,
-    timeout,
     auth,
     fetch,
     sdu,
     server,
+    timeouts,
     cursors,
     defcols,
     params = [],
