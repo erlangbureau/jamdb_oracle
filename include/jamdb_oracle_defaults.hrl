@@ -7,3 +7,4 @@
 -define(DEF_FETCH, 15).
 -define(DEF_SDU, 8192).
 -define(DEF_TIMEOUT, 15000).
+-define(DEF_READ_TIMEOUT, 500).
