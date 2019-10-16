@@ -120,8 +120,7 @@ defmodule Jamdb.Oracle do
         statement = "COMMIT"
         handle_transaction(statement, opts, %{s | mode: :idle})
       :savepoint when mode == :transaction ->
-        statement = "COMMIT"
-        handle_transaction(statement, opts, %{s | mode: :idle})
+        {:ok, [], %{s | mode: :transaction}}
       status when status in [:transaction, :savepoint] ->
         {status, s}
     end
