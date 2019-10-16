@@ -106,7 +106,7 @@ defmodule Jamdb.Oracle do
         statement = "SAVEPOINT tran"
         handle_transaction(statement, opts, %{s | mode: :transaction})
       :savepoint when mode == :transaction ->
-        statement = "SAVEPOINT " ++ Keyword.get(opts, :name, :svpt)
+        statement = "SAVEPOINT " <> Keyword.get(opts, :name, "svpt")
         handle_transaction(statement, opts, %{s | mode: :transaction})
       status when status in [:transaction, :savepoint] ->
         {status, s}
@@ -134,7 +134,7 @@ defmodule Jamdb.Oracle do
         statement = "ROLLBACK TO tran"
         handle_transaction(statement, opts, %{s | mode: :idle})
       :savepoint when mode in [:transaction, :error] ->
-        statement = "ROLLBACK TO " ++ Keyword.get(opts, :name, :svpt)
+        statement = "ROLLBACK TO " <> Keyword.get(opts, :name, "svpt")
         handle_transaction(statement, opts, %{s | mode: :transaction})
       status when status in [:transaction, :savepoint] ->
         {status, s}
