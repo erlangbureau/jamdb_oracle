@@ -95,11 +95,13 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   Ecto types              | Oracle types                     | Literal syntax in params
   :---------------------- | :------------------------------- | :-----------------------
   `:id`, `:integer`       | `NUMBER (*,0)`                   | 1, 2, 3
-  `:float`                 | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | 1.0, 2.0, 3.0
+  `:float`                | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | 1.0, 2.0, 3.0
   `:decimal`              | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | [`Decimal`](https://hexdocs.pm/decimal)
   `:string`, `:binary`    | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
   `:string`, `:binary`    | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
   `{:array, :integer}`    | `RAW`, `BLOB`                    | 'E799BE'
+  `:boolean`              | `CHAR`, `VARCHAR2`, `NUMBER`     | true, false
+  `:map`                  | `VARCHAR2`, `NVARCHAR2`          | %{"one" => 1, "hundred" => "百"}
   `:naive_datetime`       | `DATE`, `TIMESTAMP`              | [`NaiveDateTime`](https://hexdocs.pm/elixir)
   `:utc_datetime`         | `TIMESTAMP WITH TIME ZONE`       | [`DateTime`](https://hexdocs.pm/elixir)
 
@@ -114,6 +116,31 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   @behaviour Ecto.Adapter.Storage
   @behaviour Ecto.Adapter.Structure
+
+  @impl true
+  def loaders({:array, _}, type), do: [&array_decode/1, type]
+  def loaders({:embed, _}, type), do: [&json_decode/1, &Ecto.Adapters.SQL.load_embed(type, &1)]
+  def loaders({:map, _}, type),   do: [&json_decode/1, &Ecto.Adapters.SQL.load_embed(type, &1)]
+  def loaders(:map, type),        do: [&json_decode/1, type]
+  def loaders(:float, type),      do: [&float_decode/1, type]
+  def loaders(:boolean, type),    do: [&bool_decode/1, type]
+  def loaders(:binary_id, type),  do: [Ecto.UUID, type]
+  def loaders(_, type),           do: [type]
+
+  defp bool_decode("0"), do: {:ok, false}
+  defp bool_decode("1"), do: {:ok, true}
+  defp bool_decode(0), do: {:ok, false}
+  defp bool_decode(1), do: {:ok, true}
+  defp bool_decode(x), do: {:ok, x}
+
+  defp float_decode(%Decimal{} = decimal), do: {:ok, Decimal.to_float(decimal)}
+  defp float_decode(x), do: {:ok, x}
+
+  defp json_decode(x) when is_binary(x), do: {:ok, Jamdb.Oracle.json_library().decode!(x)}
+  defp json_decode(x), do: {:ok, x}
+
+  defp array_decode(x) when is_binary(x), do: {:ok, :binary.bin_to_list(x)}
+  defp array_decode(x), do: {:ok, x}
 
   @impl true
   def storage_up(_opts), do: err()
