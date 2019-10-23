@@ -224,6 +224,20 @@ defmodule Jamdb.Oracle do
     DBConnection.ConnectionError.exception("#{inspect msg}")
   end
 
+  @doc """
+  Returns the configured JSON library.
+
+  To customize the JSON library, include the following in your `config/config.exs`:
+
+      config :jamdb_oracle, :json_library, SomeJSONModule
+
+  Defaults to [`Jason`](https://hexdocs.pm/jason)
+  """
+  @spec json_library() :: module()
+  def json_library() do
+    Application.get_env(:jamdb_oracle, :json_library, Jason)
+  end
+
 end
 
 defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
@@ -255,11 +269,15 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   end
 
   defp encode(nil, _), do: :null
+  defp encode(true, _), do: "1"
+  defp encode(false, _), do: "0"
   defp encode(%Decimal{} = decimal, _), do: Decimal.to_float(decimal)
   defp encode(%DateTime{} = datetime, _), do: NaiveDateTime.to_erl(DateTime.to_naive(datetime))
   defp encode(%NaiveDateTime{} = naive, _), do: NaiveDateTime.to_erl(naive)
   defp encode(%Ecto.Query.Tagged{value: elem}, _), do: elem
   defp encode(elem, false) when is_binary(elem), do: elem |> to_charlist
+  defp encode(elem, charset) when is_map(elem), 
+    do: encode(Jamdb.Oracle.json_library().encode!(elem), charset)
   defp encode(elem, _), do: elem
 
   defp expr(list) when is_list(list) do
