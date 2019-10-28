@@ -192,7 +192,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   def query(conn, query, params, opts) do
     case DBConnection.prepare_execute(conn, query!(query, ""), params, opts) do
       {:ok, _, result}  -> {:ok, result}
-      {:error, err} -> err
+      {:error, err} -> {:error, err}
     end
   end
 
