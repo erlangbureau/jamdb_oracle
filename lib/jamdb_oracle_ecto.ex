@@ -57,7 +57,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:parameters` - Keyword list of connection parameters
     * `:socket_options` - Options to be given to the underlying socket
     * `:timeout` - The default timeout to use on queries, defaults to `15000`
-    * `:charset` - Name that is used in multibyte encoding
+    * `:charset` - Client character set, defaults to UTF8
 
   ### Pool options
 	
@@ -104,6 +104,14 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   `:map`                  | `VARCHAR2`, `NVARCHAR2`          | %{"one" => 1, "hundred" => "百"}
   `:naive_datetime`       | `DATE`, `TIMESTAMP`              | [`NaiveDateTime`](https://hexdocs.pm/elixir)
   `:utc_datetime`         | `TIMESTAMP WITH TIME ZONE`       | [`DateTime`](https://hexdocs.pm/elixir)
+
+  ### Character sets
+
+  `:us7ascii`, `:we8iso8859p1`, `:ee8iso8859p2`, `:nee8iso8859p4`, `:cl8iso8859p5`, `:ar8iso8859p6`,`:el8iso8859p7`,
+  `:iw8iso8859p8`, `:we8iso8859p9`, `:ne8iso8859p10`, `:th8tisascii`, `:vn8mswin1258`, `:we8iso8859p15`,
+  `:blt8iso8859p13`, `:ee8mswin1250`, `:cl8mswin1251`, `:el8mswin1253`, `:iw8mswin1255`, `:tr8mswin1254`,
+  `:we8mswin1252`, `:blt8mswin1257`, `:ar8mswin1256`, `:ja16euc`, `:ja16sjis`, `:ja16euctilde`,`:ja16sjistilde`,
+  `:ko16mswin949`, `:zhs16gbk`, `:zht32euc`, `:zht16big5`, `:zht16mswin950`, `:zht16hkscs`
 
   #### Examples
 
