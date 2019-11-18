@@ -263,8 +263,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   def encode(_, [], _), do: []
   def encode(_, params, opts) do 
     charset = if( Keyword.has_key?(opts, :charset) == true, 
-      do: Enum.member?(["al16utf16","ja16euc","zhs16gbk","zht16big5","zht16mswin950"],
-        opts[:charset]), else: false )
+      do: String.starts_with?(Atom.to_string(opts[:charset]), ["al16","ja16","ko16","zht16","zhs16"]), else: false )
     Enum.map(params, fn elem -> encode(elem, charset) end)
   end
 
