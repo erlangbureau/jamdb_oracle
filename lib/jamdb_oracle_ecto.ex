@@ -57,7 +57,6 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:parameters` - Keyword list of connection parameters
     * `:socket_options` - Options to be given to the underlying socket
     * `:timeout` - The default timeout to use on queries, defaults to `15000`
-    * `:charset` - Client character set, defaults to UTF8
 
   ### Pool options
 	
@@ -67,6 +66,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   ### Connection parameters
 
+    * `:charset` - Client character set, defaults to UTF8
     * `:autocommit` - Mode that issued an automatic COMMIT operation
     * `:fetch` - Number of rows to fetch from the server
     * `:sdu` - Size of session data unit
