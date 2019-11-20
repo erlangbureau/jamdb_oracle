@@ -94,14 +94,14 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   Ecto types              | Oracle types                     | Literal syntax in params
   :---------------------- | :------------------------------- | :-----------------------
-  `:id`, `:integer`       | `NUMBER (*,0)`                   | 1, 2, 3
+  `:id`, `:integer`       | `NUMBER (*,0)`, `INTEGER`        | 1, 2, 3
   `:float`                | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | 1.0, 2.0, 3.0
   `:decimal`              | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | [`Decimal`](https://hexdocs.pm/decimal)
   `:string`, `:binary`    | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
   `:string`, `:binary`    | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
   `{:array, :integer}`    | `RAW`, `BLOB`                    | 'E799BE'
   `:boolean`              | `CHAR`, `VARCHAR2`, `NUMBER`     | true, false
-  `:map`                  | `VARCHAR2`, `NVARCHAR2`          | %{"one" => 1, "hundred" => "百"}
+  `:map`                  | `CLOB`, `NCLOB`                  | %{"one" => 1, "hundred" => "百"}
   `:naive_datetime`       | `DATE`, `TIMESTAMP`              | [`NaiveDateTime`](https://hexdocs.pm/elixir)
   `:utc_datetime`         | `TIMESTAMP WITH TIME ZONE`       | [`DateTime`](https://hexdocs.pm/elixir)
 
@@ -118,6 +118,26 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
       iex> Ecto.Adapters.SQL.query(YourApp.Repo, "select 1+:1, sysdate, rowid from dual where 1=:1 ", [1])
       {:ok, %{num_rows: 1, rows: [[2, ~N[2016-08-01 13:14:15], "AAAACOAABAAAAWJAAA"]]}}
 
+  Imagine you have this migration:
+
+      defmodule YourApp.Migration do
+        use Ecto.Migration
+
+        def up do
+          create table(:users, comment: "users table") do
+            add :name, :string, comment: "name column"
+            add :namae, :string, national: true
+            add :custom_id, :uuid
+            timestamps()
+          end
+        end
+
+      end
+
+  You can execute it manually with:
+
+      Ecto.Migrator.up(YourApp.Repo, 20160801131415000, YourApp.Migration)
+      
   """
 
   use Ecto.Adapters.SQL, driver: Jamdb.Oracle, migration_lock: nil
@@ -218,18 +238,12 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   defdelegate update(prefix, table, fields, filters, returning), to: Jamdb.Oracle.Query
   defdelegate delete(prefix, table, filters, returning), to: Jamdb.Oracle.Query
   defdelegate table_exists_query(table), to: Jamdb.Oracle.Query
+  defdelegate execute_ddl(command), to: Jamdb.Oracle.Query
 
   @impl true
   def to_constraints(_err), do: []
 
   @impl true
-  def execute_ddl(err), do: error!(err)
-
-  @impl true
-  def ddl_logs(err), do: error!(err)
-
-  defp error!(msg) do
-    raise DBConnection.ConnectionError, "#{inspect msg}"
-  end  
+  def ddl_logs(_result), do: []
 
 end
