@@ -56,9 +56,11 @@ First, supply connection details for your test database in test/jamdb_oracle_tes
 
 Author
 ======
- [![Donate Bitcoin](https://img.shields.io/badge/donate-bitcoin-yellow.svg)](https://www.blockchain.com/btc/payment_request?address=1Am6cPsSMZLwHQbQ5AXQQhpSMMoxgRHQit)
- 
-Mykhailo Vstavskyi
+<img src="https://pubs.payoneer.com/Content/Default/img/partner-logo.png" width="72">
+
+[Make a Payment](https://myaccount.payoneer.com/MainPage/Widget.aspx?w=SelectionPage#/pay/selectionpage)
+
+[Mykhailo Vstavskyi](mailto:mihail.vstavskiy@hotmail.com)
 
 Contributors
 ============
