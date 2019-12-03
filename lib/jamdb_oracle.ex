@@ -214,6 +214,7 @@ defmodule Jamdb.Oracle do
     case query(s, 'PING') do
       {:ok, _} -> {:ok, s}
       {:error, err} -> {:disconnect, error!(err), s}
+      {:disconnect, reason} -> {:disconnect, error!(reason), s}
     end
   end
   def ping(%{mode: :transaction} = s) do
