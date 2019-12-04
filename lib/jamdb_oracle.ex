@@ -46,7 +46,7 @@ defmodule Jamdb.Oracle do
         {:ok, %{num_rows: length(rows), rows: rows, columns: columns}}
       {:ok, [{:fetched_rows, _, _, _} = result]} -> {:cont, result}
       {:ok, [{:proc_result, 0, rows}]} -> {:ok, %{num_rows: length(rows), rows: rows}}
-      {:ok, [{:proc_result, _, _}] = result} -> {:error, result}
+      {:ok, [{:proc_result, _, msg}]} -> {:error, msg}
       {:ok, [{:affected_rows, num_rows}]} -> {:ok, %{num_rows: num_rows, rows: nil}}
       {:ok, result} -> {:ok, result}
       {:error, _, err} -> {:disconnect, err}
@@ -55,6 +55,7 @@ defmodule Jamdb.Oracle do
 
   defp stmt({:fetch, sql, params}, _), do: {:fetch, sql, params}
   defp stmt({:fetch, cursor, row_format, last_row}, _), do: {:fetch, cursor, row_format, last_row}
+  defp stmt({:batch, sql, params}, _), do: {:batch, sql, params}
   defp stmt(sql, params), do: {sql, params}
   
   @impl true
@@ -88,7 +89,6 @@ defmodule Jamdb.Oracle do
     returning = Enum.map(Keyword.get(opts, :out, []), fn elem -> {:out, elem} end)
     case query(s, statement |> to_charlist, Enum.concat(params, returning)) do
       {:ok, result} -> {:ok, query, result, s}
-      {:error, [{:proc_result, _, msg}]} -> {:error, error!(msg), s}
       {:error, err} -> {:error, error!(err), s}
       {:disconnect, err} -> {:disconnect, error!(err), s}
     end
@@ -214,7 +214,7 @@ defmodule Jamdb.Oracle do
     case query(s, 'PING') do
       {:ok, _} -> {:ok, s}
       {:error, err} -> {:disconnect, error!(err), s}
-      {:disconnect, reason} -> {:disconnect, error!(reason), s}
+      {:disconnect, err} -> {:disconnect, error!(err), s}
     end
   end
   def ping(%{mode: :transaction} = s) do
