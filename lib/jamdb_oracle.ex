@@ -53,6 +53,16 @@ defmodule Jamdb.Oracle do
     end
   end
 
+  @doc """
+  Displays the current version number of JamDB Oracle.
+
+  The information is based on the value of :version in the file mix.exs.
+  """
+  @spec version_info() :: any()
+  def version_info() do
+    Mix.Project.config[:version]
+  end
+
   defp stmt({:fetch, sql, params}, _), do: {:fetch, sql, params}
   defp stmt({:fetch, cursor, row_format, last_row}, _), do: {:fetch, cursor, row_format, last_row}
   defp stmt({:batch, sql, params}, _), do: {:batch, sql, params}
