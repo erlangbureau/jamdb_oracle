@@ -6,7 +6,7 @@ defmodule Jamdb.Oracle.Query do
 
   """
 
-  defstruct [:statement, :name]  
+  defstruct [:statement, :name, :batch]  
 
   alias Ecto.Query.{BooleanExpr, JoinExpr, QueryExpr}
 
