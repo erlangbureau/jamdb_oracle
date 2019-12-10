@@ -1,4 +1,5 @@
 defmodule Jamdb.Oracle do
+  @vsn "0.3.7"
   @moduledoc """
   Adapter module for Oracle. `DBConnection` behaviour implementation.
 
@@ -84,6 +85,14 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
+  def handle_execute(%{batch: true} = query, params, opts, s) do
+    %Jamdb.Oracle.Query{statement: statement} = query
+    case query(s, {:batch, statement |> to_charlist, params}, []) do
+      {:ok, result} -> {:ok, query, result, s}
+      {:error, err} -> {:error, error!(err), s}
+      {:disconnect, err} -> {:disconnect, error!(err), s}
+    end
+  end
   def handle_execute(query, params, opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
     returning = Enum.map(Keyword.get(opts, :out, []), fn elem -> {:out, elem} end)
