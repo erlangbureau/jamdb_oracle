@@ -136,7 +136,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   You can execute it manually with:
 
-      Ecto.Migrator.up(YourApp.Repo, 20160801131415000, YourApp.Migration)
+      Ecto.Migrator.up(YourApp.Repo, 20160801131415, YourApp.Migration)
       
   """
 
@@ -175,6 +175,9 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   @impl true
   def storage_down(_opts), do: err()
+
+  @impl true
+  def storage_status(_opts), do: err()
 
   @impl true
   def structure_dump(_default, _config), do: err()
