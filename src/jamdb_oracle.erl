@@ -44,7 +44,11 @@ init(Opts) ->
                 _ -> {ok, State}
             end;
         {ok, Result, _State} ->
-            {stop, Result}
+            {stop, Result};
+        {error, ErrorType, Reason} ->
+            {stop, {ErrorType, Reason}};
+        {error, ErrorType, Reason, _State} ->
+            {stop, {ErrorType, Reason}}
     end.
 
 %% Error types: socket, remote, local

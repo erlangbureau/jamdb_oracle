@@ -15,7 +15,7 @@
 -type rows() :: list().  %% TODO
 -type return_status() :: non_neg_integer().
 -type out_params() :: list().  %% TODO
--type empty_result() :: {ok, state()} | {error, error_type(), binary(), state()}.
+-type empty_result() :: {ok, state()} | {error, error_type(), term()} | {error, error_type(), binary(), state()}.
 -type fetched_rows() :: {fetched_rows, non_neg_integer(), metainfo(), rows()}.
 -type affected_rows() :: {affected_rows, non_neg_integer()}.
 -type result_set() :: {result_set, columns(), metainfo(), rows()}.
@@ -151,7 +151,7 @@ handle_token(<<Token, Data/binary>>, State) ->
 	?TTI_RPA ->
             case ?DECODER:decode_token(rpa, Data) of
                 {?TTI_SESS, Request} ->
-		    send_req(auth, State#oraclient{req=Request});
+                  send_req(auth, State#oraclient{req=Request});
                 {?TTI_AUTH, Resp, Ver, SessId} ->
                     #oraclient{auth = KeyConn} = State,
                     Cursors = spawn(fun() -> loop([]) end),
