@@ -94,9 +94,10 @@ decode_token(oac, Data) ->
     {Rest13, DataType, Length, Scale, Charset};
 decode_token(wrn, Data) ->
     Rest2 = decode_next(ub2,Data),	%%retCode
+    Length = decode_ub2(Rest2),
     Rest3 = decode_next(ub2,Rest2),	%%warnLength
     Rest4 = decode_next(ub2,Rest3),	%%warnFlag
-    decode_next(chr, Rest4).            %%errorMsg
+    decode_next(ub1, Rest4, Length).    %%warnMsg
 
 decode_token(dcb, Data, {Ver, _RowFormat, Type}) when is_atom(Type) ->
     {Rest2, RowFormat} = decode_token(dcb, decode_next(Data), Ver),
