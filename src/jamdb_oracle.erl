@@ -1,5 +1,5 @@
 -module(jamdb_oracle).
--vsn("0.3.7").
+-vsn("0.3.8").
 -behaviour(gen_server).
 
 -ifdef(OTP_RELEASE).
@@ -44,7 +44,9 @@ init(Opts) ->
                 _ -> {ok, State}
             end;
         {ok, Result, _State} ->
-            {stop, Result}
+            {stop, Result};
+        {error, Type, Result, _State} ->
+            {stop, {Type, Result}}
     end.
 
 %% Error types: socket, remote, local
