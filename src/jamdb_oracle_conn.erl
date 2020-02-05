@@ -53,7 +53,7 @@ connect(Opts, Tout) ->
             {ok, State2} = send_req(login, State),
             handle_login(State2#oraclient{conn_state=auth_negotiate});
         {error, Reason} ->
-            {error, socket, Reason}
+            {error, socket, Reason, #oraclient{}}
     end.
 
 -spec disconnect(state()) -> {ok, [env()]}.
@@ -276,6 +276,8 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
 			_ -> more
 		    end,
 		    erlang:append_element(Result, State);
+		{error, [{proc_result, RetCode, Reason}]} ->
+		    {error, remote, Reason, State};
 		{error, Result} ->
 		    case get_result(Cursors) of
 			[] -> more;
