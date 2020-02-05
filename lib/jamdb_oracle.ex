@@ -85,7 +85,7 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def handle_execute(%{batch: true} = query, params, opts, s) do
+  def handle_execute(%{batch: true} = query, params, _opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
     case query(s, {:batch, statement |> to_charlist, params}, []) do
       {:ok, result} -> {:ok, query, result, s}
