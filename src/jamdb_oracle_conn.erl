@@ -53,7 +53,7 @@ connect(Opts, Tout) ->
             {ok, State2} = send_req(login, State),
             handle_login(State2#oraclient{conn_state=auth_negotiate});
         {error, Reason} ->
-            {error, socket, Reason, #oraclient{}}
+            handle_error(socket, Reason, #oraclient{})
     end.
 
 -spec disconnect(state()) -> {ok, [env()]}.
@@ -377,6 +377,7 @@ sock_renegotiate(Socket, Opts, {Tout, _ReadTout}) ->
 sock_connect(Socket, [], _Tout) when is_port(Socket) -> {ok, Socket};
 sock_connect(Socket, SslOpts, Tout) -> ssl:connect(Socket, SslOpts, Tout).
 
+sock_close(undefined) -> ok;
 sock_close(Socket) when is_port(Socket) -> gen_tcp:close(Socket);
 sock_close(Socket) -> ssl:close(Socket).
 
