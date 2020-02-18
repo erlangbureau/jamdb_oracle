@@ -276,8 +276,6 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
 			_ -> more
 		    end,
 		    erlang:append_element(Result, State);
-		{error, [{proc_result, RetCode, Reason}]} ->
-		    {error, remote, Reason, State};
 		{error, Result} ->
 		    case get_result(Cursors) of
 			[] -> more;
@@ -314,6 +312,7 @@ get_result(_Type, RetCode, _RowNumber, Reason, []) ->
 get_result(_Type, _RetCode, _RowNumber, _RowFormat, _Rows) ->
     more.
 
+get_result(undefined) -> [];
 get_result(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply -> Reply end;
 get_result(#format{column_name=Column}) -> Column.
 
