@@ -244,7 +244,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   defdelegate execute_ddl(command), to: Jamdb.Oracle.Query
 
   @impl true
-  def to_constraints(_err), do: []
+  def to_constraints(_err, _opts), do: []
 
   @impl true
   def ddl_logs(_result), do: []
