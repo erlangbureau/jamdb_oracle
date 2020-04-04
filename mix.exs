@@ -14,7 +14,7 @@ defmodule Jamdb.Oracle.Mixfile do
 
   defp deps do
     [
-      {:ecto_sql, "~> 3.4.0"},
+      {:ecto_sql, "~> 3.0"},
       {:ex_doc, "~> 0.21", only: :docs}
     ]
   end
