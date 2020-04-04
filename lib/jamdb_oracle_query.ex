@@ -117,6 +117,12 @@ defmodule Jamdb.Oracle.Query do
     {"SELECT count(*) FROM user_tables WHERE table_name = :1 ", [table]}
   end
 
+  @doc false
+  def ddl_logs(_result), do: []
+
+  @doc false
+  def to_constraints(_err, _opts \\ []), do: []
+
   ## Query generation
 
   binary_ops =
