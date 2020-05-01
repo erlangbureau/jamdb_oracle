@@ -3,7 +3,7 @@
 %% API
 -export([decode_packet/2]).
 -export([decode_token/2]).
--export([decode_helper/2]).
+-export([decode_helper/3]).
 
 -include("jamdb_oracle.hrl").
 
@@ -726,5 +726,5 @@ decode_long(Data) ->
     Rest2 = decode_next(chr,Data),
     {Value, decode_next(ub2,Rest2,2)}.
 
-decode_helper(param, Data) -> decode_token(oac, ?ENCODER:encode_token(oac, Data));
-decode_helper(tz, Data) -> ltz(Data).
+decode_helper(param, Data, Format) -> decode_token(oac, ?ENCODER:encode_token(oac, Data, Format));
+decode_helper(tz, Data, _) -> ltz(Data).
