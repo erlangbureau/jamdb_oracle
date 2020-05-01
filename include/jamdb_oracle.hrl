@@ -30,6 +30,7 @@
     auto = 1 :: 1 | 0,
     type = select  :: select  | block | change | return | fetch,
     auth,
+    charset,
     fetch,
     sdu,
     server,
