@@ -1,6 +1,6 @@
 {application, jamdb_oracle, [
     {description, "Erlang driver for Oracle"},
-    {vsn, "0.3.9"},
+    {vsn, "0.3.11"},
     {modules, []},
     {registered, []},
     {applications, [kernel,stdlib]},
