@@ -3,7 +3,7 @@
 %% API
 -export([encode_packet/3]).
 -export([encode_record/2]).
--export([encode_token/2]).
+-export([encode_token/3]).
 -export([encode_helper/2]).
 
 -include("jamdb_oracle.hrl").
@@ -103,8 +103,7 @@ encode_record(auth, #oraclient{env=EnvOpts,req=Request,seq=Tseq}) ->
     (encode_keyval(<<"AUTH_SESSKEY">>, AuthSess, 1))/binary
     >>,
     KeyConn};
-encode_record(dty, #oraclient{req=Request}) ->
-    Charset = proplists:get_value(Request, ?CHARSET, ?UTF8_CHARSET),
+encode_record(dty, #oraclient{charset=Charset}) ->
     <<
     ?TTI_DTY,
     (encode_ub2(Charset))/binary,	%cli in charset
@@ -178,7 +177,7 @@ encode_record(fetch, #oraclient{fetch=Fetch,req=Cursor,seq=Tseq}) ->
     (encode_sb4(Cursor))/binary,	%cursor
     (encode_sb4(Fetch))/binary	        %rows to fetch
     >>;
-encode_record(exec, #oraclient{type=Type,auto=Auto,fetch=Fetch,server=Ver,req={Cursor,Query,Bind,Batch,Def},seq=Tseq}) ->
+encode_record(exec, #oraclient{type=Type,auto=Auto,charset=Charset,fetch=Fetch,server=Ver,req={Cursor,Query,Bind,Batch,Def},seq=Tseq}) ->
     QueryData = encode_str(Query),
     QueryLen = if Cursor > 0 -> 0; true -> byte_size(QueryData) end,
     BindLen = length(Bind),
@@ -227,8 +226,8 @@ encode_record(exec, #oraclient{type=Type,auto=Auto,fetch=Fetch,server=Ver,req={C
     (case {BindLen, DefLen, QueryLen} of
         {0, 0, QueryLen} -> <<>>;
         {BindLen, 0, 0} -> encode_token(rxd, [Bind|Batch], <<>>);
-        {BindLen, 0, QueryLen} -> encode_token(rxd, [Bind|Batch], encode_token(oac, Bind, <<>>));
-        {0, DefLen, 0} -> encode_token(oac, Def, <<>>)
+        {BindLen, 0, QueryLen} -> encode_token(rxd, [Bind|Batch], encode_token(oac, Bind, #format{charset=Charset}, <<>>));
+        {0, DefLen, 0} -> encode_token(oac, Def, #format{charset=Charset}, <<>>)
     end)/binary
     >>;
 encode_record(pig, #oraclient{req={Request,Cursors},seq=Tseq}) ->
@@ -245,7 +244,9 @@ encode_record(close, #oraclient{seq=Tseq}) ->
     ?TTI_LOGOFF, Tseq
     >>.
 
-setopts(all8, {Opts, Fetch, Type}) -> [Opts,Fetch,0,0,0,0,0,Type,0,0,0,0,0].
+setopts(all8, {Opts, Fetch, Type}) -> [Opts,Fetch,0,0,0,0,0,Type,0,0,0,0,0];
+setopts(size, Data) when length(Data) > 4000 -> 33554432;  %clob
+setopts(size, _Data) -> 4000.
 
 setopts(fetch, DefInd, _BatchLen, Fetch) ->
     {32832 bor (DefInd * 16), 0, 2147483647, setopts(all8, {0, Fetch, 1})};
@@ -273,29 +274,31 @@ encode_token(rxd, Data) when is_binary(Data) -> encode_chr(unicode:characters_to
 encode_token(rxd, Data) when is_number(Data) -> encode_len(encode_number(Data));
 encode_token(rxd, Data) when is_tuple(Data) -> encode_len(encode_date(Data));
 encode_token(rxd, cursor) -> <<1,0>>;
-encode_token(rxd, null) -> <<0>>;
-encode_token(oac, Data) when is_list(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?UTF8_CHARSET, 0);
-encode_token(oac, Data) when is_binary(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?AL16UTF16_CHARSET, 0);
-encode_token(oac, Data) when is_number(Data) -> encode_token(oac, ?TNS_TYPE_NUMBER, 22, 0, 0, 0);
-encode_token(oac, {{_Year,_Mon,_Day}, {_Hour,_Min,_Sec,_Ms}}) -> encode_token(oac, ?TNS_TYPE_TIMESTAMP, 11, 0, 0, 0);
-encode_token(oac, {{_Year,_Mon,_Day}, {_Hour,_Min,_Sec,_Ms}, _}) -> encode_token(oac, ?TNS_TYPE_TIMESTAMPTZ, 13, 0, 0, 0);
-encode_token(oac, Data) when is_tuple(Data) -> encode_token(oac, ?TNS_TYPE_DATE, 7, 0, 0, 0);
-encode_token(oac, cursor) -> encode_token(oac, ?TNS_TYPE_REFCURSOR, 1, 0, ?UTF8_CHARSET, 0);
-encode_token(oac, null) -> encode_token(oac, []).
+encode_token(rxd, null) -> <<0>>.
 
 encode_token(rxd, [], Acc) -> Acc;
 encode_token(rxd, [Data|Rest], Acc) ->
     encode_token(rxd, Rest, <<Acc/binary, (encode_token(Data, <<?TTI_RXD>>))/binary>>);
-encode_token(oac, [], Acc) when is_binary(Acc) -> Acc;
-encode_token(oac, [Data|Rest], Acc) when is_record(Data, format), is_binary(Acc) ->
-    encode_token(oac, Rest, <<Acc/binary, (encode_token(oac, Data, []))/binary>>);
-encode_token(oac, [Data|Rest], Acc) when is_binary(Acc) ->
-    encode_token(oac, Rest, <<Acc/binary, (encode_token(oac, Data))/binary>>);
-encode_token(oac, #format{data_type=DataType,charset=Charset}, Acc) when is_list(Acc), ?IS_CHAR_TYPE(DataType) ->
+encode_token(oac, Data, #format{charset=Charset}) when is_list(Data) ->
+    encode_token(oac, ?TNS_TYPE_VARCHAR, setopts(size, Data), 16, Charset, 0);
+encode_token(oac, Data, _) when is_binary(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?AL16UTF16_CHARSET, 0);
+encode_token(oac, Data, _) when is_number(Data) -> encode_token(oac, ?TNS_TYPE_NUMBER, 22, 0, 0, 0);
+encode_token(oac, {{_Year,_Mon,_Day}, {_Hour,_Min,_Sec,_Ms}}, _) -> encode_token(oac, ?TNS_TYPE_TIMESTAMP, 11, 0, 0, 0);
+encode_token(oac, {{_Year,_Mon,_Day}, {_Hour,_Min,_Sec,_Ms}, _}, _) -> encode_token(oac, ?TNS_TYPE_TIMESTAMPTZ, 13, 0, 0, 0);
+encode_token(oac, Data, _) when is_tuple(Data) -> encode_token(oac, ?TNS_TYPE_DATE, 7, 0, 0, 0);
+encode_token(oac, cursor, #format{charset=Charset}) -> encode_token(oac, ?TNS_TYPE_REFCURSOR, 1, 0, Charset, 0);
+encode_token(oac, null, Format) -> encode_token(oac, [], Format).
+
+encode_token(oac, [], _, Acc) when is_binary(Acc) -> Acc;
+encode_token(oac, [Data|Rest], Format, Acc) when is_record(Data, format), is_binary(Acc) ->
+    encode_token(oac, Rest, Format, <<Acc/binary, (encode_token(oac, Data, Format,[]))/binary>>);
+encode_token(oac, [Data|Rest], Format, Acc) when is_binary(Acc) ->
+    encode_token(oac, Rest, Format, <<Acc/binary, (encode_token(oac, Data, Format))/binary>>);
+encode_token(oac, #format{data_type=DataType,charset=Charset}, _, Acc) when is_list(Acc), ?IS_CHAR_TYPE(DataType) ->
     encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, Charset, 0);
-encode_token(oac, #format{data_type=DataType,charset=Charset}, Acc) when is_list(Acc), ?IS_LOB_TYPE(DataType) ->
-    encode_token(oac, DataType, 0, 33554432, Charset, 4000);
-encode_token(oac, #format{data_type=DataType,data_length=Length,charset=Charset}, Acc) when is_list(Acc) ->
+encode_token(oac, #format{data_type=DataType,charset=Charset}, _, Acc) when is_list(Acc), ?IS_LOB_TYPE(DataType) ->
+    encode_token(oac, DataType, 0, 33554432, Charset, 33554432);
+encode_token(oac, #format{data_type=DataType,data_length=Length,charset=Charset}, _, Acc) when is_list(Acc) ->
     encode_token(oac, DataType, Length, 0, Charset, 0).
 
 encode_token(oac, DataType, Length, Flag, Charset, Max) ->
@@ -455,7 +458,7 @@ encode_helper(param, Data) ->
     {date, {1900,1,1}}, {timestamp, {{1900,1,1}, {0,0,0,0}}}, {timestamptz, {{1900,1,1}, {0,0,0,0}, 0}}
     ],
     proplists:get_value(Data, Values, Data);
-encode_helper(sess, _) ->
+encode_helper(sess, L) ->
     Secs = calendar:datetime_to_gregorian_seconds(calendar:local_time()),
     USecs = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
-    "ALTER SESSION SET TIME_ZONE='"++?DECODER:decode_helper(tz, (Secs - USecs) div 3600)++"'".
+    "ALTER SESSION SET TIME_ZONE='"++?DECODER:decode_helper(tz, (Secs - USecs) div 3600, L)++"'".
