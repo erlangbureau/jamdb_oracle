@@ -43,13 +43,14 @@ connect(Opts, Tout) ->
     Fetch       = proplists:get_value(fetch, Opts, ?DEF_FETCH),
     Sdu         = proplists:get_value(sdu, Opts, ?DEF_SDU),
     ReadTout    = proplists:get_value(read_timeout, Opts, ?DEF_READ_TIMEOUT),
-    Charset     = proplists:get_value(charset, Opts, utf8),
+    Cset        = proplists:get_value(charset, Opts, utf8),
+    Charset     = proplists:get_value(Cset, ?CHARSET, ?UTF8_CHARSET),
     SockOpts = [binary, {active, false}, {packet, raw}, %{recbuf, 65535},
             {nodelay, true}, {keepalive, true}]++SocketOpts,
     case gen_tcp:connect(Host, Port, SockOpts, Tout) of
         {ok, Socket} ->
             {ok, Socket2} = sock_connect(Socket, SslOpts, Tout),
-            State = #oraclient{socket=Socket2, env=Opts, auto=Auto, fetch=Fetch, sdu=Sdu, req=Charset, timeouts={Tout, ReadTout}},
+            State = #oraclient{socket=Socket2, env=Opts, auto=Auto, fetch=Fetch, sdu=Sdu, charset=Charset, timeouts={Tout, ReadTout}},
             {ok, State2} = send_req(login, State),
             handle_login(State2#oraclient{conn_state=auth_negotiate});
         {error, Reason} ->
@@ -229,7 +230,7 @@ send_req(exec, State, {Query, Bind, Batch}) when is_map(Bind) ->
     Data = lists:filtermap(fun(L) -> case string:chr(L, $:) of 0 -> false; I -> {true, lists:nthtail(I, L)} end end,
         string:tokens(Query," \t;,)")),
     send_req(exec, State, {Query, get_param(Data, Bind, []), [get_param(Data, B, []) || B <- Batch]});
-send_req(exec, #oraclient{fetch=Fetch,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
+send_req(exec, #oraclient{charset=Charset,fetch=Fetch,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
     {Type, Fetch2} = get_param(type, {lists:nth(1, string:tokens(string:to_upper(Query)," \t\r\n")), [B || {out, B} <- Bind], Fetch}),
     DefCol = get_param(defcols, {Query, Cursors}),
     {LCursor, Cursor} = get_param(defcols, DefCol),
@@ -237,7 +238,7 @@ send_req(exec, #oraclient{fetch=Fetch,cursors=Cursors,seq=Task} = State, {Query,
     Pig2 = if Cursor > 0 -> get_record(pig, [], {?TTI_OCCA, [Cursor]}, Task); true -> <<>> end,
     Data = get_record(exec, State#oraclient{type=Type,fetch=Fetch2}, {LCursor, if LCursor =:= 0 -> Query; true -> [] end,
         [get_param(data, B) || B <- Bind], Batch, []}, Task),
-    send(State#oraclient{type=Type,defcols=DefCol,params=[get_param(format, B) || B <- Bind]},
+    send(State#oraclient{type=Type,defcols=DefCol,params=[get_param(format, B, #format{charset=Charset}) || B <- Bind]},
         ?TNS_DATA, <<Pig/binary, Pig2/binary, Data/binary>>).
 
 handle_resp(Acc, #oraclient{socket=Socket, sdu=Length, timeouts=Touts} = State) ->
@@ -332,7 +333,13 @@ get_param(Task) when is_pid(Task) ->
 get_param(Tseq) -> Tseq.
 
 get_param([], _M, Acc) -> Acc;
-get_param([H|L], M, Acc) -> get_param(L, M, Acc++[maps:get(list_to_atom(H), M)]).
+get_param([H|L], M, Acc) -> get_param(L, M, Acc++[maps:get(list_to_atom(H), M)]);
+get_param(format, {out, Data}, Format) -> get_param(out, ?ENCODER:encode_helper(param, Data), Format);
+get_param(format, {in, Data}, Format) -> get_param(in, Data, Format);
+get_param(format, Data, Format) -> get_param(in, Data, Format);
+get_param(Type, Data, Format) when is_atom(Type) ->
+    {<<>>, DataType, Length, Scale, Charset} = ?DECODER:decode_helper(param, Data, Format),
+    #format{param=Type,data_type=DataType,data_length=Length,data_scale=Scale,charset=Charset}.
 
 get_param(defcols, {Query, Cursors}) when is_pid(Cursors) ->
     Acc = get_result(Cursors),
@@ -355,13 +362,7 @@ get_param(type, {_Type, fetch}) -> fetch;
 get_param(type, {Type, []}) -> Type;
 get_param(data, {out, Data}) -> ?ENCODER:encode_helper(param, Data);
 get_param(data, {in, Data}) -> Data;
-get_param(data, Data) -> Data;
-get_param(format, {out, Data}) -> get_param(out, ?ENCODER:encode_helper(param, Data));
-get_param(format, {in, Data}) -> get_param(in, Data);
-get_param(format, Data) -> get_param(in, Data);
-get_param(Type, Data) ->
-    {<<>>, DataType, Length, Scale, Charset} = ?DECODER:decode_helper(param, Data),
-    #format{param=Type,data_type=DataType,data_length=Length,data_scale=Scale,charset=Charset}.
+get_param(data, Data) -> Data.
 
 get_record(Type, [], Request, Task) ->
     ?ENCODER:encode_record(Type, #oraclient{req=Request, seq=get_param(Task)});
