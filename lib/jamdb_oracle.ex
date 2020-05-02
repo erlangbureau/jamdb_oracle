@@ -271,23 +271,21 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp decode(elem), do: elem
 
   def encode(_, [], _), do: []
-  def encode(_, params, opts) do 
-    charset = if( Keyword.has_key?(opts, :charset) == true, 
-      do: String.starts_with?(Atom.to_string(opts[:charset]), ["al16","ja16","ko16","zht16","zhs16"]), else: false )
-    Enum.map(params, fn elem -> encode(elem, charset) end)
+  def encode(_, params, _) do
+    Enum.map(params, fn elem -> encode(elem) end)
   end
 
-  defp encode(nil, _), do: :null
-  defp encode(true, _), do: "1"
-  defp encode(false, _), do: "0"
-  defp encode(%Decimal{} = decimal, _), do: Decimal.to_float(decimal)
-  defp encode(%DateTime{} = datetime, _), do: NaiveDateTime.to_erl(DateTime.to_naive(datetime))
-  defp encode(%NaiveDateTime{} = naive, _), do: NaiveDateTime.to_erl(naive)
-  defp encode(%Ecto.Query.Tagged{value: elem}, _), do: elem
-  defp encode(elem, false) when is_binary(elem), do: elem |> to_charlist
-  defp encode(elem, charset) when is_map(elem), 
-    do: encode(Jamdb.Oracle.json_library().encode!(elem), charset)
-  defp encode(elem, _), do: elem
+  defp encode(nil), do: :null
+  defp encode(true), do: "1"
+  defp encode(false), do: "0"
+  defp encode(%Decimal{} = decimal), do: Decimal.to_float(decimal)
+  defp encode(%DateTime{} = datetime), do: NaiveDateTime.to_erl(DateTime.to_naive(datetime))
+  defp encode(%NaiveDateTime{} = naive), do: NaiveDateTime.to_erl(naive)
+  defp encode(%Ecto.Query.Tagged{value: elem, type: :binary}) when is_binary(elem), do: elem
+  defp encode(elem) when is_binary(elem), do: elem |> to_charlist
+  defp encode(elem) when is_map(elem),
+    do: encode(Jamdb.Oracle.json_library().encode!(elem))
+  defp encode(elem), do: elem
 
   defp expr(list) when is_list(list) do
     Enum.map(list, fn 
