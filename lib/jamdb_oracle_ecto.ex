@@ -15,6 +15,8 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
    * Using bind variables:
 
       `{"select 1+:1, sysdate, rowid from dual where 1=:1"`, `[1]}`
+
+      `{"insert into tabl values (:1)"`, `[<<16#E7,16#99,16#BE>>]}`
    * Calling stored procedure:
 
       `{"begin proc(:1, :2, :3); end;"`, `[1.0, 2.0, 3.0]}`
@@ -99,6 +101,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   `:decimal`              | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | [`Decimal`](https://hexdocs.pm/decimal)
   `:string`, `:binary`    | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
   `:string`, `:binary`    | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
+  `:string`, `:binary`    | `RAW`, `BLOB`                    | [`Ecto.Query.Tagged`](https://hexdocs.pm/ecto)
   `{:array, :integer}`    | `RAW`, `BLOB`                    | 'E799BE'
   `:boolean`              | `CHAR`, `VARCHAR2`, `NUMBER`     | true, false
   `:map`                  | `CLOB`, `NCLOB`                  | %{"one" => 1, "hundred" => "百"}
@@ -107,16 +110,21 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   ### Character sets
 
-  `:us7ascii`, `:we8iso8859p1`, `:ee8iso8859p2`, `:nee8iso8859p4`, `:cl8iso8859p5`, `:ar8iso8859p6`,`:el8iso8859p7`,
-  `:iw8iso8859p8`, `:we8iso8859p9`, `:ne8iso8859p10`, `:th8tisascii`, `:vn8mswin1258`, `:we8iso8859p15`,
-  `:blt8iso8859p13`, `:ee8mswin1250`, `:cl8mswin1251`, `:el8mswin1253`, `:iw8mswin1255`, `:tr8mswin1254`,
-  `:we8mswin1252`, `:blt8mswin1257`, `:ar8mswin1256`, `:ja16euc`, `:ja16sjis`, `:ja16euctilde`,`:ja16sjistilde`,
-  `:ko16mswin949`, `:zhs16gbk`, `:zht32euc`, `:zht16big5`, `:zht16mswin950`, `:zht16hkscs`
+  `:us7ascii`, `:we8iso8859p1`, `:ee8iso8859p2`, `:nee8iso8859p4`, `:cl8iso8859p5`, `:ar8iso8859p6`,
+  `:el8iso8859p7`,`:iw8iso8859p8`, `:we8iso8859p9`, `:ne8iso8859p10`, `:th8tisascii`, `:vn8mswin1258`,
+  `:we8iso8859p15`,`:blt8iso8859p13`, `:ee8mswin1250`, `:cl8mswin1251`, `:el8mswin1253`, `:iw8mswin1255`,
+  `:tr8mswin1254`,`:we8mswin1252`, `:blt8mswin1257`, `:ar8mswin1256`
+  
+  `:ja16euc`, `:ja16sjis`, `:ja16euctilde`,`:ja16sjistilde`,`:ko16mswin949`,
+  `:zhs16gbk`, `:zht32euc`, `:zht16big5`, `:zht16mswin950`, `:zht16hkscs`
 
   #### Examples
 
-      iex> Ecto.Adapters.SQL.query(YourApp.Repo, "select 1+:1, sysdate, rowid from dual where 1=:1 ", [1])
+      iex> Ecto.Adapters.SQL.query(YourApp.Repo, "select 1+:1,sysdate,rowid from dual where 1=:1 ", [1])
       {:ok, %{num_rows: 1, rows: [[2, ~N[2016-08-01 13:14:15], "AAAACOAABAAAAWJAAA"]]}}
+		
+      iex> binary = %Ecto.Query.Tagged{value: <<0xE7,0x99,0xBE>>, type: :binary}
+      iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", [binary])
 
   Imagine you have this migration:
 
