@@ -270,7 +270,7 @@ setopts(block, BindInd, _BatchLen, Auto) ->
 encode_token([], Acc) -> Acc;
 encode_token([Data|Rest], Acc) -> encode_token(Rest, <<Acc/binary, (encode_token(rxd, Data))/binary>>);
 encode_token(rxd, Data) when is_list(Data) -> encode_chr(Data);
-encode_token(rxd, Data) when is_binary(Data) -> encode_chr(unicode:characters_to_binary(Data, utf8, utf16));
+encode_token(rxd, Data) when is_binary(Data) -> encode_chr(Data);
 encode_token(rxd, Data) when is_number(Data) -> encode_len(encode_number(Data));
 encode_token(rxd, Data) when is_tuple(Data) -> encode_len(encode_date(Data));
 encode_token(rxd, cursor) -> <<1,0>>;
@@ -281,7 +281,8 @@ encode_token(rxd, [Data|Rest], Acc) ->
     encode_token(rxd, Rest, <<Acc/binary, (encode_token(Data, <<?TTI_RXD>>))/binary>>);
 encode_token(oac, Data, #format{charset=Charset}) when is_list(Data) ->
     encode_token(oac, ?TNS_TYPE_VARCHAR, setopts(size, Data), 16, Charset, 0);
-encode_token(oac, Data, _) when is_binary(Data) -> encode_token(oac, ?TNS_TYPE_VARCHAR, 4000, 16, ?AL16UTF16_CHARSET, 0);
+encode_token(oac, Data, _) when is_binary(Data) ->
+    encode_token(oac, ?TNS_TYPE_LONGRAW, 33554432, 0, 0, 0);
 encode_token(oac, Data, _) when is_number(Data) -> encode_token(oac, ?TNS_TYPE_NUMBER, 22, 0, 0, 0);
 encode_token(oac, {{_Year,_Mon,_Day}, {_Hour,_Min,_Sec,_Ms}}, _) -> encode_token(oac, ?TNS_TYPE_TIMESTAMP, 11, 0, 0, 0);
 encode_token(oac, {{_Year,_Mon,_Day}, {_Hour,_Min,_Sec,_Ms}, _}, _) -> encode_token(oac, ?TNS_TYPE_TIMESTAMPTZ, 13, 0, 0, 0);
