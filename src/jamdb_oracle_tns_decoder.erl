@@ -390,8 +390,13 @@ decode_data(Data, Values, {DefCol, [ValueFormat|RestRowFormat], Ver, Type=block}
 decode_data(Data, _ValueFormat, Values, 0, _Type) ->
     {lists:reverse(Values), Data};
 decode_data(Data, ValueFormat, Values, Num, Type) ->
-    {Value, RestData} = decode_data(Data, ValueFormat),
-    decode_data(decode_next(ub2,RestData), ValueFormat, [Value|Values], Num-1, Type).    
+    {Value, RestData} = decode_data(Data, ValueFormat, Num, Type),
+    decode_data(decode_next(ub2,RestData), ValueFormat, [Value|Values], Num-1, Type).
+
+decode_data(Bin, #format{data_type=DataType}, _Num, Type=return) when ?IS_LONG_TYPE(DataType) ->
+    decode_long(Bin, Type);
+decode_data(Bin, DataType, _Num, _Type) ->
+    decode_data(Bin, DataType).
 
 decode_data(Data, #format{data_type=DataType, data_length=0}) when ?IS_NULL_TYPE(DataType) ->
     {null, Data};
@@ -412,7 +417,9 @@ decode_data(Data, #format{data_type=DataType}) when ?IS_FIXED_TYPE(DataType) ->
 decode_data(Data, #format{data_type=DataType}) ->
     decode_value(Data, DataType).
 
-decode_value(Bin, DataType) when ?IS_CHAR_TYPE(DataType); ?IS_RAW_TYPE(DataType) ->
+decode_value(Bin, DataType) when ?IS_CHAR_TYPE(DataType) ->
+    decode_chr(Bin);
+decode_value(Bin, DataType) when ?IS_RAW_TYPE(DataType) ->
     decode_chr(Bin);
 decode_value(Bin, DataType) when ?IS_NUMBER_TYPE(DataType) ->
     {decode_number(Bin)};
@@ -453,7 +460,7 @@ decode_param({_Data, ValueFormat}) ->
 %        L when DataType =:= ?TNS_TYPE_DATE -> 7;
 %        L when DataType =:= ?TNS_TYPE_TIMESTAMPTZ -> 13;
 %        L -> L
-%    end.      
+%    end.
 
 decode_keyval(_Data,0,Acc) ->
     Acc;
@@ -641,7 +648,7 @@ decode_urowid(Data) ->
             {lid(Objid,Partid,Blocknum,Slotnum),Rest3};
         _ -> {Value, Rest3}
     end.
-    
+
 lid(O,P,B,S) -> lid(O,6,[])++lid(P,3,[])++lid(B,6,[])++lid(S,3,[]).
 
 lid(_N,0,Acc) -> Acc;
@@ -718,6 +725,12 @@ decode_adt(Data, Num, Acc) ->
 
 lrd(<<I,F,S,T,L, Rest/bits>>) when I > 245 -> {(F+S+T) * 256 + L, Rest};
 lrd(<<L, Rest/bits>>) -> {L, Rest}.
+
+decode_long(<<0, Rest/bits>>, _Type) ->
+    {null, Rest};
+decode_long(Data, _Type) ->
+    Value = decode_chr(Data),
+    {Value, decode_next(chr,Data)}.
 
 decode_long(<<0, Rest/bits>>) ->
     {null, decode_next(ub2,Rest,2)};
