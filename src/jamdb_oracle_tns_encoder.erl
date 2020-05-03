@@ -454,8 +454,8 @@ encode_helper(param, Data) ->
     Values =
     [
     {number, 0}, {integer, 0}, {float, 0}, {decimal, 0},
-    {varchar, []}, {char, []}, {string, []},
-    {nvarchar, <<>>}, {nchar, <<>>}, {binary, <<>>},
+    {varchar, []}, {char, []}, {clob, []}, {nvarchar, []}, {nchar, []}, {nclob, []}, {string, []},
+    {raw, <<>>}, {blob, <<>>}, {binary, <<>>}, {hexstring, []},
     {date, {1900,1,1}}, {timestamp, {{1900,1,1}, {0,0,0,0}}}, {timestamptz, {{1900,1,1}, {0,0,0,0}, 0}}
     ],
     proplists:get_value(Data, Values, Data);
