@@ -37,7 +37,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
    * Row prefetching:
 
       `{:fetch, "select * from tabl where id>:1"`, `[1]}`
-      
+
       `{:fetch, cursor, row_format, last_row}`
 
   ## Options
@@ -61,7 +61,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:timeout` - The default timeout to use on queries, defaults to `15000`
 
   ### Pool options
-	
+
     * `:pool` - The connection pool module, defaults to `DBConnection.ConnectionPool`
     * `:pool_size` - The size of the pool, defaults to `1`
     * `:idle_interval` - The ping interval to validate an idle connection, defaults to `1000`	
@@ -77,19 +77,20 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:prelim` - Mode that is permitted when the database is down
 
   ### Output parameters
-  
+
   Using syntax for keyword lists: `[{:out, :cursor}]`, `[out: :cursor]`
 
   Oracle types                     | Literal syntax in params
   :------------------------------- | :-----------------------
   `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | `:number`, `:integer`, `:float`, `:decimal`
-  `CHAR`, `VARCHAR2`               | `:varchar`, `:char`, `:string`
-  `NCHAR`, `NVARCHAR2`             | `:nvarchar`, `:nchar`, `:binary`
+  `CHAR`, `VARCHAR2`, `CLOB`       | `:varchar`, `:char`, `:clob`, `:string`
+  `NCHAR`, `NVARCHAR2`, `NCLOB`    | `:nvarchar`, `:nchar`, `:nclob`
+  `RAW`, `BLOB`                    | `:raw`, `:blob`, `:binary`, `:hexstring`
   `DATE`                           | `:date`
   `TIMESTAMP`                      | `:timestamp`
   `TIMESTAMP WITH TIME ZONE`       | `:timestamptz`
   `SYS_REFCURSOR`                  | `:cursor`
-  
+
   ### Primitive types
 
   The primitive types are:
@@ -101,8 +102,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   `:decimal`              | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | [`Decimal`](https://hexdocs.pm/decimal)
   `:string`, `:binary`    | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
   `:string`, `:binary`    | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
-  `:string`, `:binary`    | `RAW`, `BLOB`                    | [`Ecto.Query.Tagged`](https://hexdocs.pm/ecto)
-  `{:array, :integer}`    | `RAW`, `BLOB`                    | 'E799BE'
+  `:string`, `:binary`    | `RAW`, `BLOB`                    | [`Ecto.Query.Tagged`](https://hexdocs.pm/ecto), 'E799BE'
   `:boolean`              | `CHAR`, `VARCHAR2`, `NUMBER`     | true, false
   `:map`                  | `CLOB`, `NCLOB`                  | %{"one" => 1, "hundred" => "百"}
   `:naive_datetime`       | `DATE`, `TIMESTAMP`              | [`NaiveDateTime`](https://hexdocs.pm/elixir)
@@ -114,7 +114,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   `:el8iso8859p7`,`:iw8iso8859p8`, `:we8iso8859p9`, `:ne8iso8859p10`, `:th8tisascii`, `:vn8mswin1258`,
   `:we8iso8859p15`,`:blt8iso8859p13`, `:ee8mswin1250`, `:cl8mswin1251`, `:el8mswin1253`, `:iw8mswin1255`,
   `:tr8mswin1254`,`:we8mswin1252`, `:blt8mswin1257`, `:ar8mswin1256`
-  
+
   `:ja16euc`, `:ja16sjis`, `:ja16euctilde`,`:ja16sjistilde`,`:ko16mswin949`,
   `:zhs16gbk`, `:zht32euc`, `:zht16big5`, `:zht16mswin950`, `:zht16hkscs`
 
@@ -122,7 +122,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
       iex> Ecto.Adapters.SQL.query(YourApp.Repo, "select 1+:1,sysdate,rowid from dual where 1=:1 ", [1])
       {:ok, %{num_rows: 1, rows: [[2, ~N[2016-08-01 13:14:15], "AAAACOAABAAAAWJAAA"]]}}
-		
+
       iex> binary = %Ecto.Query.Tagged{value: <<0xE7,0x99,0xBE>>, type: :binary}
       iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", [binary])
 
@@ -145,7 +145,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   You can execute it manually with:
 
       Ecto.Migrator.up(YourApp.Repo, 20160801131415, YourApp.Migration)
-      
+
   """
 
   use Ecto.Adapters.SQL, driver: Jamdb.Oracle, migration_lock: nil
