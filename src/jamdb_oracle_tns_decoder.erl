@@ -577,11 +577,13 @@ decode_date(<<Data:11/binary,H,M>>) ->
         0 -> ltz(H - 20);
         _ ->
             Zoneid = ((H band 127) bsl 6) + ((M band 252) bsr 2),
-            try lists:nth(Zoneid,
-            [0,-14,-13,-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,1,2,3,4,5,6,7,8,9,10,11,12]) of
+            try lists:nth(Zoneid, [0,-14,-13,-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,1,2,3,4,5,6,7,8,9,10,11,12]) of
                 Hour -> ltz(Hour)
             catch
-                error:_ -> proplists:get_value(Zoneid, ?ZONEIDMAP, {Zoneid})
+		error:_ -> case proplists:get_value(Zoneid, ?ZONEIDMAP) of
+                               undefined -> {Zoneid};
+		               {Region, Zone} -> lists:nth(Region, ?REGION)++"/"++Zone
+                           end
             end
     end).
 
