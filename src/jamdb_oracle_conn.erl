@@ -356,6 +356,7 @@ get_param(defcols, {{_Sum, {LCursor, _Cursor, RowFormat}}, _Ver, _RowFormat, Typ
 get_param(type, {"ALTER", _Bind, _Fetch}) -> {block, 0};
 get_param(type, {"BEGIN", _Bind, _Fetch}) -> {block, 0};
 get_param(type, {"SELECT", [], Fetch}) -> {select, Fetch};
+get_param(type, {"WITH", [], Fetch}) -> {select, Fetch};
 get_param(type, {_Value, [], _Fetch}) -> {change, 0};
 get_param(type, {_Value, _Bind, _Fetch}) -> {return, 0};
 get_param(type, {_Type, fetch}) -> fetch;
