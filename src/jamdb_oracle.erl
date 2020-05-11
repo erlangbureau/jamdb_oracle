@@ -1,5 +1,5 @@
 -module(jamdb_oracle).
--vsn("0.4.0").
+-vsn("0.4.1").
 -behaviour(gen_server).
 
 -ifdef(OTP_RELEASE).
