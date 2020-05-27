@@ -414,6 +414,9 @@ decode_data(Data, #format{data_type=DataType, data_scale=Scale}) when ?IS_NUMBER
 decode_data(Data, #format{data_type=DataType}) when ?IS_FIXED_TYPE(DataType) ->
     <<Length, Bin:Length/binary, Rest/binary>> = Data,
     {decode_value(Bin, DataType), Rest};
+decode_data(Data, #format{data_type=?TNS_TYPE_REFCURSOR}) ->
+    {_DefCol, Rest2} = decode_token(rxd, Data, {0, [], fetch}),
+    {null, decode_next(ub1,Rest2)};
 decode_data(Data, #format{data_type=DataType}) ->
     decode_value(Data, DataType).
 
