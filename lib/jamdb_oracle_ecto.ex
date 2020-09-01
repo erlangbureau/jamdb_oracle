@@ -91,6 +91,10 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   `TIMESTAMP WITH TIME ZONE`       | `:timestamptz`
   `SYS_REFCURSOR`                  | `:cursor`
 
+  ### Input parameters
+
+  Using syntax for keyword lists: `[{:in, [:float, :binary]}]`, `[in: [:float, :binary]]`
+
   ### Primitive types
 
   The primitive types are:
@@ -100,9 +104,10 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   `:id`, `:integer`       | `NUMBER (*,0)`, `INTEGER`        | 1, 2, 3
   `:float`                | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | 1.0, 2.0, 3.0
   `:decimal`              | `NUMBER`,`FLOAT`,`BINARY_FLOAT`  | [`Decimal`](https://hexdocs.pm/decimal)
-  `:string`, `:binary`    | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
-  `:string`, `:binary`    | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
-  `:string`, `:binary`    | `RAW`, `BLOB`                    | [`Ecto.Query.Tagged`](https://hexdocs.pm/ecto), 'E799BE'
+  `:string`               | `CHAR`, `VARCHAR2`, `CLOB`       | "one hundred"
+  `:string`               | `NCHAR`, `NVARCHAR2`, `NCLOB`    | "百元", "万円"
+  `:binary`               | `RAW`, `BLOB`                    | [`Ecto.Query.Tagged`](https://hexdocs.pm/ecto), 'E799BE'
+  `:binary_id`,`Ecto.UUID`| `RAW`, `BLOB`                    | [`Ecto.UUID`](https://hexdocs.pm/ecto)
   `:boolean`              | `CHAR`, `VARCHAR2`, `NUMBER`     | true, false
   `:map`                  | `CLOB`, `NCLOB`                  | %{"one" => 1, "hundred" => "百"}
   `:naive_datetime`       | `DATE`, `TIMESTAMP`              | [`NaiveDateTime`](https://hexdocs.pm/elixir)
@@ -125,6 +130,9 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
       iex> binary = %Ecto.Query.Tagged{value: <<0xE7,0x99,0xBE>>, type: :binary}
       iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", [binary])
+      
+      iex> binary = <<0xE7,0x99,0xBE>>
+      iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", [binary]], [in: [:binary]])
 
   Imagine you have this migration:
 
@@ -231,6 +239,14 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   def query(conn, query, params, opts) do
     case DBConnection.prepare_execute(conn, query!(query, ""), params, opts) do
       {:ok, _, result}  -> {:ok, result}
+      {:error, err} -> {:error, err}
+    end
+  end
+
+  @impl false
+  def explain_query(conn, query, params, opts) do
+    case query(conn, IO.iodata_to_binary(["EXPLAIN PLAN FOR ", query]), params, opts) do
+      {:ok, _result} -> query(conn, "SELECT * FROM table(DBMS_XPLAN.DISPLAY())", params, opts)
       {:error, err} -> {:error, err}
     end
   end
