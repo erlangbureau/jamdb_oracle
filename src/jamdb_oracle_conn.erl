@@ -308,7 +308,6 @@ get_result(_Type, 1403, _RowNumber, RowFormat, Rows) ->
     Column = [get_result(Fmt) || Fmt <- RowFormat],
     {ok, [{result_set, Column, [], Rows}]};
 get_result(_Type, RetCode, _RowNumber, Reason, []) ->
-%    io:format("~s~n", [Reason]),
     {error, [{proc_result, RetCode, Reason}]};
 get_result(_Type, _RetCode, _RowNumber, _RowFormat, _Rows) ->
     more.
@@ -355,6 +354,7 @@ get_param(defcols, {{_Sum, {LCursor, _Cursor, RowFormat}}, _Ver, _RowFormat, Typ
     {LCursor, RowFormat, Type};
 get_param(type, {"ALTER", _Bind, _Fetch}) -> {block, 0};
 get_param(type, {"BEGIN", _Bind, _Fetch}) -> {block, 0};
+get_param(type, {"EXPLAIN", _Bind, _Fetch}) -> {block, 0};
 get_param(type, {"SELECT", [], Fetch}) -> {select, Fetch};
 get_param(type, {"WITH", [], Fetch}) -> {select, Fetch};
 get_param(type, {_Value, [], _Fetch}) -> {change, 0};
