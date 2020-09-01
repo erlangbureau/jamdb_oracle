@@ -1,5 +1,5 @@
 defmodule Jamdb.Oracle do
-  @vsn "0.4.1"
+  @vsn "0.4.2"
   @moduledoc """
   Adapter module for Oracle. `DBConnection` behaviour implementation.
 
@@ -273,9 +273,17 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp decode(elem), do: elem
 
   def encode(_, [], _), do: []
-  def encode(_, params, _) do
-    Enum.map(params, fn elem -> encode(elem) end)
+  def encode(_, params, opts) do
+    types = Enum.map(Keyword.get(opts, :in, []), fn elem -> elem end)
+    Enum.map(encode(params, types), fn elem -> encode(elem) end)
   end
+
+  defp encode(params, []), do: params
+  defp encode([%Ecto.Query.Tagged{type: :binary} = elem | next1], [_type | next2]),
+    do: [ elem | encode(next1, next2)]
+  defp encode([elem | next1], [type | next2]) when type in [:binary, :binary_id, Ecto.UUID],
+    do: [ %Ecto.Query.Tagged{value: elem, type: :binary} | encode(next1, next2)]
+  defp encode([elem | next1], [_type | next2]), do: [ elem | encode(next1, next2)]
 
   defp encode(nil), do: :null
   defp encode(true), do: "1"
