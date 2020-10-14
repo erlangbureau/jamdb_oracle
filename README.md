@@ -56,11 +56,7 @@ First, supply connection details for your test database in test/jamdb_oracle_tes
 
 Author
 ======
-<img src="https://pubs.payoneer.com/Content/Default/img/partner-logo.png" width="72">
-
-[Make a Payment](https://myaccount.payoneer.com/MainPage/Widget.aspx?w=SelectionPage#/pay/selectionpage)
-
-[Mykhailo Vstavskyi](mailto:mihail.vstavskiy@hotmail.com)
+Mykhailo Vstavskyi
 
 Contributors
 ============
