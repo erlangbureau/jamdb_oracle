@@ -8,12 +8,14 @@ defmodule Jamdb.Oracle.Query do
 
   defstruct [:statement, :name, :batch]  
 
-  alias Ecto.Query.{BooleanExpr, JoinExpr, QueryExpr}
+  @parent_as __MODULE__
+  alias Ecto.Query.{BooleanExpr, JoinExpr, QueryExpr, WithExpr}
 
   @doc false
-  def all(query) do
-    sources = create_names(query)
+  def all(query, as_prefix \\ []) do
+    sources = create_names(query, as_prefix)
 
+    cte      = cte(query, sources)
     from     = from(query, sources)
     select   = select(query, sources)
     window   = window(query, sources)
@@ -27,12 +29,12 @@ defmodule Jamdb.Oracle.Query do
     offset   = offset(query, sources)
     lock     = lock(query.lock)
 
-    [select, window, from, join, where, group_by, having, combinations, order_by, offset, limit | lock]
+    [cte, select, window, from, join, where, group_by, having, combinations, order_by, offset, limit | lock]
   end
 
   @doc false
   def update_all(%{from: %{source: source}} = query, prefix \\ nil) do
-    sources = create_names(query)
+    sources = create_names(query, [])
     {from, name} = get_source(query, sources, 0, source)
 
     prefix = prefix || ["UPDATE ", from, ?\s, name | " SET "]
@@ -44,7 +46,7 @@ defmodule Jamdb.Oracle.Query do
 
   @doc false
   def delete_all(%{from: from} = query) do
-    sources = create_names(query)
+    sources = create_names(query, [])
     {from, name} = get_source(query, sources, 0, from)
 
     where = where(%{query | wheres: query.wheres}, sources)
@@ -167,6 +169,20 @@ defmodule Jamdb.Oracle.Query do
     {from, name} = get_source(query, sources, 0, source)
     [" FROM ", from, ?\s | name]
   end
+
+  defp cte(%{with_ctes: %WithExpr{queries: [_ | _] = queries}} = query, sources) do
+    ctes = intersperse_map(queries, ", ", &cte_expr(&1, sources, query))
+    ["WITH ", ctes, " "]
+  end
+
+  defp cte(%{with_ctes: _}, _), do: []
+
+  defp cte_expr({name, cte}, sources, query) do
+    [quote_name(name), " AS ", cte_query(cte, sources, query)]
+  end
+
+  defp cte_query(%Ecto.Query{} = query, _, _), do: ["(", all(query), ")"]
+  defp cte_query(%QueryExpr{expr: expr}, sources, query), do: expr(expr, sources, query)
 
   defp update_fields(%{updates: updates} = query, sources) do
     for(%{expr: expr} <- updates,
@@ -325,6 +341,11 @@ defmodule Jamdb.Oracle.Query do
     [?: | Integer.to_string(ix + 1)]
   end
 
+  defp expr({{:., _, [{:parent_as, _, [{:&, _, [idx]}]}, field]}, _, []}, _sources, query)
+      when is_atom(field) do
+    quote_qualified_name(field, query.aliases[@parent_as], idx)
+  end
+
   defp expr({{:., _, [{:&, _, [idx]}, field]}, _, []}, sources, _query) when is_atom(field) do
     quote_qualified_name(field, sources, idx)
   end
@@ -352,6 +373,10 @@ defmodule Jamdb.Oracle.Query do
     expr({:in, [], [left, right]}, sources, query)
   end
 
+  defp expr({:in, _, [left, %Ecto.SubQuery{} = subquery]}, sources, query) do
+    [expr(left, sources, query), " IN ", expr(subquery, sources, query)]
+  end
+
   defp expr({:in, _, [left, right]}, sources, query) do
     [expr(left, sources, query), " = ANY(", expr(right, sources, query), ?)]
   end
@@ -364,8 +389,9 @@ defmodule Jamdb.Oracle.Query do
     ["NOT (", expr(expr, sources, query), ?)]
   end
 
-  defp expr(%Ecto.SubQuery{query: query}, _sources, _query) do
-    [?(, all(query), ?)]
+  defp expr(%Ecto.SubQuery{query: query}, sources, _query) do
+    query = put_in(query.aliases[@parent_as], sources)
+    [?(, all(query, subquery_as_prefix(sources)), ?)]
   end
 
   defp expr({:fragment, _, [kw]}, _sources, query) when is_list(kw) or tuple_size(kw) == 3 do
@@ -471,29 +497,33 @@ defmodule Jamdb.Oracle.Query do
      " INTO ", intersperse_map(returning, ", ", &[?: | quote_name(&1)])]
   end   
 
-  defp create_names(%{sources: sources}) do
-    create_names(sources, 0, tuple_size(sources)) |> List.to_tuple()
+  defp create_names(%{sources: sources}, as_prefix) do
+    create_names(sources, 0, tuple_size(sources), as_prefix) |> List.to_tuple()
   end
 
-  defp create_names(sources, pos, limit) when pos < limit do
-    [create_name(sources, pos) | create_names(sources, pos + 1, limit)]
+  defp create_names(sources, pos, limit, as_prefix) when pos < limit do
+    [create_name(sources, pos, as_prefix) | create_names(sources, pos + 1, limit, as_prefix)]
   end
 
-  defp create_names(_sources, pos, pos) do
-    []
+  defp create_names(_sources, pos, pos, as_prefix) do
+    [as_prefix]
   end
 
-  defp create_name(sources, pos) do
+  defp subquery_as_prefix(sources) do
+    [?s | :erlang.element(tuple_size(sources), sources)]
+  end
+
+  defp create_name(sources, pos, as_prefix) do
     case elem(sources, pos) do
       {:fragment, _, _} ->
-        {nil, [?f | Integer.to_string(pos)], nil}
+        {nil, as_prefix ++ [?f | Integer.to_string(pos)], nil}
 
       {table, schema, prefix} ->
-        name = [create_alias(table) | Integer.to_string(pos)]
+        name = as_prefix ++ [create_alias(table) | Integer.to_string(pos)]
         {quote_table(prefix, table), name, schema}
 
       %Ecto.SubQuery{} ->
-        {nil, [?s | Integer.to_string(pos)], nil}
+        {nil, as_prefix ++ [?s | Integer.to_string(pos)], nil}
     end
   end
 
