@@ -291,6 +291,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp encode(%Decimal{} = decimal), do: Decimal.to_float(decimal)
   defp encode(%DateTime{} = datetime), do: NaiveDateTime.to_erl(DateTime.to_naive(datetime))
   defp encode(%NaiveDateTime{} = naive), do: NaiveDateTime.to_erl(naive)
+  defp encode(%Date{} = date), do: Date.to_erl(date)
   defp encode(%Ecto.Query.Tagged{value: elem, type: :binary}) when is_binary(elem), do: elem
   defp encode(elem) when is_binary(elem), do: elem |> to_charlist
   defp encode(elem) when is_map(elem),
