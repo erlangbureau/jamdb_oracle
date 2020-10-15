@@ -437,6 +437,10 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp expr({:count, _, []}, _sources, _query), do: "count(*)"
+  defp expr({:count, _, [literal, :distinct]}, sources, query) do
+    exprs = expr(literal, sources, query)
+    ["count (", distinct(%QueryExpr{expr: exprs}, sources, query), exprs, ?)]
+  end
 
   defp expr({fun, _, args}, sources, query) when is_atom(fun) and is_list(args) do
     case handle_call(fun, length(args)) do
