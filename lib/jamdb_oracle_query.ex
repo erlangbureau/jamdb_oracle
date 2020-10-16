@@ -50,7 +50,7 @@ defmodule Jamdb.Oracle.Query do
     {from, name} = get_source(query, sources, 0, from)
 
     where = where(%{query | wheres: query.wheres}, sources)
-    
+
     ["DELETE FROM ", from, ?\s, name, where | returning(query, sources)]
   end
 
@@ -78,6 +78,10 @@ defmodule Jamdb.Oracle.Query do
     intersperse_reduce(values, ?,, counter, fn
       nil, counter ->
         {"DEFAULT", counter}
+
+      {%Ecto.Query{} = query, params_counter}, counter ->
+        {[?(, all(query), ?)], counter + params_counter}
+
       _, counter ->
         {[?: | Integer.to_string(counter)], counter + 1}
     end)
@@ -213,7 +217,7 @@ defmodule Jamdb.Oracle.Query do
         end
 
         {join, name} = get_source(query, sources, ix, source)
-        [join_qual(qual), join, " ", name | join_on(qual, expr, sources, query)]
+        [join_qual(qual), join, ?\s, name | join_on(qual, expr, sources, query)]
     end)]
   end
 
