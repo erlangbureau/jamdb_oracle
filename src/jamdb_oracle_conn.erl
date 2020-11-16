@@ -342,7 +342,7 @@ get_param(Type, Data, Format) when is_atom(Type) ->
 
 get_param(defcols, {Query, Cursors}) when is_pid(Cursors) ->
     Acc = get_result(Cursors),
-    Sum = erlang:crc32(unicode:characters_to_binary(Query)),
+    Sum = erlang:crc32(?ENCODER:encode_str(Query)),
     {Sum, proplists:get_value(Sum, Acc, {0,0,[]})};
 get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) when LCursor =:= Cursor -> {LCursor, 0};
 get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) -> {LCursor, Cursor};
