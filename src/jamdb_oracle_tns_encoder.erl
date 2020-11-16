@@ -4,6 +4,7 @@
 -export([encode_packet/3]).
 -export([encode_record/2]).
 -export([encode_token/3]).
+-export([encode_str/1]).
 -export([encode_helper/2]).
 
 -include("jamdb_oracle.hrl").
@@ -370,10 +371,15 @@ encode_sb4(Data) ->
 %encode_dalc(Data) when byte_size(Data) > 64 -> <<(encode_chr(Data))/binary>>.
 %encode_dalc(Data) -> <<(encode_sb4(byte_size(Data)))/binary,(encode_chr(Data))/binary>>.
 
-encode_str(Data) -> unicode:characters_to_binary(Data).
+encode_str(Data) ->
+    try list_to_binary(Data) of     %%latin-1
+        Bin -> Bin
+    catch
+	error:_ -> unicode:characters_to_binary(Data)
+    end.
 
 encode_chr(Data) when is_list(Data) ->
-    encode_chr(unicode:characters_to_binary(Data));
+    encode_chr(encode_str(Data));
 encode_chr(Data) when byte_size(Data) > 64 ->
     encode_chr(Data,<<254>>);
 encode_chr(Data) ->
