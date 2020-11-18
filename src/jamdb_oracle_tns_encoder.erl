@@ -107,8 +107,8 @@ encode_record(auth, #oraclient{env=EnvOpts,req=Request,seq=Tseq}) ->
 encode_record(dty, #oraclient{charset=Charset}) ->
     <<
     ?TTI_DTY,
-    (encode_ub2(Charset))/binary,	%cli in charset
-    (encode_ub2(Charset))/binary,	%cli out charset
+    (encode_ub2(Charset))/binary,	                  %cli in charset
+    (encode_ub2(encode_helper(utf16, Charset)))/binary,   %cli out charset
     1,
     38,6,1,0,0,106,1,1,6,1,1,1,1,1,1,0,41,144,3,7,3,0,1,0,79,1,55,4,0,0,0,0,12,0,0,6,0,1,1,
     7,2,0,0,0,0,0,0,
@@ -456,6 +456,11 @@ encode_date({{Year,Mon,Day}, {Hour,Min,Sec}}) ->
     (Sec + 1)
     >>.
 
+encode_helper(utf16, Data) ->
+    case lists:member(Data, [?AL16UTF16_CHARSET,830,832,837,838,846,852,860,865,867,868]) of
+	false -> Data;
+	true -> ?UTF8_CHARSET
+    end;
 encode_helper(param, Data) ->
     Values =
     [
