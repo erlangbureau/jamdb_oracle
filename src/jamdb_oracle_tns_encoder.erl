@@ -66,16 +66,17 @@ encode_record(sess, #oraclient{env=EnvOpts,seq=Tseq}) ->
     Role            = proplists:get_value(role, EnvOpts, 0),
     Prelim          = proplists:get_value(prelim, EnvOpts, 0),
     AppName         = proplists:get_value(app_name, EnvOpts, "jamdb"),
+    User2 = encode_str(User),
     <<
     ?TTI_FUN,
     ?TTI_SESS, Tseq,
     1,
-    (encode_sb2(length(User)))/binary,
+    (encode_sb2(byte_size(User2)))/binary,
     (encode_sb2((Role * 32) bor (Prelim * 128) bor 1))/binary, %logon mode
     1,
     (encode_sb2(4))/binary,	   %keyval count
     1,1,
-    (encode_str(User))/binary,
+    User2/binary,
     (encode_keyval("AUTH_PROGRAM_NM", AppName))/binary,
     (encode_keyval("AUTH_MACHINE", UserHost))/binary,
     (encode_keyval("AUTH_PID", UserPID))/binary,
@@ -86,19 +87,21 @@ encode_record(auth, #oraclient{env=EnvOpts,req=Request,seq=Tseq}) ->
     Pass            = proplists:get_value(password, EnvOpts),
     Role            = proplists:get_value(role, EnvOpts, 0),
     Prelim          = proplists:get_value(prelim, EnvOpts, 0),
-    Logon = Request#logon{user=User, password=Pass},
+    User2 = encode_str(User),
+    Pass2 = encode_str(Pass),
+    Logon = Request#logon{user=binary_to_list(User2), password=binary_to_list(Pass2)},
     {AuthPass, AuthSess, SpeedyKey, KeyConn} = jamdb_oracle_crypt:generate(Logon),
     KeyInd = if length(SpeedyKey) > 0 -> 1; true -> 0 end,
     {<<
     ?TTI_FUN,
     ?TTI_AUTH, Tseq,
     1,
-    (encode_sb2(length(User)))/binary,
+    (encode_sb2(byte_size(User2)))/binary,
     (encode_sb2((Role * 32) bor (Prelim * 128) bor 1 bor 256))/binary, %logon mode
     1,
     (encode_sb2(2 + KeyInd))/binary,	    %keyval count
     1,1,
-    (encode_str(User))/binary,
+    User2/binary,
     (encode_keyval("AUTH_PASSWORD", AuthPass))/binary,
     (if KeyInd > 0 -> encode_keyval("AUTH_PBKDF2_SPEEDY_KEY", SpeedyKey); true -> <<>> end)/binary,
     (encode_keyval(<<"AUTH_SESSKEY">>, AuthSess, 1))/binary
