@@ -456,11 +456,6 @@ encode_date({{Year,Mon,Day}, {Hour,Min,Sec}}) ->
     (Sec + 1)
     >>.
 
-encode_helper(utf16, Data) ->
-    case lists:member(Data, [?AL16UTF16_CHARSET,830,832,837,838,846,852,860,865,867,868]) of
-	false -> Data;
-	true -> ?UTF8_CHARSET
-    end;
 encode_helper(param, Data) ->
     Values =
     [
@@ -470,6 +465,11 @@ encode_helper(param, Data) ->
     {date, {1900,1,1}}, {timestamp, {{1900,1,1}, {0,0,0,0}}}, {timestamptz, {{1900,1,1}, {0,0,0,0}, 0}}
     ],
     proplists:get_value(Data, Values, Data);
+encode_helper(utf16, Data) ->
+    case lists:member(Data, [?AL16UTF16_CHARSET,830,832,837,838,846,852,860,865,867,868]) of
+	false -> Data;
+	true -> ?UTF8_CHARSET
+    end;
 encode_helper(sess, L) ->
     Secs = calendar:datetime_to_gregorian_seconds(calendar:local_time()),
     USecs = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
