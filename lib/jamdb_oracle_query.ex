@@ -778,13 +778,13 @@ defmodule Jamdb.Oracle.Query do
          reference_on_delete(ref.on_delete)]
 
   defp constraint_expr(%Reference{} = ref, table, name),
-    do: [", ADD CONSTRAINT ", reference_name(ref, table, name), ?\s,
+    do: [" ADD CONSTRAINT ", reference_name(ref, table, name), ?\s,
          "FOREIGN KEY (", quote_name(name), ") REFERENCES ",
          quote_table(ref.prefix || table.prefix, ref.table), ?(, quote_name(ref.column), ?),
          reference_on_delete(ref.on_delete)]
 
   defp drop_constraint_expr(%Reference{} = ref, table, name),
-    do: ["DROP CONSTRAINT ", reference_name(ref, table, name), ", "]
+    do: [" DROP CONSTRAINT ", reference_name(ref, table, name), ", "]
   defp drop_constraint_expr(_, _, _),
     do: []
 
