@@ -243,7 +243,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
     end
   end
 
-  @impl false
+  @impl true
   def explain_query(conn, query, params, opts) do
     case query(conn, IO.iodata_to_binary(["EXPLAIN PLAN FOR ", query]), params, opts) do
       {:ok, _result} -> query(conn, "SELECT * FROM table(DBMS_XPLAN.DISPLAY())", params, opts)
@@ -267,7 +267,6 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   defdelegate table_exists_query(table), to: Jamdb.Oracle.Query
   defdelegate execute_ddl(command), to: Jamdb.Oracle.Query
   defdelegate ddl_logs(result), to: Jamdb.Oracle.Query
-  defdelegate to_constraints(err), to: Jamdb.Oracle.Query
   defdelegate to_constraints(err, opts), to: Jamdb.Oracle.Query
 
 end
