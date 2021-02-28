@@ -20,9 +20,9 @@
 o5logon(#logon{auth=Sess, der_salt=DerivedSalt, user=User, password=Pass}, Bits) when Bits =:= 128 ->
     IVec = <<0:64>>,
     CliPass = norm(User++Pass),
-    Rest1 = crypto:block_encrypt(des_cbc, hexstr2bin("0123456789ABCDEF"), IVec, CliPass),
-    Rest2 = crypto:block_encrypt(des_cbc, binary:part(Rest1,byte_size(Rest1),-8), IVec, CliPass),
-    KeySess = <<(binary:part(Rest2,byte_size(Rest2),-8))/binary,0:64>>,
+    B1 = crypto:block_encrypt(des_cbc, hexstr2bin("0123456789ABCDEF"), IVec, CliPass),
+    B2 = crypto:block_encrypt(des_cbc, binary:part(B1,byte_size(B1),-8), IVec, CliPass),
+    KeySess = <<(binary:part(B2,byte_size(B2),-8))/binary,0:64>>,
     o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
 o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits) when Bits =:= 192 ->
     Data = crypto:hash(sha,<<(list_to_binary(Pass))/binary,(hexstr2bin(Salt))/binary>>),
@@ -66,8 +66,8 @@ validate(Resp, KeyConn) ->
     IVec = <<0:128>>,
     Data = crypto:block_decrypt(aes_cbc, KeyConn, IVec, hexstr2bin(Resp)),
     case binary:match(Data,<<"SERVER_TO_CLIENT">>) of
-	nomatch -> error;
-	_ -> ok
+        nomatch -> error;
+        _ -> ok
     end.
 
 %%====================================================================
@@ -101,9 +101,9 @@ norm(<<>>,S) ->
     S;
 norm(<<U/utf8,R/binary>>,S) ->
     C = case U of
-	N when N > 255 -> 63;
-	N when N >= 97, N =< 122 -> N-32;
-	N -> N
+        N when N > 255 -> 63;
+        N when N >= 97, N =< 122 -> N-32;
+        N -> N
     end,
     norm(R,S++[0,C]).
 
