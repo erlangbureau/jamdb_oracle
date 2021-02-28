@@ -1,10 +1,6 @@
 -module(jamdb_oracle).
--vsn("0.4.4").
+-vsn("0.4.5").
 -behaviour(gen_server).
-
--ifdef(OTP_RELEASE).
--compile({nowarn_deprecated_function, [{erlang, get_stacktrace, 0}]}).
--endif.
 
 %% API
 -export([start_link/1, start/1]).
@@ -58,10 +54,8 @@ handle_call({sql_query, Query}, _From, State) ->
         {error, Type, Reason, State2} ->
             {reply, {error, Type, Reason}, State2}
     catch
-        error:_ ->
-            Stacktrace = erlang:get_stacktrace(),
-            {ok, State2} = jamdb_oracle_conn:reconnect(State),
-            {reply, {error, local, Stacktrace}, State2}
+        error:Reason ->
+            {reply, {error, local, Reason}, State}
     end;
 %handle_call({prepare, Query}, _From, State) ->
 %handle_call({execute, Query}, _From, State) ->
