@@ -2,7 +2,6 @@
 
 %% API
 -export([connect/1, connect/2]).
--export([reconnect/1]).
 -export([disconnect/1, disconnect/2]).
 -export([sql_query/2, sql_query/3]).
 
@@ -170,7 +169,7 @@ handle_error(socket, Reason, State) ->
     _ = disconnect(State, 0),
     {error, socket, Reason, State#oraclient{conn_state=disconnected}};
 handle_error(Type, Reason, State) ->
-%    io:format("~s~n", [Reason]),
+%%  io:format("~p~n", [Reason]),
     {error, Type, Reason, State}.
 
 handle_req(pig, #oraclient{cursors=Cursors,seq=Task} = State, {Type, Request}) ->
@@ -263,6 +262,9 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
 	    #oraclient{auto=Auto, defcols=DefCol} = State2,
 	    {_, Result} = get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
             handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=Result, type=Type2});
+	{28, _, _, Reason, []} ->
+	    {ok, State2} = reconnect(State),
+	    handle_error(remote, Reason, State2);
 	{RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
 	    case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
 		more when Type =:= fetch ->
