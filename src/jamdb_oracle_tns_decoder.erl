@@ -38,18 +38,18 @@ decode_packet(_,_) ->
 
 decode_token(<<Token, Data/binary>>, Acc) ->
     case Token of
-	?TTI_DCB -> decode_token(dcb, Data, Acc);
-	?TTI_IOV -> decode_token(iov, Data, Acc);
-	?TTI_RXH -> decode_token(rxh, Data, Acc);
-	?TTI_RXD -> decode_token(rxd, Data, Acc);
-	?TTI_BVC -> decode_token(bvc, Data, Acc);
-	?TTI_LOB -> decode_token(lob, Data, Acc);
-	?TTI_RPA -> decode_token(rpa, Data, Acc);
-	?TTI_OER -> decode_token(oer, Data, Acc);
-	?TTI_STA -> {ok, Acc};  %tran
-	?TTI_FOB -> {error, fob};  %return
+        ?TTI_DCB -> decode_token(dcb, Data, Acc);
+        ?TTI_IOV -> decode_token(iov, Data, Acc);
+        ?TTI_RXH -> decode_token(rxh, Data, Acc);
+        ?TTI_RXD -> decode_token(rxd, Data, Acc);
+        ?TTI_BVC -> decode_token(bvc, Data, Acc);
+        ?TTI_LOB -> decode_token(lob, Data, Acc);
+        ?TTI_RPA -> decode_token(rpa, Data, Acc);
+        ?TTI_OER -> decode_token(oer, Data, Acc);
+        ?TTI_STA -> {ok, Acc};     %%tran
+        ?TTI_FOB -> {error, fob};  %%return
         _ -> 
-    	    {error, <<Token, (hd(binary:split(Data, <<0>>)))/binary>>}
+            {error, <<Token, (hd(binary:split(Data, <<0>>)))/binary>>}
     end;
 decode_token(net, {Data, EnvOpts}) ->
     Values = lists:map(fun(L) -> list_to_tuple(string:tokens(L, "=")) end,
@@ -76,123 +76,123 @@ decode_token(rpa, Data) ->
     end;
 decode_token(oac, Data) ->
     DataType = decode_ub1(Data),
-    Rest2 = decode_next(ub1,Data),	%%data type
-    Rest3 = decode_next(ub1,Rest2),     %%flg
-    Rest4 = decode_next(ub1,Rest3),     %%pre
-    Scale = decode_ub2(Rest4),
-    Rest5 = decode_next(ub2,Rest4),	%%data scale
-    Length = decode_ub4(Rest5),
-    Rest6 = decode_next(ub4,Rest5),	%%max data lenght
-    Rest7 = decode_next(ub4,Rest6),     %%mal
-    Rest8 = decode_next(ub4,Rest7),     %%fl2
-    Rest9 = decode_next(dalc,Rest8),    %%toid
-    Rest10 = decode_next(ub2,Rest9),    %%vsn
-    Charset = decode_ub2(Rest10),
-    Rest11 = decode_next(ub2,Rest10),	%%charset
-    Rest12 = decode_next(ub1,Rest11),	%%form of use
-    Rest13 = decode_next(ub4,Rest12),   %%mxlc
-    {Rest13, DataType, Length, Scale, Charset};
+    A = decode_next(ub1,Data),     %%data type
+    B = decode_next(ub1,A),        %%flg
+    C = decode_next(ub1,B),        %%pre
+    Scale = decode_ub2(C),
+    D = decode_next(ub2,C),        %%data scale
+    Length = decode_ub4(D),
+    E = decode_next(ub4,D),        %%max data lenght
+    F = decode_next(ub4,E),        %%mal
+    G = decode_next(ub4,F),        %%fl2
+    J = decode_next(dalc,G),       %%toid
+    K = decode_next(ub2,J),        %%vsn
+    Charset = decode_ub2(K),
+    L = decode_next(ub2,K),        %%charset
+    M = decode_next(ub1,L),        %%form of use
+    N = decode_next(ub4,M),        %%mxlc
+    {N, DataType, Length, Scale, Charset};
 decode_token(wrn, Data) ->
-    Rest2 = decode_next(ub2,Data),	%%retCode
-    Length = decode_ub2(Rest2),
-    Rest3 = decode_next(ub2,Rest2),	%%warnLength
-    Rest4 = decode_next(ub2,Rest3),	%%warnFlag
-    decode_next(ub1, Rest4, Length).    %%warnMsg
+    A = decode_next(ub2,Data),     %%retCode
+    Length = decode_ub2(A),
+    B = decode_next(ub2,A),        %%warnLength
+    C = decode_next(ub2,B),        %%warnFlag
+    decode_next(ub1, C, Length).   %%warnMsg
 
 decode_token(dcb, Data, {Ver, _RowFormat, Type}) when is_atom(Type) ->
-    {Rest2, RowFormat} = decode_token(dcb, decode_next(Data), Ver),
-    decode_token(Rest2, {0, RowFormat, []});
+    {A, RowFormat} = decode_token(dcb, decode_next(Data), Ver),
+    decode_token(A, {0, RowFormat, []});
 decode_token(dcb, Data, Ver) ->
-    Rest3 = decode_next(ub4,Data),
-    Num = decode_ub4(Rest3),
-    Rest4 = decode_next(ub4,Rest3),
-    Rest5 =
+    A = decode_next(ub4,Data),
+    Num = decode_ub4(A),
+    B = decode_next(ub4,A),
+    C =
     case Num of
-	0 -> Rest4;
-	_ -> decode_next(ub1,Rest4)
+        0 -> B;
+        _ -> decode_next(ub1,B)
     end,
-    {RowFormat, Rest6} = decode_token(uds, Rest5, {Ver, [], Num}),
-    Rest7 = decode_next(dalc,Rest6),
-    Rest8 = decode_next(ub4,Rest7),
-    Rest9 = decode_next(ub4,Rest8),
-    Rest10 = decode_next(ub4,Rest9),
-    Rest11 = decode_next(ub4,Rest10),
-    Rest12 =
+    {RowFormat, D} = decode_token(uds, C, {Ver, [], Num}),
+    E = decode_next(dalc,D),
+    F = decode_next(ub4,E),
+    G = decode_next(ub4,F),
+    J = decode_next(ub4,G),
+    K = decode_next(ub4,J),
+    L =
     case Ver of
-        10 -> Rest11;
-        _ -> decode_next(dalc,Rest11)
+        10 -> K;
+        _ -> decode_next(dalc,K)
     end,
-    {Rest12, RowFormat};
+    {L, RowFormat};
 decode_token(uds, Data, {_Ver, RowFormat, 0}) ->
     {lists:reverse(RowFormat), Data};
 decode_token(uds, Data, {Ver, RowFormat, Num}) ->
-    {Rest2, DataType, Length, Scale, Charset} = decode_token(oac, Data),
-    Rest3 = decode_next(ub1,Rest2),	%%nullable
-    Rest4 = decode_next(ub1,Rest3),
-    Column = decode_dalc(Rest4),
-    Rest5 = decode_next(dalc,Rest4),	%%column name
-    Rest6 = decode_next(dalc,Rest5),	%%schema name
-    Rest7 = decode_next(dalc,Rest6),	%%type name
-    Rest8 = decode_next(ub2,Rest7),
-    Rest9 =
+    {A, DataType, Length, Scale, Charset} = decode_token(oac, Data),
+    B = decode_next(ub1,A),        %%nullable
+    C = decode_next(ub1,B),
+    Column = decode_dalc(C),
+    D = decode_next(dalc,C),       %%column name
+    E = decode_next(dalc,D),       %%schema name
+    F = decode_next(dalc,E),       %%type name
+    G = decode_next(ub2,F),
+    J =
     case Ver of
-        10 -> Rest8;
-        _ -> decode_next(ub4,Rest8)
+        10 -> G;
+        _ -> decode_next(ub4,G)
     end,
-    decode_token(uds, Rest9, {Ver, [#format{column_name=list_to_binary(Column),
+    decode_token(uds, J, {Ver, [#format{column_name=list_to_binary(Column),
     data_type=DataType,data_length=Length,data_scale=Scale,charset=Charset}|RowFormat], Num-1});
 decode_token(rxh, Data, {Cursor, RowFormat, Type}) when is_atom(Type) ->
-    Rest = decode_next(rxh,Data),
-    decode_token(Rest, {Cursor, RowFormat, [0], []});
+    A = decode_next(rxh,Data),
+    decode_token(A, {Cursor, RowFormat, [0], []});
 decode_token(rxh, Data, {Cursor, RowFormat, Rows}) ->
-    Rest2 = decode_next(ub1,Data),
-    Rest3 = decode_next(ub2,Rest2),
-    Rest4 = decode_next(ub2,Rest3),
-    Rest5 = decode_next(ub2,Rest4),
-    Rest6 = decode_next(ub2,Rest5),
-    Bitvec = decode_dalc(Rest6),
+    A = decode_next(ub1,Data),
+    B = decode_next(ub2,A),
+    C = decode_next(ub2,B),
+    D = decode_next(ub2,C),
+    E = decode_next(ub2,D),
+    Bitvec = decode_dalc(E),
     {Bvc, _Num} =
     case length(Bitvec) of
         0 -> {[0], 0};
         _ -> decode_bvc(list_to_binary(Bitvec), RowFormat, [])
     end,
-    Rest7 = decode_next(rxh,Data),
-    decode_token(Rest7, {Cursor, RowFormat, Bvc, Rows});
+    F = decode_next(rxh,Data),
+    decode_token(F, {Cursor, RowFormat, Bvc, Rows});
 decode_token(iov, Data, {Ver, RowFormat, Type}) when is_atom(Type) ->
-    Rest2 = decode_next(ub1,Data),
-    Num = decode_ub2(Rest2),
-    <<Mode:Num/binary, Rest3/bits>> = decode_next(rxh,Data),
+    A = decode_next(ub1,Data),
+    Num = decode_ub2(A),
+    <<Mode:Num/binary, Rest/bits>> = decode_next(rxh,Data),
     case binary:matches(Mode,[<<16>>,<<48>>]) of
-        [] -> decode_token(Rest3, {0, [], []});                      %%proc_result
+        [] -> decode_token(Rest, {0, [], []});               %%proc_result
         _ ->
-	    Bind = lists:zip(binary_to_list(Mode), RowFormat),
-	    decode_token(Rest3, {Ver, [decode_param(B) || B <- Bind], Type})
+            Bind = lists:zip(binary_to_list(Mode), RowFormat),
+            decode_token(Rest, {Ver, [decode_param(B) || B <- Bind], Type})
     end;
 decode_token(rxd, Data, {Ver, _RowFormat, fetch}) ->
-    {Rest2, CursorRowFormat} = decode_token(dcb, decode_next(ub1,Data), Ver),
-    Cursor = decode_ub4(Rest2),
-    Rest3 = decode_next(ub4,Rest2),
-    {{Cursor, CursorRowFormat}, decode_next(ub2,Rest3)};
+    {A, CursorRowFormat} = decode_token(dcb, decode_next(ub1,Data), Ver),
+    Cursor = decode_ub4(A),
+    B = decode_next(ub4,A),
+    {{Cursor, CursorRowFormat}, decode_next(ub2,B)};
 decode_token(rxd, Data, {Ver, RowFormat, Type}) when is_atom(Type) ->
     case decode_data(Data, [], {[], RowFormat, Ver, Type}) of
-    	{{Cursor, CursorRowFormat}, Rest2} ->
-	    decode_token(Rest2, {Cursor, CursorRowFormat, []});      %%fetch cursor
-        {Rows, Rest2} -> decode_token(Rest2, {0, RowFormat, Rows})   %%proc_result
+    	{{Cursor, CursorRowFormat}, A} ->
+            decode_token(A, {Cursor, CursorRowFormat, []});  %%fetch cursor
+        {Rows, A} -> decode_token(A, {0, RowFormat, Rows})   %%proc_result
     end;
 decode_token(rxd, Data, {Cursor, RowFormat, Bvc, Rows}) ->
     LastRow = last(Rows),
-    {Rest2, Row} = decode_rxd(Data, RowFormat, 1, Bvc, LastRow, []),
-    decode_token(Rest2, {Cursor, RowFormat, Bvc, Rows++[Row]});
+    {A, Row} = decode_rxd(Data, RowFormat, 1, Bvc, LastRow, []),
+    decode_token(A, {Cursor, RowFormat, Bvc, Rows++[Row]});
 decode_token(bvc, Data, {Cursor, RowFormat, _Bvc, Rows}) ->
-    Rest2 = decode_next(ub2,Data),
-    {Bvc, Num} = decode_bvc(Rest2, RowFormat, []),
-    Rest3 = decode_next(ub1, Rest2, Num),
-    decode_token(Rest3, {Cursor, RowFormat, Bvc, Rows});
+    A = decode_next(ub2,Data),
+    {Bvc, Num} = decode_bvc(A, RowFormat, []),
+    B = decode_next(ub1, A, Num),
+    decode_token(B, {Cursor, RowFormat, Bvc, Rows});
 decode_token(lob, Data, _Loc) ->
     try decode_chr(Data) of
         Value -> {ok, Value}
     catch
-	error:_ -> {ok, [eof]}
+        error:_ -> {ok, [eof]}
     end;
 decode_token(rpa, Data, []) ->
     {ok, [decode_ub4(Data)]};
@@ -201,20 +201,20 @@ decode_token(rpa, Data, {_Ver, RowFormat, Type}) when is_atom(Type) ->
 decode_token(rpa, Data, {0, RowFormat, Rows}) ->
     Cursor =
     case decode_ub2(Data) of
-	0 -> 0;
-	_ ->
-	    Rest2 = decode_next(ub2,Data),
-	    Rest3 = decode_next(ub4, Rest2),
-	    Rest4 = decode_next(ub4, Rest3),
-	    decode_ub4(Rest4)
+        0 -> 0;
+        _ ->
+            A = decode_next(ub2,Data),
+            B = decode_next(ub4, A),
+            C = decode_next(ub4, B),
+            decode_ub4(C)
     end,
-    Rest5 = decode_next(rpa,Data),
-    decode_token(Rest5, {Cursor, RowFormat, Rows});
+    D = decode_next(rpa,Data),
+    decode_token(D, {Cursor, RowFormat, Rows});
 decode_token(rpa, Data, {Cursor, RowFormat, _Bvc, Rows}) ->
     decode_token(rpa, Data, {Cursor, RowFormat, Rows});
 decode_token(rpa, Data, {Cursor, RowFormat, Rows}) ->
-    Rest2 = decode_next(rpa,Data),
-    decode_token(Rest2, {Cursor, RowFormat, Rows});
+    A = decode_next(rpa,Data),
+    decode_token(A, {Cursor, RowFormat, Rows});
 decode_token(oer, Data, []) ->
     decode_token(oer, Data, {0, [], []});
 decode_token(oer, Data, {_Ver, RowFormat, Type}) when is_atom(Type) ->
@@ -222,41 +222,41 @@ decode_token(oer, Data, {_Ver, RowFormat, Type}) when is_atom(Type) ->
 decode_token(oer, Data, {Cursor, RowFormat, _Bvc, Rows}) ->
     decode_token(oer, Data, {Cursor, RowFormat, Rows});
 decode_token(oer, Data, {Cursor, RowFormat, Rows}) ->
-    Rest2 = decode_next(ub2,Data),
-    Rest3 = decode_next(ub2,Rest2),             %%Sequence Number
-    RowNumber = decode_ub4(Rest3),
-    Rest4 = decode_next(ub4,Rest3),             %%Current Row Number
-    RetCode = decode_ub2(Rest4),
+    A = decode_next(ub2,Data),
+    B = decode_next(ub2,A),              %%Sequence Number
+    RowNumber = decode_ub4(B),
+    C = decode_next(ub4,B),              %%Current Row Number
+    RetCode = decode_ub2(C),
     RetFormat =
     case lists:member(RetCode, [0,1403]) of
         true ->
-            Rest5 = decode_next(ub2,Rest4),
-            Rest6 = decode_next(ub2,Rest5),
-            Rest7 = decode_next(ub2,Rest6),
-	    {decode_ub2(Rest7), RowFormat};     %%defcols
+            D = decode_next(ub2,C),
+            E = decode_next(ub2,D),
+            F = decode_next(ub2,E),
+            {decode_ub2(F), RowFormat};  %%defcols
         false ->
-            Rest5 = decode_next(ub2,Rest4),	%%Returned Code
-            Rest6 = decode_next(ub2,Rest5),	%%Array Element w/error
-            Rest7 = decode_next(ub2,Rest6),	%%Array Element errno
-            Rest8 = decode_next(ub2,Rest7),	%%Current Cursor ID
-            Rest9 = decode_next(ub2,Rest8),	%%Error Position 
-            Rest10 = decode_next(ub1,Rest9),	%%SQL command type 
-            Rest11 = decode_next(ub2,Rest10),	%%Fatal 
-            Rest12 = decode_next(ub2,Rest11),	%%Various flags
-            Rest13 = decode_next(ub2,Rest12),	%%User cursor options
-            Rest14 = decode_next(ub1,Rest13),	%%UPI parameter that generated the error
-            Rest15 = decode_next(ub1,Rest14),	%%Warning flags
-            Rest16 = decode_next(ub4,Rest15),	%%Row ID rba
-            Rest17 = decode_next(ub2,Rest16),	%%partitionid
-            Rest18 = decode_next(ub1,Rest17),	%%tableid
-            Rest19 = decode_next(ub4,Rest18),	%%blocknumber
-            Rest20 = decode_next(ub2,Rest19),	%%slotnumber
-            Rest21 = decode_next(ub4,Rest20),	%%Operating System Error
-            Rest22 = decode_next(ub1,Rest21),	%%Statement number
-            Rest23 = decode_next(ub1,Rest22),	%%Procedure call number
-            Rest24 = decode_next(ub2,Rest23),	%%Pad
-            Rest25 = decode_next(ub4,Rest24),	%%Successful iterations
-            {Cursor, decode_dalc(Rest25)}
+            D = decode_next(ub2,C),      %%Returned Code
+            E = decode_next(ub2,D),      %%Array Element w/error
+            F = decode_next(ub2,E),      %%Array Element errno
+            G = decode_next(ub2,F),      %%Current Cursor ID
+            H = decode_next(ub2,G),      %%Error Position 
+            I = decode_next(ub1,H),      %%SQL command type 
+            J = decode_next(ub2,I),      %%Fatal 
+            K = decode_next(ub2,J),      %%Various flags
+            L = decode_next(ub2,K),      %%User cursor options
+            M = decode_next(ub1,L),      %%UPI parameter that generated the error
+            N = decode_next(ub1,M),      %%Warning flags
+            O = decode_next(ub4,N),      %%Row ID rba
+            P = decode_next(ub2,O),      %%partitionid
+            Q = decode_next(ub1,P),      %%tableid
+            R = decode_next(ub4,Q),      %%blocknumber
+            S = decode_next(ub2,R),      %%slotnumber
+            T = decode_next(ub4,S),      %%Operating System Error
+            U = decode_next(ub1,T),      %%Statement number
+            V = decode_next(ub1,U),      %%Procedure call number
+            W = decode_next(ub2,V),      %%Pad
+            X = decode_next(ub4,W),      %%Successful iterations
+            {Cursor, decode_dalc(X)}
     end,
     {RetCode, RowNumber, Cursor, RetFormat, Rows}.
 
@@ -298,38 +298,38 @@ decode_next(chr,<<254,Rest/bits>>) ->
 decode_next(chr,Data) ->
     decode_next(Data);
 decode_next(keyword,Data) ->
-    Rest2 =
+    A =
     case decode_ub2(Data) of
-	0 -> decode_next(ub2,Data);
-	_ -> decode_next(decode_next(ub2,Data))
+        0 -> decode_next(ub2,Data);
+        _ -> decode_next(decode_next(ub2,Data))
     end,
-    Rest3 =
-    case decode_ub2(Rest2) of
-	0 -> decode_next(ub2,Rest2);
-	_ -> decode_next(decode_next(ub2,Rest2))
+    B =
+    case decode_ub2(A) of
+        0 -> decode_next(ub2,A);
+        _ -> decode_next(decode_next(ub2,A))
     end,
-    decode_next(ub2,Rest3);
+    decode_next(ub2,B);
 decode_next(rxh,Data) ->
-    Rest2 = decode_next(ub1,Data),      %%Flags
-    Rest3 = decode_next(ub2,Rest2),     %%Number of Requests
-    Rest4 = decode_next(ub2,Rest3),     %%Iteration Number
-    Rest5 = decode_next(ub2,Rest4),     %%Num. Iterations this time
-    Rest6 = decode_next(ub2,Rest5),     %%UAC bufffer length
-    Rest7 = decode_next(dalc,Rest6),    %%Bitvec
-    decode_next(dalc,Rest7);
+    A = decode_next(ub1,Data),     %%Flags
+    B = decode_next(ub2,A),        %%Number of Requests
+    C = decode_next(ub2,B),        %%Iteration Number
+    D = decode_next(ub2,C),        %%Num. Iterations this time
+    E = decode_next(ub2,D),        %%UAC bufffer length
+    F = decode_next(dalc,E),       %%Bitvec
+    decode_next(dalc,F);
 decode_next(rpa,Data) ->
     I = decode_ub2(Data),
-    Rest2 = decode_next(ub2,Data),
-    Rest3 = decode_next(ub4, Rest2, I),
-    M = decode_ub2(Rest3),
-    Rest4 = decode_next(ub2,Rest3),
-    Rest5 = decode_next(M,Rest4),
-    N = decode_ub2(Rest5),
-    Rest6 = decode_next(ub2,Rest5),
-    Rest7 = decode_next(keyword, Rest6, N),
-    R = decode_ub4(Rest7),
-    Rest8 = decode_next(ub4,Rest7),
-    decode_next(R,Rest8).
+    A = decode_next(ub2,Data),
+    B = decode_next(ub4, A, I),
+    M = decode_ub2(B),
+    C = decode_next(ub2,B),
+    D = decode_next(M,C),
+    N = decode_ub2(D),
+    E = decode_next(ub2,D),
+    F = decode_next(keyword, E, N),
+    R = decode_ub4(F),
+    G = decode_next(ub4,F),
+    decode_next(R,G).
 
 decode_rxd(Data, [], _I, _Bvc, _LastRow, Values) ->
     {Data, lists:reverse(Values)};
@@ -341,8 +341,8 @@ decode_rxd(Data, [ValueFormat|RestRowFormat], I, [0], LastRow, Values) ->
 decode_rxd(Data, [ValueFormat|RestRowFormat], I, Bvc, LastRow, Values) ->
     {Value, RestData} = 
     case lists:member(I, Bvc) of
-	true -> decode_data(Data, ValueFormat);
-	false -> {lists:nth(I, LastRow), Data}
+        true -> decode_data(Data, ValueFormat);
+        false -> {lists:nth(I, LastRow), Data}
     end,
     decode_rxd(RestData, RestRowFormat, I+1, Bvc, LastRow, [Value|Values]).
 
@@ -360,8 +360,8 @@ decode_bvc(_Data, Acc, 8, _I) when is_tuple(Acc) ->
 decode_bvc(Data, Acc, Num, I) when is_tuple(Acc) ->
     Bvc =
     case (Data band (1 bsl Num)) of
-	0 -> Acc;
-	_ -> erlang:append_element(Acc, I * 8 + Num + 1)
+        0 -> Acc;
+        _ -> erlang:append_element(Acc, I * 8 + Num + 1)
     end,
     decode_bvc(Data, Bvc, Num+1, I);    
 decode_bvc(_Data, Acc, 0, _I) when is_list(Acc) ->
@@ -377,8 +377,8 @@ decode_data(Data, _Values, {DefCol, [], _Ver, _Type}) ->
 decode_data(Data, Values, {DefCol, [#format{param=in}|RestRowFormat], Ver, Type}) ->
     decode_data(Data, Values, {DefCol, RestRowFormat, Ver, Type});
 decode_data(Data, Values, {_DefCol, [#format{data_type=?TNS_TYPE_REFCURSOR}|RestRowFormat], Ver, Type}) ->
-    {DefCol, Rest2} = decode_token(rxd, Data, {Ver, [], fetch}),
-    decode_data(Rest2, Values, {DefCol, RestRowFormat, Ver, Type});
+    {DefCol, Bin} = decode_token(rxd, Data, {Ver, [], fetch}),
+    decode_data(Bin, Values, {DefCol, RestRowFormat, Ver, Type});
 decode_data(Data, Values, {DefCol, [ValueFormat|RestRowFormat], Ver, Type=return}) ->
     Num = decode_ub4(Data),
     {Value, RestData} = decode_data(decode_next(ub4,Data), ValueFormat, [], Num, Type),
@@ -415,8 +415,8 @@ decode_data(Data, #format{data_type=DataType}) when ?IS_FIXED_TYPE(DataType) ->
     <<Length, Bin:Length/binary, Rest/binary>> = Data,
     {decode_value(Bin, DataType), Rest};
 decode_data(Data, #format{data_type=?TNS_TYPE_REFCURSOR}) ->
-    {_DefCol, Rest2} = decode_token(rxd, Data, {0, [], fetch}),
-    {null, decode_next(ub1,Rest2)};
+    {_DefCol, Bin} = decode_token(rxd, Data, {0, [], fetch}),
+    {null, decode_next(ub1,Bin)};
 decode_data(Data, #format{data_type=DataType}) ->
     decode_value(Data, DataType).
 
@@ -448,9 +448,9 @@ decode_value(Bin, _DataType) ->
     decode_value(Bin).
 
 decode_value(Data) ->
-    Rest2 = decode_next(ub4,Data),
-    Value = decode_chr(Rest2),
-    {Value, decode_next(chr,Rest2)}.
+    A = decode_next(ub4,Data),
+    Value = decode_chr(A),
+    {Value, decode_next(chr,A)}.
 
 decode_param({Data, #format{param=in}=ValueFormat}) when Data =/= 32 ->
     ValueFormat#format{param=out};
@@ -468,23 +468,23 @@ decode_param({_Data, ValueFormat}) ->
 decode_keyval(_Data,0,Acc) ->
     Acc;
 decode_keyval(Data,Num,Acc) ->
-    {Key, Rest2} =
+    {Key, A} =
     case decode_ub4(Data) of
 	0 -> {undefined, decode_next(Data)};
 	_ ->
-	    Rest3 = decode_next(Data),
-	    {decode_chr(Rest3), decode_next(chr,Rest3)}
+	    B = decode_next(Data),
+	    {decode_chr(B), decode_next(chr,B)}
     end,
-    {Value, Rest4} =
-    case decode_ub4(Rest2) of
-	0 -> {undefined, decode_next(Rest2)};
+    {Value, C} =
+    case decode_ub4(A) of
+	0 -> {undefined, decode_next(A)};
 	_ ->
-	    Rest5 = decode_next(Rest2),
-	    {decode_chr(Rest5), decode_next(chr,Rest5)}
+	    D = decode_next(A),
+	    {decode_chr(D), decode_next(chr,D)}
     end,
-    NbPair = decode_ub4(Rest4),
-    Rest6 = decode_next(Rest4),
-    decode_keyval(Rest6,Num-1,[{Key,Value,NbPair}|Acc]).
+    NbPair = decode_ub4(C),
+    E = decode_next(C),
+    decode_keyval(E,Num-1,[{Key,Value,NbPair}|Acc]).
 
 decode_ub1(<<Data:8,_Rest/bits>>) ->
     Data.
@@ -524,8 +524,8 @@ decode_number(Data) ->
     H = length(L),
     N *
     case (I + 1) > (H - 1) of
-	true ->  lnxsni([I|L],H);
-	false -> lnxnur([I|L],H)
+        true ->  lnxsni([I|L],H);
+        false -> lnxnur([I|L],H)
     end.
 
 lnxsni([I|L],20) ->
@@ -583,9 +583,9 @@ decode_date(<<Data:11/binary,H,M>>) ->
             try lists:nth(Zoneid, [0,-14,-13,-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,1,2,3,4,5,6,7,8,9,10,11,12]) of
                 Hour -> ltz(Hour)
             catch
-		error:_ -> case proplists:get_value(Zoneid, ?ZONEIDMAP) of
+                error:_ -> case proplists:get_value(Zoneid, ?ZONEIDMAP) of
                                undefined -> {Zoneid};
-		               {Region, Zone} -> lists:nth(Region, ?REGION)++"/"++Zone
+                               {Region, Zone} -> lists:nth(Region, ?REGION)++"/"++Zone
                            end
             end
     end).
@@ -629,29 +629,29 @@ decode_version(undefined) -> 0;
 decode_version(Data) -> list_to_integer(Data) bsr 24.
 
 decode_rowid(Data) ->
-    Rest2 = decode_next(ub1,Data),
-    Objid = decode_ub4(Rest2),
-    Rest3 = decode_next(ub4,Rest2),
-    Partid = decode_ub2(Rest3),
-    Rest4 = decode_next(ub2,Rest3),
-    Rest5 = decode_next(ub1,Rest4),
-    Blocknum = decode_ub4(Rest5),
-    Rest6 = decode_next(ub4,Rest5),
-    Slotnum = decode_ub2(Rest6),
-    Rest7 = decode_next(ub2,Rest6),
-    {lid(Objid,Partid,Blocknum,Slotnum),Rest7}.
+    A = decode_next(ub1,Data),
+    Objid = decode_ub4(A),
+    B = decode_next(ub4,A),
+    Partid = decode_ub2(B),
+    C = decode_next(ub2,B),
+    D = decode_next(ub1,C),
+    Blocknum = decode_ub4(D),
+    E = decode_next(ub4,D),
+    Slotnum = decode_ub2(E),
+    F = decode_next(ub2,E),
+    {lid(Objid,Partid,Blocknum,Slotnum),F}.
 
 decode_urowid(Data) ->
-    Rest2 = decode_next(ub4,Data),
-    Value = decode_chr(Rest2),
-    Rest3 = decode_next(chr,Rest2),
+    A = decode_next(ub4,Data),
+    Value = decode_chr(A),
+    B = decode_next(chr,A),
     case hd(Value) of
         1 ->
             <<Objid:4/integer-unit:8,Partid:2/integer-unit:8,
             Blocknum:4/integer-unit:8,Slotnum:2/integer-unit:8,
-            _Rest4/bits>> = list_to_binary(tl(Value)),
-            {lid(Objid,Partid,Blocknum,Slotnum),Rest3};
-        _ -> {Value, Rest3}
+            _Rest/bits>> = list_to_binary(tl(Value)),
+            {lid(Objid,Partid,Blocknum,Slotnum),B};
+        _ -> {Value, B}
     end.
 
 lid(O,P,B,S) -> lid(O,6,[])++lid(P,3,[])++lid(B,6,[])++lid(S,3,[]).
@@ -663,70 +663,70 @@ lid(N,I,Acc) ->
     lid(N bsr 6 band 67108863,I-1,[H|Acc]).
 
 decode_clob(Data) ->
-    Rest2 = decode_next(ub4,Data),
-    Rest3 = decode_next(ub4,Rest2), %LobSize
-    Rest4 = decode_next(ub4,Rest3), %LobChunkSize
-    Vary = decode_ub1(Rest4),
-    Rest5 = decode_next(ub1,Rest4), %ClobDBVary
-    Rest6 =
+    A = decode_next(ub4,Data),
+    B = decode_next(ub4,A),        %%LobSize
+    C = decode_next(ub4,B),        %%LobChunkSize
+    Vary = decode_ub1(C),
+    D = decode_next(ub1,C),        %%ClobDBVary
+    E =
     case Vary of
-        1 -> decode_next(ub2,Rest5); %ClobCharset
-        _ -> Rest5
+        1 -> decode_next(ub2,D);   %%ClobCharset
+        _ -> D
     end,
-    Rest7 = decode_next(ub1,Rest6), %ClobFormOfUse
-    Value = decode_chr(Rest7),
-    Rest8 = decode_next(chr,Rest7),
-    {Value, decode_next(Rest8)}.
+    F = decode_next(ub1,E),        %%ClobFormOfUse
+    Value = decode_chr(F),
+    G = decode_next(chr,F),
+    {Value, decode_next(G)}.
 
 decode_blob(Data) ->
-    Rest2 = decode_next(ub4,Data),
-    Rest3 = decode_next(ub4,Rest2), %LobSize
-    Rest4 = decode_next(ub4,Rest3), %LobChunkSize
-    Value = decode_chr(Rest4),
-    Rest5 = decode_next(chr,Rest4),
-    {Value, decode_next(Rest5)}.
+    A = decode_next(ub4,Data),
+    B = decode_next(ub4,A),        %%LobSize
+    C = decode_next(ub4,B),        %%LobChunkSize
+    Value = decode_chr(C),
+    D = decode_next(chr,C),
+    {Value, decode_next(D)}.
 
 decode_adt(Data) ->
-    Rest2 = decode_next(ub4,Data),
-    Rest3 = decode_next(chr,Rest2),
-    Rest4 = decode_next(chr,Rest3),
-    Rest5 = decode_next(chr,Rest4),
-    Rest6 = decode_next(ub2,Rest5),
-    Num = decode_ub4(Rest6),
-    Rest7 = decode_next(ub4,Rest6),
-    Rest8 = decode_next(ub2,Rest7),
+    A = decode_next(ub4,Data),
+    B = decode_next(chr,A),
+    C = decode_next(chr,B),
+    D = decode_next(chr,C),
+    E = decode_next(ub2,D),
+    Num = decode_ub4(E),
+    F = decode_next(ub4,E),
+    G = decode_next(ub2,F),
     case Num of
-        0 -> {null, Rest8};
+        0 -> {null, G};
         _ ->
-            Value = decode_chr(Rest8),
-            Rest9 = decode_next(chr,Rest8),
+            Value = decode_chr(G),
+            J = decode_next(chr,G),
             try decode_adt(list_to_binary(Value), 0) of
-                Values -> {Values, Rest9}
+                Values -> {Values, J}
             catch
-                error:_ -> {Value, Rest9}
+                error:_ -> {Value, J}
             end
     end.
 
 decode_adt(<<I,_Rest/bits>>, _Type) when I band 128 =:= 0 ->
     erlang:error(format);
 decode_adt(Data, _Type) ->
-    Rest2 = decode_next(ub1,Data),
-    Rest3 = decode_next(ub1,Rest2),
-    {_, Rest4} = lrd(Rest3),
-    {_, Rest5} = lrd(Rest4),
-    Rest6 = decode_next(ub1,Rest5),
-    Rest7 = decode_next(ub1,Rest6),
-    {Num, Rest8} = lrd(Rest7),
-    decode_adt(Rest8, Num, []).
+    A = decode_next(ub1,Data),
+    B = decode_next(ub1,A),
+    {_, C} = lrd(B),
+    {_, D} = lrd(C),
+    E = decode_next(ub1,D),
+    F = decode_next(ub1,E),
+    {Num, G} = lrd(F),
+    decode_adt(G, Num, []).
 
 decode_adt(_Data, 0, Acc) ->
     lists:reverse(Acc);
 decode_adt(<<255, Rest/bits>>, Num, Acc) ->
     decode_adt(Rest, Num-1, [null|Acc]);
 decode_adt(Data, Num, Acc) ->
-    {Length, Rest2} = lrd(Data),
-   <<Bin:Length/binary, Rest3/binary>> = Rest2,
-    decode_adt(Rest3, Num-1, [binary_to_list(Bin)|Acc]).
+    {Length, A} = lrd(Data),
+   <<Bin:Length/binary, Rest/binary>> = A,
+    decode_adt(Rest, Num-1, [binary_to_list(Bin)|Acc]).
 
 lrd(<<I,F,S,T,L, Rest/bits>>) when I > 245 -> {(F+S+T) * 256 + L, Rest};
 lrd(<<L, Rest/bits>>) -> {L, Rest}.
@@ -741,8 +741,8 @@ decode_long(<<0, Rest/bits>>) ->
     {null, decode_next(ub2,Rest,2)};
 decode_long(Data) ->
     Value = decode_chr(Data),
-    Rest2 = decode_next(chr,Data),
-    {Value, decode_next(ub2,Rest2,2)}.
+    A = decode_next(chr,Data),
+    {Value, decode_next(ub2,A,2)}.
 
 decode_helper(param, Data, Format) -> decode_token(oac, ?ENCODER:encode_token(oac, Data, Format));
 decode_helper(tz, Data, _) -> ltz(Data).
