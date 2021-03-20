@@ -39,6 +39,7 @@
     defcols,
     params = [],
     env = [],
+    passwd,
     req,
     seq
 }).
