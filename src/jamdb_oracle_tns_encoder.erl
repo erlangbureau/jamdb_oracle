@@ -82,11 +82,12 @@ encode_record(sess, #oraclient{env=EnvOpts,seq=Tseq}) ->
     (encode_keyval("AUTH_PID", UserPID))/binary,
     (encode_keyval("AUTH_SID", User))/binary
     >>;
-encode_record(auth, #oraclient{env=EnvOpts,req=Request,seq=Tseq}) ->
+encode_record(auth, #oraclient{env=EnvOpts,passwd=Passwd,req=Request,seq=Tseq}) ->
     User            = proplists:get_value(user, EnvOpts),
-    Pass            = proplists:get_value(password, EnvOpts),
     Role            = proplists:get_value(role, EnvOpts, 0),
     Prelim          = proplists:get_value(prelim, EnvOpts, 0),
+    Passwd ! {get, self()},
+    Pass = receive Reply -> Reply end,
     User2 = encode_str(User),
     Pass2 = encode_str(Pass),
     Logon = Request#logon{user=binary_to_list(User2), password=binary_to_list(Pass2)},
