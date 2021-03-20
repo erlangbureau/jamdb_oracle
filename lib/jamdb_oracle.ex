@@ -50,7 +50,6 @@ defmodule Jamdb.Oracle do
       {:ok, [{:proc_result, _, msg}]} -> {:error, msg}
       {:ok, [{:affected_rows, num_rows}]} -> {:ok, %{num_rows: num_rows, rows: nil}}
       {:ok, result} -> {:ok, result}
-      {:error, :local, _} -> {:error, "Data is incomplete. Pass :read_timeout as connection parameter."}
       {:error, _, err} -> {:disconnect, err}
     end
   end
