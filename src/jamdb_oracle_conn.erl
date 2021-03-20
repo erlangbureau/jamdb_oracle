@@ -2,6 +2,7 @@
 
 %% API
 -export([connect/1, connect/2]).
+-export([reconnect/1]).
 -export([disconnect/1, disconnect/2]).
 -export([sql_query/2, sql_query/3]).
 
@@ -46,10 +47,14 @@ connect(Opts, Tout) ->
     Charset     = proplists:get_value(Cset, ?CHARSET, ?UTF8_CHARSET),
     SockOpts = [binary, {active, false}, {packet, raw}, %{recbuf, 65535},
             {nodelay, true}, {keepalive, true}]++SocketOpts,
+    Pass        = proplists:get_value(password, Opts),
+    EnvOpts     = proplists:delete(password, Opts),
+    Passwd = spawn(fun() -> loop(Pass) end),
     case gen_tcp:connect(Host, Port, SockOpts, Tout) of
         {ok, Socket} ->
             {ok, Socket2} = sock_connect(Socket, SslOpts, Tout),
-            State = #oraclient{socket=Socket2, env=Opts, auto=Auto, fetch=Fetch, sdu=Sdu, charset=Charset, timeouts={Tout, ReadTout}},
+            State = #oraclient{socket=Socket2, env=EnvOpts, passwd=Passwd,
+            auto=Auto, fetch=Fetch, sdu=Sdu, charset=Charset, timeouts={Tout, ReadTout}},
             {ok, State2} = send_req(login, State),
             handle_login(State2#oraclient{conn_state=auth_negotiate});
         {error, Reason} ->
@@ -61,20 +66,25 @@ disconnect(State) ->
     disconnect(State, 1).
 
 -spec disconnect(state(), timeout()) -> {ok, [env()]}.
-disconnect(#oraclient{socket=Socket, env=Env}, 0) ->
+disconnect(#oraclient{socket=Socket, env=Env, passwd=Passwd}, 0) ->
     sock_close(Socket),
+    exit(Passwd, ok),
     {ok, Env};
-disconnect(#oraclient{conn_state=connected, socket=Socket, env=Env} = State, _Tout) ->
+disconnect(#oraclient{conn_state=connected, socket=Socket, env=Env, passwd=Passwd} = State, _Tout) ->
     _ = send_req(close, State),
     sock_close(Socket),
+    exit(Passwd, ok),
     {ok, Env};
 disconnect(#oraclient{env=Env}, _Tout) ->
     {ok, Env}.
 
 -spec reconnect(state()) -> {ok, state()}.
-reconnect(State) ->
+reconnect(#oraclient{passwd=Passwd} = State) ->
+    Passwd ! {get, self()},
+    Pass = receive Reply -> Reply end,
+    exit(Passwd, ok),
     {ok, InitOpts} = disconnect(State, 0),
-    connect(InitOpts).
+    connect(erlang:append_element({password, Pass}, InitOpts)).
 
 -spec sql_query(state(), string() | tuple(), timeout()) -> query_result().
 sql_query(State, Query, _Tout) ->
@@ -262,9 +272,6 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
 	    #oraclient{auto=Auto, defcols=DefCol} = State2,
 	    {_, Result} = get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
             handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=Result, type=Type2});
-	{28, _, _, Reason, []} ->
-	    {ok, State2} = reconnect(State),
-	    handle_error(remote, Reason, State2);
 	{RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
 	    case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
 		more when Type =:= fetch ->
