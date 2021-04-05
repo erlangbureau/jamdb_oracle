@@ -202,6 +202,9 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   def structure_load(_default, _config), do: err()
 
   @impl true
+  def lock_for_migrations(_meta, _opts, fun), do: fun.()
+
+  @impl true
   def supports_ddl_transaction? do
     false
   end
