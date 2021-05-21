@@ -1,7 +1,7 @@
 -module(jamdb_oracle_crypt).
 
 -export([generate/1]).
--export([validate/2]).
+-export([validate/1]).
 
 -include("jamdb_oracle.hrl").
 
@@ -11,17 +11,17 @@
 
 %o3logon(Sess, KeySess, Pass) ->
 %    IVec = <<0:64>>,
-%    SrvSess = crypto:block_decrypt(des_cbc, binary:part(KeySess,0,8), IVec, Sess),
+%    SrvSess = crypto:crypto_one_time(des_cbc, binary:part(KeySess,0,8), IVec, Sess, false),
 %    N = (8 - (length(Pass) rem 8 )) rem 8,
 %    CliPass = <<(list_to_binary(Pass))/binary, (binary:copy(<<0>>, N))/binary>>,
-%    AuthPass = crypto:block_encrypt(des_cbc, binary:part(SrvSess,0,8), IVec, CliPass),
+%    AuthPass = crypto:crypto_one_time(des_cbc, binary:part(SrvSess,0,8), IVec, CliPass, true),
 %    {bin2hexstr(AuthPass)++[N], [], []}.
 
 o5logon(#logon{auth=Sess, der_salt=DerivedSalt, user=User, password=Pass}, Bits) when Bits =:= 128 ->
     IVec = <<0:64>>,
     CliPass = norm(User++Pass),
-    B1 = crypto:block_encrypt(des_cbc, hexstr2bin("0123456789ABCDEF"), IVec, CliPass),
-    B2 = crypto:block_encrypt(des_cbc, binary:part(B1,byte_size(B1),-8), IVec, CliPass),
+    B1 = crypto:crypto_one_time(des_cbc, hexstr2bin("0123456789ABCDEF"), IVec, CliPass, true),
+    B2 = crypto:crypto_one_time(des_cbc, binary:part(B1,byte_size(B1),-8), IVec, CliPass, true),
     KeySess = <<(binary:part(B2,byte_size(B2),-8))/binary,0:64>>,
     o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
 o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits) when Bits =:= 192 ->
@@ -36,20 +36,21 @@ o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits)
 
 o5logon(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey, password=Pass, bits=Bits}) ->
     IVec = <<0:128>>,
-    SrvSess = crypto:block_decrypt(aes_cbc, KeySess, IVec, Sess),
+    Cipher = list_to_atom("aes_"++integer_to_list(Bits)++"_cbc"),
+    SrvSess = crypto:crypto_one_time(Cipher, KeySess, IVec, Sess, false),
     CliSess =
     case binary:match(SrvSess,pad(8, <<>>)) of
         {40,8} -> pad(8, crypto:strong_rand_bytes(40));
         _ -> crypto:strong_rand_bytes(byte_size(SrvSess))
     end,
-    AuthSess = crypto:block_encrypt(aes_cbc, KeySess, IVec, CliSess),
+    AuthSess = crypto:crypto_one_time(Cipher, KeySess, IVec, CliSess, true),
     CatKey = cat_key(SrvSess, CliSess, DerivedSalt, Bits),
     KeyConn = conn_key(CatKey, DerivedSalt, Bits),
-    AuthPass = crypto:block_encrypt(aes_cbc, KeyConn, IVec, pad(Pass)),
+    AuthPass = crypto:crypto_one_time(Cipher, KeyConn, IVec, pad(Pass), true),
     SpeedyKey =
     case DerivedKey of
         undefined -> <<>>;
-        _ -> crypto:block_encrypt(aes_cbc, KeyConn, IVec, DerivedKey)
+        _ -> crypto:crypto_one_time(Cipher, KeyConn, IVec, DerivedKey, true)
     end,
     {bin2hexstr(AuthPass), bin2hex(AuthSess), bin2hexstr(SpeedyKey), KeyConn}.
 
@@ -62,9 +63,10 @@ generate(#logon{type=Type} = Logon) ->
     end,
     o5logon(Logon, Bits).
 
-validate(Resp, KeyConn) ->
+validate(#logon{auth=Resp, key=KeyConn}) ->
     IVec = <<0:128>>,
-    Data = crypto:block_decrypt(aes_cbc, KeyConn, IVec, hexstr2bin(Resp)),
+    Cipher = list_to_atom("aes_"++integer_to_list(byte_size(KeyConn) * 8)++"_cbc"),
+    Data = crypto:crypto_one_time(Cipher, KeyConn, IVec, hexstr2bin(Resp), false),
     case binary:match(Data,<<"SERVER_TO_CLIENT">>) of
         nomatch -> error;
         _ -> ok
@@ -136,7 +138,7 @@ mkhex(C) when C < 10 -> $0 + C;
 mkhex(C) -> $A + C - 10.
 
 pbkdf2(Type, Iterations, Length, Pass, Salt) ->
-    Mac = fun(Key, Data) -> crypto:hmac(Type, Key, Data) end,
+    Mac = fun(Key, Data) -> crypto:mac(hmac, Type, Key, Data) end,
     pbkdf2(Mac, 1, 1, Iterations, Length, Pass, Salt, <<>>).
 
 pbkdf2(Mac, Reps, Reps, Iterations, Length, Pass, Salt, Acc) ->
