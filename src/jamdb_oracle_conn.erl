@@ -165,7 +165,7 @@ handle_token(<<Token, Data/binary>>, State) ->
                 {?TTI_AUTH, Resp, Ver, SessId} ->
                     #oraclient{auth = KeyConn} = State,
                     Cursors = spawn(fun() -> loop([]) end),
-                    case jamdb_oracle_crypt:validate(Resp,KeyConn) of
+                    case jamdb_oracle_crypt:validate(#logon{auth=Resp, key=KeyConn}) of
                         ok -> State#oraclient{conn_state=connected,auth=SessId,server=Ver,cursors=Cursors};
                         error -> handle_error(remote, Resp, State)
                     end
