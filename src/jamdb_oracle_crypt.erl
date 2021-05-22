@@ -29,7 +29,7 @@ o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits)
     KeySess = <<Data/binary,0:32>>,
     o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
 o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits) when Bits =:= 256 ->
-    Data = pbkdf2(sha512, 4096, 64, Pass, <<(hexstr2bin(Salt))/binary,"AUTH_PBKDF2_SPEEDY_KEY">>),
+    Data = pbkdf2(sha512, 64, 4096, 64, Pass, <<(hexstr2bin(Salt))/binary,"AUTH_PBKDF2_SPEEDY_KEY">>),
     KeySess = binary:part(crypto:hash(sha512, <<Data/binary, (hexstr2bin(Salt))/binary>>),0,32),
     o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits,
     der_salt=DerivedSalt, der_key = <<(crypto:strong_rand_bytes(16))/binary, Data/binary>>}).
@@ -82,7 +82,7 @@ conn_key(Data, undefined, Bits) when Bits =:= 192 ->
     <<(erlang:md5(binary:part(Data,0,16)))/binary,
       (binary:part(erlang:md5(binary:part(Data,16,8)),0,8))/binary>>;
 conn_key(Data, DerivedSalt, Bits) ->
-    pbkdf2(sha512, 3, Bits div 8, bin2hexstr(Data), hexstr2bin(DerivedSalt)).
+    pbkdf2(sha512, 64, 3, Bits div 8, bin2hexstr(Data), hexstr2bin(DerivedSalt)).
 
 cat_key(X,Y,undefined, Bits) ->
     cat_key(binary:part(X, 16, Bits div 8),binary:part(Y, 16, Bits div 8),[]);
@@ -143,23 +143,8 @@ block_encrypt(Cipher, Key, Ivec, Data) ->
 block_decrypt(Cipher, Key, Ivec, Data) ->
     crypto:crypto_one_time(Cipher, Key, Ivec, Data, false).
 
-pbkdf2(Type, Iterations, Length, Pass, Salt) ->
-    Mac = fun(Key, Data) -> crypto:mac(hmac, Type, Key, Data) end,
-    pbkdf2(Mac, 1, 1, Iterations, Length, Pass, Salt, <<>>).
+pbkdf2(Type, MacLength, Count, Length, Pass, Salt) ->
+    pubkey_pbe:pbdkdf2(Pass, Salt, Count, Length, fun pbdkdf2_hmac/4, Type, MacLength).
 
-pbkdf2(Mac, Reps, Reps, Iterations, Length, Pass, Salt, Acc) ->
-    << Key:Length/binary, _/binary >> =
-    << Acc/binary, (pbkdf2_exor(Mac, Pass, Salt, 1, Iterations, Reps, <<>>, <<>>))/binary >>,
-    Key;
-pbkdf2(Mac, Num, Reps, Iterations, Length, Pass, Salt, Acc) ->
-    pbkdf2(Mac, Num + 1, Reps, Iterations, Length, Pass, Salt,
-    << Acc/binary, (pbkdf2_exor(Mac, Pass, Salt, 1, Iterations, Num, <<>>, <<>>))/binary >>).
-
-pbkdf2_exor(_Mac, _Pass, _Salt, I, Iterations, _Num, _Prev, Acc) when I > Iterations ->
-    Acc;
-pbkdf2_exor(Mac, Pass, Salt, I = 1, Iterations, Num, <<>>, <<>>) ->
-    Next = Mac(Pass, << Salt/binary, Num:1/integer-unit:32 >>),
-    pbkdf2_exor(Mac, Pass, Salt, I + 1, Iterations, Num, Next, Next);
-pbkdf2_exor(Mac, Pass, Salt, I, Iterations, Num, Prev, Acc) ->
-    Next = Mac(Pass, Prev),
-    pbkdf2_exor(Mac, Pass, Salt, I + 1, Iterations, Num, Next, crypto:exor(Next, Acc)).
+pbdkdf2_hmac(Type, Key, Data, MacLength) ->
+    crypto:macN(hmac, Type, Key, Data, MacLength).
