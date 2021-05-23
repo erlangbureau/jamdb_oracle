@@ -15,23 +15,23 @@
 %    N = (8 - (length(Pass) rem 8 )) rem 8,
 %    CliPass = <<(list_to_binary(Pass))/binary, (binary:copy(<<0>>, N))/binary>>,
 %    AuthPass = block_encrypt(des_cbc, binary:part(SrvSess,0,8), IVec, CliPass),
-%    {bin2hexstr(AuthPass)++[N], [], []}.
+%    {hexify(AuthPass)++[N], [], []}.
 
 o5logon(#logon{auth=Sess, der_salt=DerivedSalt, user=User, password=Pass}, Bits) when Bits =:= 128 ->
     IVec = <<0:64>>,
     CliPass = norm(User++Pass),
-    B1 = block_encrypt(des_cbc, hexstr2bin("0123456789ABCDEF"), IVec, CliPass),
+    B1 = block_encrypt(des_cbc, unhex("0123456789ABCDEF"), IVec, CliPass),
     B2 = block_encrypt(des_cbc, binary:part(B1,byte_size(B1),-8), IVec, CliPass),
     KeySess = <<(binary:part(B2,byte_size(B2),-8))/binary,0:64>>,
-    o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
+    o5logon(#logon{auth=unhex(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
 o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits) when Bits =:= 192 ->
-    Data = crypto:hash(sha,<<(list_to_binary(Pass))/binary,(hexstr2bin(Salt))/binary>>),
+    Data = crypto:hash(sha,<<(list_to_binary(Pass))/binary,(unhex(Salt))/binary>>),
     KeySess = <<Data/binary,0:32>>,
-    o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
+    o5logon(#logon{auth=unhex(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
 o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits) when Bits =:= 256 ->
-    Data = pbkdf2(sha512, 64, 4096, 64, Pass, <<(hexstr2bin(Salt))/binary,"AUTH_PBKDF2_SPEEDY_KEY">>),
-    KeySess = binary:part(crypto:hash(sha512, <<Data/binary, (hexstr2bin(Salt))/binary>>),0,32),
-    o5logon(#logon{auth=hexstr2bin(Sess), key=KeySess, password=Pass, bits=Bits,
+    Data = pbkdf2(sha512, 64, 4096, 64, Pass, <<(unhex(Salt))/binary,"AUTH_PBKDF2_SPEEDY_KEY">>),
+    KeySess = binary:part(crypto:hash(sha512, <<Data/binary, (unhex(Salt))/binary>>),0,32),
+    o5logon(#logon{auth=unhex(Sess), key=KeySess, password=Pass, bits=Bits,
     der_salt=DerivedSalt, der_key = <<(crypto:strong_rand_bytes(16))/binary, Data/binary>>}).
 
 o5logon(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey, password=Pass, bits=Bits}) ->
@@ -52,7 +52,7 @@ o5logon(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey,
         undefined -> <<>>;
         _ -> block_encrypt(Cipher, KeyConn, IVec, DerivedKey)
     end,
-    {bin2hexstr(AuthPass), bin2hex(AuthSess), bin2hexstr(SpeedyKey), KeyConn}.
+    {hexify(AuthPass), list_to_binary(hexify(AuthSess)), hexify(SpeedyKey), KeyConn}.
 
 generate(#logon{type=Type} = Logon) ->
     Bits =
@@ -66,7 +66,7 @@ generate(#logon{type=Type} = Logon) ->
 validate(#logon{auth=Resp, key=KeyConn}) ->
     IVec = <<0:128>>,
     Cipher = list_to_atom("aes_"++integer_to_list(byte_size(KeyConn) * 8)++"_cbc"),
-    Data = block_decrypt(Cipher, KeyConn, IVec, hexstr2bin(Resp)),
+    Data = block_decrypt(Cipher, KeyConn, IVec, unhex(Resp)),
     case binary:match(Data,<<"SERVER_TO_CLIENT">>) of
         nomatch -> error;
         _ -> ok
@@ -82,7 +82,7 @@ conn_key(Data, undefined, Bits) when Bits =:= 192 ->
     <<(erlang:md5(binary:part(Data,0,16)))/binary,
       (binary:part(erlang:md5(binary:part(Data,16,8)),0,8))/binary>>;
 conn_key(Data, DerivedSalt, Bits) ->
-    pbkdf2(sha512, 64, 3, Bits div 8, bin2hexstr(Data), hexstr2bin(DerivedSalt)).
+    pbkdf2(sha512, 64, 3, Bits div 8, hexify(Data), unhex(DerivedSalt)).
 
 cat_key(X,Y,undefined, Bits) ->
     cat_key(binary:part(X, 16, Bits div 8),binary:part(Y, 16, Bits div 8),[]);
@@ -115,27 +115,19 @@ pad(S) ->
 
 pad(P, Bin) -> <<Bin/binary, (binary:copy(<<P>>, P))/binary>>.
 
-hexstr2bin(S) ->
-    list_to_binary(hexstr2list(S)).
+unhex(S) ->
+    list_to_binary(unhex(S, [])).
 
-hexstr2list([X,Y|T]) ->
-    [mkint(X)*16 + mkint(Y) | hexstr2list(T)];
-hexstr2list([]) ->
-    [].
-mkint(C) when $0 =< C, C =< $9 ->
-    C - $0;
-mkint(C) when $A =< C, C =< $F ->
-    C - $A + 10;
-mkint(C) when $a =< C, C =< $f ->
-    C - $a + 10.
+unhex("", Acc) ->
+    lists:reverse(Acc);
+unhex([X, Y | S], Acc) ->
+    unhex(S, [list_to_integer([X, Y], 16) | Acc]).
 
-bin2hexstr(Bin) when is_binary(Bin) ->
-    binary_to_list(bin2hex(Bin)).
+hexify(Bin) ->
+    [hex_byte(B) || B <- binary_to_list(Bin)].
 
-bin2hex(Bin) when is_binary(Bin) ->
-    << <<(mkhex(H)),(mkhex(L))>> || <<H:4,L:4>> <= Bin >>.
-mkhex(C) when C < 10 -> $0 + C;
-mkhex(C) -> $A + C - 10.
+hex_byte(B) when B < 16 -> "0"++integer_to_list(B, 16);
+hex_byte(B) -> integer_to_list(B, 16).
 
 block_encrypt(Cipher, Key, Ivec, Data) ->
     crypto:crypto_one_time(Cipher, Key, Ivec, Data, true).
