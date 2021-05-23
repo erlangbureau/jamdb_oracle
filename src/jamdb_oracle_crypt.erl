@@ -76,38 +76,38 @@ validate(#logon{auth=Resp, key=KeyConn}) ->
 %% Internal misc
 %%====================================================================
 
-conn_key(Data, undefined, Bits) when Bits =:= 128 ->
-    <<(erlang:md5(Data))/binary>>;
-conn_key(Data, undefined, Bits) when Bits =:= 192 ->
-    <<(erlang:md5(binary:part(Data,0,16)))/binary,
-      (binary:part(erlang:md5(binary:part(Data,16,8)),0,8))/binary>>;
-conn_key(Data, DerivedSalt, Bits) ->
-    pbkdf2(sha512, 64, 3, Bits div 8, hexify(Data), unhex(DerivedSalt)).
+conn_key(Key, undefined, Bits) when Bits =:= 128 ->
+    <<(erlang:md5(Key))/binary>>;
+conn_key(Key, undefined, Bits) when Bits =:= 192 ->
+    <<(erlang:md5(binary:part(Key,0,16)))/binary,
+      (binary:part(erlang:md5(binary:part(Key,16,8)),0,8))/binary>>;
+conn_key(Key, DerivedSalt, Bits) ->
+    pbkdf2(sha512, 64, 3, Bits div 8, hexify(Key), unhex(DerivedSalt)).
 
-cat_key(X,Y,undefined, Bits) ->
-    cat_key(binary:part(X, 16, Bits div 8),binary:part(Y, 16, Bits div 8),[]);
-cat_key(X,Y,_DerivedSalt, Bits) ->
-    <<(binary:part(Y, 0, Bits div 8))/binary,(binary:part(X, 0, Bits div 8))/binary>>.
+cat_key(Key, Key2, undefined, Bits) ->
+    cat_key(binary:part(Key, 16, Bits div 8),binary:part(Key2, 16, Bits div 8),[]);
+cat_key(Key, Key2, _DerivedSalt, Bits) ->
+    <<(binary:part(Key2, 0, Bits div 8))/binary,(binary:part(Key, 0, Bits div 8))/binary>>.
 
 cat_key(<<>>,<<>>,S) ->
     list_to_binary(S);
-cat_key(<<H, X/bits>>,<<L, Y/bits>>,S) ->
-    cat_key(X,Y,S++[H bxor L]).
+cat_key(<<A, Rest/bits>>,<<B, Rest2/bits>>,S) ->
+    cat_key(Rest,Rest2,S++[A bxor B]).
 
 norm(Data) ->
-    S = norm(list_to_binary(Data),[]),
-    N = (8 - (length(S) rem 8 )) rem 8,
-    <<(list_to_binary(S))/binary, (binary:copy(<<0>>, N))/binary>>.
+    Bin = norm(?ENCODER:encode_str(Data),[]),
+    N = (8 - (byte_size(Bin) rem 8 )) rem 8,
+    <<Bin/binary, (binary:copy(<<0>>, N))/binary>>.
 
 norm(<<>>,S) ->
-    S;
-norm(<<U/utf8,R/binary>>,S) ->
-    C = case U of
+    list_to_binary(S);
+norm(<<A/utf8, Rest/bits>>,S) ->
+    B = case A of
         N when N > 255 -> 63;
         N when N >= 97, N =< 122 -> N-32;
         N -> N
     end,
-    norm(R,S++[0,C]).
+    norm(Rest,S++[0,B]).
 
 pad(S) ->
     P = 16 - (length(S) rem 16),
@@ -118,10 +118,10 @@ pad(P, Bin) -> <<Bin/binary, (binary:copy(<<P>>, P))/binary>>.
 unhex(S) ->
     list_to_binary(unhex(S, [])).
 
-unhex("", Acc) ->
+unhex([], Acc) ->
     lists:reverse(Acc);
-unhex([X, Y | S], Acc) ->
-    unhex(S, [list_to_integer([X, Y], 16) | Acc]).
+unhex([A, B | S], Acc) ->
+    unhex(S, [list_to_integer([A, B], 16) | Acc]).
 
 hexify(Bin) ->
     [hex_byte(B) || B <- binary_to_list(Bin)].
