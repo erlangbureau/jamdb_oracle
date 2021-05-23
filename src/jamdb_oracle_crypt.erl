@@ -95,7 +95,7 @@ cat_key(<<A, Rest/bits>>,<<B, Rest2/bits>>,S) ->
     cat_key(Rest,Rest2,S++[A bxor B]).
 
 norm(Data) ->
-    Bin = norm(?ENCODER:encode_str(Data),[]),
+    Bin = norm(list_to_binary(Data),[]),
     N = (8 - (byte_size(Bin) rem 8 )) rem 8,
     <<Bin/binary, (binary:copy(<<0>>, N))/binary>>.
 
