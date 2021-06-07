@@ -1,0 +1,16 @@
+-define(ConnOpts, [
+	{host, "jamdb-oracle-dev.erlangbureau.dp.ua"},
+	{port, 1521},
+	{user, "jamdbtest"},
+	{password, "jamdbtest"},
+	{sid, "JAMDBTEST"},
+%%	{service_name, "JAMDBTEST"},
+	{ssl, [{ciphers,[{rsa,aes_128_cbc,sha}]},
+		{versions, [tlsv1]},
+		{signature_algs,[{sha,rsa}]},
+		{certfile, "cert.pem"},
+		{keyfile, "key.pem"},
+		{password, "PASSWORD"}
+		]},
+	{app_name, "jamdbtest"}
+]).
