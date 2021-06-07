@@ -94,10 +94,10 @@ init_per_testcase(Case, Config) ->
     case ?config(init_type, Config) of
         datatypes ->
             Query = lists:concat(["create table ", Case, "( ", table_desc(Case), " )"]),
-            {ok, [{affected_rows,0}]} = jamdb_oracle:sql_query(ConnRef, Query);
+            {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query);
         procedure ->
             Query = lists:concat(["create or replace procedure ", Case, " ", procedure_desc(Case)]),
-            {ok, [{affected_rows,0}]} = jamdb_oracle:sql_query(ConnRef, Query);
+            {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query);
         _ ->
             nothing
     end,
@@ -108,10 +108,10 @@ end_per_testcase(Case, Config) ->
     case ?config(init_type, Config) of
         datatypes ->
             Query = lists:concat(["drop table ", Case]),
-            {ok, [{affected_rows,0}]} = jamdb_oracle:sql_query(ConnRef, Query);
+            {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query);
         procedure ->
             Query = lists:concat(["drop procedure ", Case]),
-            {ok, [{affected_rows,0}]} = jamdb_oracle:sql_query(ConnRef, Query);
+            {ok, Result} = jamdb_oracle:sql_query(ConnRef, Query);
         _ ->
             nothing
     end,
