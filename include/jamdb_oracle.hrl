@@ -22,6 +22,7 @@
     {sdu, non_neg_integer()} |
     {role, non_neg_integer()} |
     {prelim, non_neg_integer()} |
+    {newpassword, string()} |
     {app_name, string()}.
 
 -record(oraclient, {
@@ -47,13 +48,15 @@
 -record(logon, {
     user,
     password,
+    newpassword,
     type,
     auth,
     bits,
     salt,
     der_salt,
     key,
-    der_key
+    der_key,
+    speedy_key
 }).
 
 -record(format, {
