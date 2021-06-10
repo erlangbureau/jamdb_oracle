@@ -48,8 +48,9 @@ connect(Opts, Tout) ->
     SockOpts = [binary, {active, false}, {packet, raw}, %{recbuf, 65535},
             {nodelay, true}, {keepalive, true}]++SocketOpts,
     Pass        = proplists:get_value(password, Opts),
-    EnvOpts     = proplists:delete(password, Opts),
-    Passwd = spawn(fun() -> loop(Pass) end),
+    NewPass     = proplists:get_value(newpassword, Opts, []),
+    EnvOpts     = proplists:delete(password, proplists:delete(newpassword, Opts)),
+    Passwd = spawn(fun() -> loop({Pass, NewPass}) end),
     case gen_tcp:connect(Host, Port, SockOpts, Tout) of
         {ok, Socket} ->
             {ok, Socket2} = sock_connect(Socket, SslOpts, Tout),
@@ -81,10 +82,11 @@ disconnect(#oraclient{env=Env}, _Tout) ->
 -spec reconnect(state()) -> {ok, state()}.
 reconnect(#oraclient{passwd=Passwd} = State) ->
     Passwd ! {get, self()},
-    Pass = receive Reply -> Reply end,
+    {Pass, NewPass} = receive Reply -> Reply end,
     exit(Passwd, ok),
-    {ok, InitOpts} = disconnect(State, 0),
-    connect(erlang:append_element({password, Pass}, InitOpts)).
+    {ok, EnvOpts} = disconnect(State, 0),
+    Pass2 = if NewPass =/= [] -> NewPass; true -> Pass end,
+    connect(erlang:append_element({password, Pass2}, EnvOpts)).
 
 -spec sql_query(state(), string() | tuple(), timeout()) -> query_result().
 sql_query(State, Query, _Tout) ->
@@ -156,12 +158,12 @@ handle_login(#oraclient{socket=Socket, env=Env, sdu=Length, timeouts=Touts} = St
 
 handle_token(<<Token, Data/binary>>, State) ->
     case Token of
-	?TTI_PRO -> send_req(dty, State);
-	?TTI_DTY -> send_req(sess, State);
-	?TTI_RPA ->
+        ?TTI_PRO -> send_req(dty, State);
+        ?TTI_DTY -> send_req(sess, State);
+        ?TTI_RPA ->
             case ?DECODER:decode_token(rpa, Data) of
                 {?TTI_SESS, Request} ->
-		    send_req(auth, State#oraclient{req=Request});
+                    send_req(auth, State#oraclient{req=Request});
                 {?TTI_AUTH, Resp, Ver, SessId} ->
                     #oraclient{auth = KeyConn} = State,
                     Cursors = spawn(fun() -> loop([]) end),
@@ -170,9 +172,9 @@ handle_token(<<Token, Data/binary>>, State) ->
                         error -> handle_error(remote, Resp, State)
                     end
             end;
-	?TTI_WRN -> handle_token(?DECODER:decode_token(wrn, Data), State);
-	_ ->
-    	    {error, remote, undefined}
+        ?TTI_WRN -> handle_token(?DECODER:decode_token(wrn, Data), State);
+        _ ->
+            {error, remote, undefined}
     end.
 
 handle_error(socket, Reason, State) ->
@@ -184,8 +186,8 @@ handle_error(Type, Reason, State) ->
 
 handle_req(pig, #oraclient{cursors=Cursors,seq=Task} = State, {Type, Request}) ->
     {LPig, LPig2} = unzip([get_param(defcols, DefCol) || DefCol <- get_result(Cursors)]),
-    Pig = if length(LPig) > 0 -> get_record(pig, [], {?TTI_CANA, LPig}, Task); true -> <<>> end,
-    Pig2 = if length(LPig2) > 0 -> get_record(pig, [], {?TTI_OCCA, LPig2}, Task); true -> <<>> end,
+    Pig = if LPig =/= [] -> get_record(pig, [], {?TTI_CANA, LPig}, Task); true -> <<>> end,
+    Pig2 = if LPig2 =/= [] -> get_record(pig, [], {?TTI_OCCA, LPig2}, Task); true -> <<>> end,
     Data = get_record(Type, [], Request, Task),
     {ok, State2} = send(State, ?TNS_DATA, <<Pig/binary, Pig2/binary, Data/binary>>),
     handle_resp([], State2);
@@ -241,10 +243,11 @@ send_req(exec, State, {Query, Bind, Batch}) when is_map(Bind) ->
     send_req(exec, State, {Query, get_param(Data, Bind, []), [get_param(Data, B, []) || B <- Batch]});
 send_req(exec, #oraclient{charset=Charset,fetch=Fetch,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
     {Type, Fetch2} = get_param(type, {lists:nth(1, string:tokens(string:to_upper(Query)," \t\r\n")), [B || {out, B} <- Bind], Fetch}),
-    DefCol = get_param(defcols, {Query, Cursors}),
+    Sum = erlang:crc32(?ENCODER:encode_str(Query)),
+    DefCol = get_param(defcols, {Sum, Cursors}),
     {LCursor, Cursor} = get_param(defcols, DefCol),
-    Pig = if Cursor > 0 -> get_record(pig, [], {?TTI_CANA, [Cursor]}, Task); true -> <<>> end,
-    Pig2 = if Cursor > 0 -> get_record(pig, [], {?TTI_OCCA, [Cursor]}, Task); true -> <<>> end,
+    Pig = if Cursor =/= 0 -> get_record(pig, [], {?TTI_CANA, [Cursor]}, Task); true -> <<>> end,
+    Pig2 = if Cursor =/= 0 -> get_record(pig, [], {?TTI_OCCA, [Cursor]}, Task); true -> <<>> end,
     Data = get_record(exec, State#oraclient{type=Type,fetch=Fetch2}, {LCursor, if LCursor =:= 0 -> Query; true -> [] end,
         [get_param(data, B) || B <- Bind], Batch, []}, Task),
     send(State#oraclient{type=Type,defcols=DefCol,params=[get_param(format, B, #format{charset=Charset}) || B <- Bind]},
@@ -262,43 +265,43 @@ handle_resp(Acc, #oraclient{socket=Socket, sdu=Length, timeouts=Touts} = State) 
 
 handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
     case ?DECODER:decode_token(Data, Acc) of
-	{0, RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->
-	    {Type2, Request} =
-	    case LCursor =:= Cursor of
-	       true -> {Type, {Cursor, if RowNumber =:= 0 -> RowFormat; true -> [] end}};
-	       _ -> {cursor, Cursor}
-	    end,
-	    {ok, State2} = send_req(fetch, State, Request),
-	    #oraclient{auto=Auto, defcols=DefCol} = State2,
-	    {_, Result} = get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
+        {0, RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->
+            {Type2, Request} =
+            case LCursor =:= Cursor of
+                true -> {Type, {Cursor, if RowNumber =:= 0 -> RowFormat; true -> [] end}};
+                _ -> {cursor, Cursor}
+            end,
+            {ok, State2} = send_req(fetch, State, Request),
+            #oraclient{auto=Auto, defcols=DefCol} = State2,
+            {_, Result} = get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
             handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=Result, type=Type2});
-	{RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
-	    case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
-		more when Type =:= fetch ->
-		    {ok, [{fetched_rows, Cursor, RowFormat, Rows}], State};
-		more ->
-		    {ok, State2} = send_req(fetch, State, Cursor),
-		    handle_resp({Cursor, RowFormat, Rows}, State2);
-		{ok, _} = Result ->
-		    #oraclient{auto=Auto, defcols=DefCol} = State,
-		    case get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors) of
-			{reset, _} -> send_req(reset, State);
-			_ -> more
-		    end,
-		    erlang:append_element(Result, State);
-		{error, Result} ->
-		    case get_result(Cursors) of
-			[] -> more;
-			_ -> send_req(reset, State)
-		    end,
-		    {ok, Result, State}
-	    end;
-	{ok, Result} -> %tran
-	    {ok, Result, State};
-	{error, fob} -> %return
-	    handle_req(fob, State, Acc);
-	{error, Reason} ->
-	    handle_error(remote, Reason, State)
+            {RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
+            case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
+                more when Type =:= fetch ->
+                    {ok, [{fetched_rows, Cursor, RowFormat, Rows}], State};
+                more ->
+                    {ok, State2} = send_req(fetch, State, Cursor),
+                    handle_resp({Cursor, RowFormat, Rows}, State2);
+                {ok, _} = Result ->
+                    #oraclient{auto=Auto, defcols=DefCol} = State,
+                    case get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors) of
+                        {reset, _} -> send_req(reset, State);
+                        _ -> more
+                    end,
+                    erlang:append_element(Result, State);
+                {error, Result} ->
+                    case get_result(Cursors) of
+                        [] -> more;
+                        _ -> send_req(reset, State)
+                    end,
+                    {ok, Result, State}
+            end;
+        {ok, Result} -> %tran
+            {ok, Result, State};
+        {error, fob} -> %return
+            handle_req(fob, State, Acc);
+        {error, Reason} ->
+            handle_error(remote, Reason, State)
     end.
 
 get_result(cursor, 0, _RowNumber, _RowFormat, _Rows) ->
@@ -329,8 +332,8 @@ get_result(Auto, {Sum, {0, _Cursor, _RowFormat}}, Result, Cursors) when is_pid(C
     Acc = get_result(Cursors),
     DefCol = {Sum, Result},
     case length(Acc) > 127 of
-	true when Auto =:= 1 -> {reset, DefCol};
-	_ -> Cursors ! {set, [DefCol|Acc]}, {more, DefCol}
+        true when Auto =:= 1 -> {reset, DefCol};
+        _ -> Cursors ! {set, [DefCol|Acc]}, {more, DefCol}
     end;
 get_result(_Auto, DefCol, _Result, _Cursors) -> {more, DefCol}.
 
@@ -349,9 +352,8 @@ get_param(Type, Data, Format) when is_atom(Type) ->
     {<<>>, DataType, Length, Scale, Charset} = ?DECODER:decode_helper(param, Data, Format),
     #format{param=Type,data_type=DataType,data_length=Length,data_scale=Scale,charset=Charset}.
 
-get_param(defcols, {Query, Cursors}) when is_pid(Cursors) ->
+get_param(defcols, {Sum, Cursors}) when is_pid(Cursors) ->
     Acc = get_result(Cursors),
-    Sum = erlang:crc32(?ENCODER:encode_str(Query)),
     {Sum, proplists:get_value(Sum, Acc, {0,0,[]})};
 get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) when LCursor =:= Cursor -> {LCursor, 0};
 get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) -> {LCursor, Cursor};
