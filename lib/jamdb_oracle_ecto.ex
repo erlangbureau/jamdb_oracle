@@ -71,6 +71,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:read_timeout` - Read timeout while reading from the socket, defaults to `500`
     * `:role` - Mode that is used in an internal logon
     * `:prelim` - Mode that is permitted when the database is down
+    * `:newpassword` - User new password (Change password for the connecting user)
 
   ### Output parameters
 
