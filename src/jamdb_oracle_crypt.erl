@@ -1,42 +1,49 @@
 -module(jamdb_oracle_crypt).
 
+%% API
 -export([generate/1]).
 -export([validate/1]).
 
 -include("jamdb_oracle.hrl").
 
-%%====================================================================
-%% callbacks
-%%====================================================================
-
-%o3logon(Sess, KeySess, Pass) ->
+%% API
+%o3logon(#logon{auth=Sess, key=KeySess, password=Pass}) ->
 %    IVec = <<0:64>>,
 %    SrvSess = block_decrypt(des_cbc, binary:part(KeySess,0,8), IVec, Sess),
 %    N = (8 - (length(Pass) rem 8 )) rem 8,
 %    CliPass = <<(list_to_binary(Pass))/binary, (binary:copy(<<0>>, N))/binary>>,
 %    AuthPass = block_encrypt(des_cbc, binary:part(SrvSess,0,8), IVec, CliPass),
-%    {hexify(AuthPass)++[N], [], []}.
+%    #logon{password=hexify(AuthPass)++[N]}.
 
-o5logon(#logon{auth=Sess, der_salt=DerivedSalt, user=User, password=Pass}, Bits) when Bits =:= 128 ->
+o5logon(#logon{auth=Sess, user=User, password=Pass, bits=128} = Logon) ->
     IVec = <<0:64>>,
     CliPass = norm(User++Pass),
     B1 = block_encrypt(des_cbc, unhex("0123456789ABCDEF"), IVec, CliPass),
     B2 = block_encrypt(des_cbc, binary:part(B1,byte_size(B1),-8), IVec, CliPass),
     KeySess = <<(binary:part(B2,byte_size(B2),-8))/binary,0:64>>,
-    o5logon(#logon{auth=unhex(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
-o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits) when Bits =:= 192 ->
+    generate(Logon#logon{auth=unhex(Sess), key=KeySess});
+o5logon(#logon{auth=Sess, salt=Salt, password=Pass, bits=192} = Logon) ->
     Data = crypto:hash(sha,<<(list_to_binary(Pass))/binary,(unhex(Salt))/binary>>),
     KeySess = <<Data/binary,0:32>>,
-    o5logon(#logon{auth=unhex(Sess), key=KeySess, password=Pass, bits=Bits, der_salt=DerivedSalt});
-o5logon(#logon{auth=Sess, salt=Salt, der_salt=DerivedSalt, password=Pass}, Bits) when Bits =:= 256 ->
+    generate(Logon#logon{auth=unhex(Sess), key=KeySess});
+o5logon(#logon{auth=Sess, salt=Salt, password=Pass, bits=256} = Logon) ->
     Data = pbkdf2(sha512, 64, 4096, 64, Pass, <<(unhex(Salt))/binary,"AUTH_PBKDF2_SPEEDY_KEY">>),
     KeySess = binary:part(crypto:hash(sha512, <<Data/binary, (unhex(Salt))/binary>>),0,32),
-    o5logon(#logon{auth=unhex(Sess), key=KeySess, password=Pass, bits=Bits,
-    der_salt=DerivedSalt, der_key = <<(crypto:strong_rand_bytes(16))/binary, Data/binary>>}).
+    generate(Logon#logon{auth=unhex(Sess), key=KeySess,
+    der_key = <<(crypto:strong_rand_bytes(16))/binary, Data/binary>>}).
 
-o5logon(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey, password=Pass, bits=Bits}) ->
+generate(#logon{type=Type,bits=undefined} = Logon) ->
+    Bits =
+    case Type of
+        2361 -> 128;
+        6949 -> 192;
+        18453 -> 256
+    end,
+    o5logon(Logon#logon{bits=Bits});
+generate(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey, 
+                password=Pass, newpassword=NewPass, bits=Bits} = Logon) ->
     IVec = <<0:128>>,
-    Cipher = list_to_atom("aes_"++integer_to_list(Bits)++"_cbc"),
+    Cipher = cipher(Bits),
     SrvSess = block_decrypt(Cipher, KeySess, IVec, Sess),
     CliSess =
     case binary:match(SrvSess,pad(8, <<>>)) of
@@ -47,40 +54,38 @@ o5logon(#logon{auth=Sess, key=KeySess, der_salt=DerivedSalt, der_key=DerivedKey,
     CatKey = cat_key(SrvSess, CliSess, DerivedSalt, Bits),
     KeyConn = conn_key(CatKey, DerivedSalt, Bits),
     AuthPass = block_encrypt(Cipher, KeyConn, IVec, pad(Pass)),
+    AuthNewPass =
+    case NewPass of
+        [] -> <<>>;
+        _ -> block_encrypt(Cipher, KeyConn, IVec, pad(NewPass))
+    end,
     SpeedyKey =
     case DerivedKey of
         undefined -> <<>>;
         _ -> block_encrypt(Cipher, KeyConn, IVec, DerivedKey)
     end,
-    {hexify(AuthPass), list_to_binary(hexify(AuthSess)), hexify(SpeedyKey), KeyConn}.
-
-generate(#logon{type=Type} = Logon) ->
-    Bits =
-    case Type of
-        2361 -> 128;
-        6949 -> 192;
-        18453 -> 256
-    end,
-    o5logon(Logon, Bits).
+    Logon#logon{auth=list_to_binary(hexify(AuthSess)), key=KeyConn, speedy_key=hexify(SpeedyKey),
+    password=hexify(AuthPass), newpassword=hexify(AuthNewPass)}.
 
 validate(#logon{auth=Resp, key=KeyConn}) ->
     IVec = <<0:128>>,
-    Cipher = list_to_atom("aes_"++integer_to_list(byte_size(KeyConn) * 8)++"_cbc"),
+    Cipher = cipher(byte_size(KeyConn) * 8),
     Data = block_decrypt(Cipher, KeyConn, IVec, unhex(Resp)),
     case binary:match(Data,<<"SERVER_TO_CLIENT">>) of
         nomatch -> error;
         _ -> ok
     end.
 
-%%====================================================================
-%% Internal misc
-%%====================================================================
+%% internal
+cipher(128) -> aes_128_cbc;
+cipher(192) -> aes_192_cbc;
+cipher(256) -> aes_256_cbc.
 
-conn_key(Key, undefined, Bits) when Bits =:= 128 ->
+conn_key(Key, undefined, 128) ->
     <<(erlang:md5(Key))/binary>>;
-conn_key(Key, undefined, Bits) when Bits =:= 192 ->
+conn_key(Key, undefined, 192) ->
     <<(erlang:md5(binary:part(Key,0,16)))/binary,
-      (binary:part(erlang:md5(binary:part(Key,16,8)),0,8))/binary>>;
+    (binary:part(erlang:md5(binary:part(Key,16,8)),0,8))/binary>>;
 conn_key(Key, DerivedSalt, Bits) ->
     pbkdf2(sha512, 64, 3, Bits div 8, hexify(Key), unhex(DerivedSalt)).
 
