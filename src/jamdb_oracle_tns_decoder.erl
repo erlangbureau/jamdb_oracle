@@ -46,8 +46,8 @@ decode_token(<<Token, Data/binary>>, Acc) ->
         ?TTI_LOB -> decode_token(lob, Data, Acc);
         ?TTI_RPA -> decode_token(rpa, Data, Acc);
         ?TTI_OER -> decode_token(oer, Data, Acc);
-        ?TTI_STA -> {ok, Acc};     %%tran
-        ?TTI_FOB -> {error, fob};  %%return
+        ?TTI_STA -> {ok, Acc};     %tran
+        ?TTI_FOB -> {error, fob};  %return
         _ -> 
             {error, <<Token, (hd(binary:split(Data, <<0>>)))/binary>>}
     end;
@@ -76,28 +76,28 @@ decode_token(rpa, Data) ->
     end;
 decode_token(oac, Data) ->
     DataType = decode_ub1(Data),
-    A = decode_next(ub1,Data),     %%data type
-    B = decode_next(ub1,A),        %%flg
-    C = decode_next(ub1,B),        %%pre
+    A = decode_next(ub1,Data),     %data type
+    B = decode_next(ub1,A),        %flg
+    C = decode_next(ub1,B),        %pre
     Scale = decode_ub2(C),
-    D = decode_next(ub2,C),        %%data scale
+    D = decode_next(ub2,C),        %data scale
     Length = decode_ub4(D),
-    E = decode_next(ub4,D),        %%max data lenght
-    F = decode_next(ub4,E),        %%mal
-    G = decode_next(ub4,F),        %%fl2
-    J = decode_next(dalc,G),       %%toid
-    K = decode_next(ub2,J),        %%vsn
+    E = decode_next(ub4,D),        %max data lenght
+    F = decode_next(ub4,E),        %mal
+    G = decode_next(ub4,F),        %fl2
+    J = decode_next(dalc,G),       %toid
+    K = decode_next(ub2,J),        %vsn
     Charset = decode_ub2(K),
-    L = decode_next(ub2,K),        %%charset
-    M = decode_next(ub1,L),        %%form of use
-    N = decode_next(ub4,M),        %%mxlc
+    L = decode_next(ub2,K),        %charset
+    M = decode_next(ub1,L),        %form of use
+    N = decode_next(ub4,M),        %mxlc
     {N, DataType, Length, Scale, Charset};
 decode_token(wrn, Data) ->
-    A = decode_next(ub2,Data),     %%retCode
+    A = decode_next(ub2,Data),     %retCode
     Length = decode_ub2(A),
-    B = decode_next(ub2,A),        %%warnLength
-    C = decode_next(ub2,B),        %%warnFlag
-    decode_next(ub1, C, Length).   %%warnMsg
+    B = decode_next(ub2,A),        %warnLength
+    C = decode_next(ub2,B),        %warnFlag
+    decode_next(ub1, C, Length).   %warnMsg
 
 decode_token(dcb, Data, {Ver, _RowFormat, Type}) when is_atom(Type) ->
     {A, RowFormat} = decode_token(dcb, decode_next(Data), Ver),
@@ -127,12 +127,12 @@ decode_token(uds, Data, {_Ver, RowFormat, 0}) ->
     {lists:reverse(RowFormat), Data};
 decode_token(uds, Data, {Ver, RowFormat, Num}) ->
     {A, DataType, Length, Scale, Charset} = decode_token(oac, Data),
-    B = decode_next(ub1,A),        %%nullable
+    B = decode_next(ub1,A),        %nullable
     C = decode_next(ub1,B),
     Column = decode_dalc(C),
-    D = decode_next(dalc,C),       %%column name
-    E = decode_next(dalc,D),       %%schema name
-    F = decode_next(dalc,E),       %%type name
+    D = decode_next(dalc,C),       %column name
+    E = decode_next(dalc,D),       %schema name
+    F = decode_next(dalc,E),       %type name
     G = decode_next(ub2,F),
     J =
     case Ver of
@@ -163,7 +163,7 @@ decode_token(iov, Data, {Ver, RowFormat, Type}) when is_atom(Type) ->
     Num = decode_ub2(A),
     <<Mode:Num/binary, Rest/bits>> = decode_next(rxh,Data),
     case binary:matches(Mode,[<<16>>,<<48>>]) of
-        [] -> decode_token(Rest, {0, [], []});               %%proc_result
+        [] -> decode_token(Rest, {0, [], []});               %proc_result
         _ ->
             Bind = lists:zip(binary_to_list(Mode), RowFormat),
             decode_token(Rest, {Ver, [decode_param(B) || B <- Bind], Type})
@@ -176,8 +176,8 @@ decode_token(rxd, Data, {Ver, _RowFormat, fetch}) ->
 decode_token(rxd, Data, {Ver, RowFormat, Type}) when is_atom(Type) ->
     case decode_data(Data, [], {[], RowFormat, Ver, Type}) of
     	{{Cursor, CursorRowFormat}, A} ->
-            decode_token(A, {Cursor, CursorRowFormat, []});  %%fetch cursor
-        {Rows, A} -> decode_token(A, {0, RowFormat, Rows})   %%proc_result
+            decode_token(A, {Cursor, CursorRowFormat, []});  %fetch cursor
+        {Rows, A} -> decode_token(A, {0, RowFormat, Rows})   %proc_result
     end;
 decode_token(rxd, Data, {Cursor, RowFormat, Bvc, Rows}) ->
     LastRow = last(Rows),
@@ -223,9 +223,9 @@ decode_token(oer, Data, {Cursor, RowFormat, _Bvc, Rows}) ->
     decode_token(oer, Data, {Cursor, RowFormat, Rows});
 decode_token(oer, Data, {Cursor, RowFormat, Rows}) ->
     A = decode_next(ub2,Data),
-    B = decode_next(ub2,A),              %%Sequence Number
+    B = decode_next(ub2,A),              %Sequence Number
     RowNumber = decode_ub4(B),
-    C = decode_next(ub4,B),              %%Current Row Number
+    C = decode_next(ub4,B),              %Current Row Number
     RetCode = decode_ub2(C),
     RetFormat =
     case lists:member(RetCode, [0,1403]) of
@@ -233,29 +233,29 @@ decode_token(oer, Data, {Cursor, RowFormat, Rows}) ->
             D = decode_next(ub2,C),
             E = decode_next(ub2,D),
             F = decode_next(ub2,E),
-            {decode_ub2(F), RowFormat};  %%defcols
+            {decode_ub2(F), RowFormat};  %defcols
         false ->
-            D = decode_next(ub2,C),      %%Returned Code
-            E = decode_next(ub2,D),      %%Array Element w/error
-            F = decode_next(ub2,E),      %%Array Element errno
-            G = decode_next(ub2,F),      %%Current Cursor ID
-            H = decode_next(ub2,G),      %%Error Position 
-            I = decode_next(ub1,H),      %%SQL command type 
-            J = decode_next(ub2,I),      %%Fatal 
-            K = decode_next(ub2,J),      %%Various flags
-            L = decode_next(ub2,K),      %%User cursor options
-            M = decode_next(ub1,L),      %%UPI parameter that generated the error
-            N = decode_next(ub1,M),      %%Warning flags
-            O = decode_next(ub4,N),      %%Row ID rba
-            P = decode_next(ub2,O),      %%partitionid
-            Q = decode_next(ub1,P),      %%tableid
-            R = decode_next(ub4,Q),      %%blocknumber
-            S = decode_next(ub2,R),      %%slotnumber
-            T = decode_next(ub4,S),      %%Operating System Error
-            U = decode_next(ub1,T),      %%Statement number
-            V = decode_next(ub1,U),      %%Procedure call number
-            W = decode_next(ub2,V),      %%Pad
-            X = decode_next(ub4,W),      %%Successful iterations
+            D = decode_next(ub2,C),      %Returned Code
+            E = decode_next(ub2,D),      %Array Element w/error
+            F = decode_next(ub2,E),      %Array Element errno
+            G = decode_next(ub2,F),      %Current Cursor ID
+            H = decode_next(ub2,G),      %Error Position 
+            I = decode_next(ub1,H),      %SQL command type 
+            J = decode_next(ub2,I),      %Fatal 
+            K = decode_next(ub2,J),      %Various flags
+            L = decode_next(ub2,K),      %User cursor options
+            M = decode_next(ub1,L),      %UPI parameter that generated the error
+            N = decode_next(ub1,M),      %Warning flags
+            O = decode_next(ub4,N),      %Row ID rba
+            P = decode_next(ub2,O),      %partitionid
+            Q = decode_next(ub1,P),      %tableid
+            R = decode_next(ub4,Q),      %blocknumber
+            S = decode_next(ub2,R),      %slotnumber
+            T = decode_next(ub4,S),      %Operating System Error
+            U = decode_next(ub1,T),      %Statement number
+            V = decode_next(ub1,U),      %Procedure call number
+            W = decode_next(ub2,V),      %Pad
+            X = decode_next(ub4,W),      %Successful iterations
             {Cursor, decode_dalc(X)}
     end,
     {RetCode, RowNumber, Cursor, RetFormat, Rows}.
@@ -310,12 +310,12 @@ decode_next(keyword,Data) ->
     end,
     decode_next(ub2,B);
 decode_next(rxh,Data) ->
-    A = decode_next(ub1,Data),     %%Flags
-    B = decode_next(ub2,A),        %%Number of Requests
-    C = decode_next(ub2,B),        %%Iteration Number
-    D = decode_next(ub2,C),        %%Num. Iterations this time
-    E = decode_next(ub2,D),        %%UAC bufffer length
-    F = decode_next(dalc,E),       %%Bitvec
+    A = decode_next(ub1,Data),     %Flags
+    B = decode_next(ub2,A),        %Number of Requests
+    C = decode_next(ub2,B),        %Iteration Number
+    D = decode_next(ub2,C),        %Num. Iterations this time
+    E = decode_next(ub2,D),        %UAC bufffer length
+    F = decode_next(dalc,E),       %Bitvec
     decode_next(dalc,F);
 decode_next(rpa,Data) ->
     I = decode_ub2(Data),
@@ -664,24 +664,24 @@ lid(N,I,Acc) ->
 
 decode_clob(Data) ->
     A = decode_next(ub4,Data),
-    B = decode_next(ub4,A),        %%LobSize
-    C = decode_next(ub4,B),        %%LobChunkSize
+    B = decode_next(ub4,A),        %LobSize
+    C = decode_next(ub4,B),        %LobChunkSize
     Vary = decode_ub1(C),
-    D = decode_next(ub1,C),        %%ClobDBVary
+    D = decode_next(ub1,C),        %ClobDBVary
     E =
     case Vary of
-        1 -> decode_next(ub2,D);   %%ClobCharset
+        1 -> decode_next(ub2,D);   %ClobCharset
         _ -> D
     end,
-    F = decode_next(ub1,E),        %%ClobFormOfUse
+    F = decode_next(ub1,E),        %ClobFormOfUse
     Value = decode_chr(F),
     G = decode_next(chr,F),
     {Value, decode_next(G)}.
 
 decode_blob(Data) ->
     A = decode_next(ub4,Data),
-    B = decode_next(ub4,A),        %%LobSize
-    C = decode_next(ub4,B),        %%LobChunkSize
+    B = decode_next(ub4,A),        %LobSize
+    C = decode_next(ub4,B),        %LobChunkSize
     Value = decode_chr(C),
     D = decode_next(chr,C),
     {Value, decode_next(D)}.
