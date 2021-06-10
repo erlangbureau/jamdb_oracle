@@ -1,5 +1,5 @@
 -module(jamdb_oracle).
--vsn("0.4.6").
+-vsn("0.4.7").
 -behaviour(gen_server).
 
 %% API
@@ -26,8 +26,8 @@ stop(Pid) ->
     call_infinity(Pid, stop).
 
 sql_query(Pid, Query, _Tout) ->
-	sql_query(Pid, Query).
-	
+    sql_query(Pid, Query).
+
 sql_query(Pid, Query) ->
     call_infinity(Pid, {sql_query, Query}).
 
