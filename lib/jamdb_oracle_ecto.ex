@@ -72,6 +72,7 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     * `:role` - Mode that is used in an internal logon
     * `:prelim` - Mode that is permitted when the database is down
     * `:newpassword` - User new password (Change password for the connecting user)
+    * `:description` - Connect descriptor
 
   ### Output parameters
 
