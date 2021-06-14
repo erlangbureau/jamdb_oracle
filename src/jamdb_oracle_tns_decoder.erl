@@ -692,44 +692,15 @@ decode_adt(Data) ->
     C = decode_next(chr,B),
     D = decode_next(chr,C),
     E = decode_next(ub2,D),
-    Num = decode_ub4(E),
+    Length = decode_ub4(E),
     F = decode_next(ub4,E),
     G = decode_next(ub2,F),
-    case Num of
+    case Length of
         0 -> {null, G};
         _ ->
             Value = decode_chr(G),
-            J = decode_next(chr,G),
-            try decode_adt(list_to_binary(Value), 0) of
-                Values -> {Values, J}
-            catch
-                error:_ -> {Value, J}
-            end
+            {Value, decode_next(chr,G)}
     end.
-
-decode_adt(<<I,_Rest/bits>>, _Type) when I band 128 =:= 0 ->
-    erlang:error(format);
-decode_adt(Data, _Type) ->
-    A = decode_next(ub1,Data),
-    B = decode_next(ub1,A),
-    {_, C} = lrd(B),
-    {_, D} = lrd(C),
-    E = decode_next(ub1,D),
-    F = decode_next(ub1,E),
-    {Num, G} = lrd(F),
-    decode_adt(G, Num, []).
-
-decode_adt(_Data, 0, Acc) ->
-    lists:reverse(Acc);
-decode_adt(<<255, Rest/bits>>, Num, Acc) ->
-    decode_adt(Rest, Num-1, [null|Acc]);
-decode_adt(Data, Num, Acc) ->
-    {Length, A} = lrd(Data),
-   <<Bin:Length/binary, Rest/binary>> = A,
-    decode_adt(Rest, Num-1, [binary_to_list(Bin)|Acc]).
-
-lrd(<<I,F,S,T,L, Rest/bits>>) when I > 245 -> {(F+S+T) * 256 + L, Rest};
-lrd(<<L, Rest/bits>>) -> {L, Rest}.
 
 decode_long(<<0, Rest/bits>>, _Type) ->
     {null, Rest};
@@ -745,4 +716,5 @@ decode_long(Data) ->
     {Value, decode_next(ub2,A,2)}.
 
 decode_helper(param, Data, Format) -> decode_token(oac, ?ENCODER:encode_token(oac, Data, Format));
-decode_helper(tz, Data, _) -> ltz(Data).
+decode_helper(tz, Data, _) -> ltz(Data);
+decode_helper(dump, Data, DataType) -> decode_value(Data, DataType).
