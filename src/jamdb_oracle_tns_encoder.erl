@@ -41,8 +41,8 @@ encode_record(description, EnvOpts) ->
                [] -> "TCP";
                 _ -> "TCPS" end ++
     ")(HOST="++Host++")(PORT="++integer_to_list(Port)++")))");
-encode_record(login, #oraclient{env=EnvOpts,sdu=Sdu}) ->
-    Data = encode_record(description, EnvOpts),
+encode_record(login, #oraclient{env=EnvOpts,sdu=Sdu,auth=Desc}) ->
+    Data = if Desc =/= [] -> encode_str(Desc); true -> encode_record(description, EnvOpts) end,
     <<
     1,57,                    % Packet version number
     1,57,                    % Lowest compatible version number
