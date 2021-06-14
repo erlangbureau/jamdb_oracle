@@ -79,14 +79,14 @@ disconnect(#oraclient{conn_state=connected, socket=Socket, env=Env, passwd=Passw
 disconnect(#oraclient{env=Env}, _Tout) ->
     {ok, Env}.
 
--spec reconnect(state()) -> {ok, state()}.
+-spec reconnect(state()) -> empty_result().
 reconnect(#oraclient{passwd=Passwd} = State) ->
     Passwd ! {get, self()},
     {Pass, NewPass} = receive Reply -> Reply end,
     exit(Passwd, ok),
     {ok, EnvOpts} = disconnect(State, 0),
     Pass2 = if NewPass =/= [] -> NewPass; true -> Pass end,
-    connect(erlang:append_element({password, Pass2}, EnvOpts)).
+    connect([{password, Pass2}|EnvOpts]).
 
 -spec sql_query(state(), string() | tuple(), timeout()) -> query_result().
 sql_query(State, Query, _Tout) ->
