@@ -23,6 +23,7 @@
     {role, non_neg_integer()} |
     {prelim, non_neg_integer()} |
     {newpassword, string()} |
+    {description, string()} |
     {app_name, string()}.
 
 -record(oraclient, {
