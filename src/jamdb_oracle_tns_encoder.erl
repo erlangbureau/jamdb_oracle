@@ -463,6 +463,8 @@ encode_date({{Year,Mon,Day}, {Hour,Min,Sec}}) ->
     (Sec + 1)
     >>.
 
+encode_helper(type, Data) ->
+    {lists:member(Data, ["SELECT", "WITH"]), lists:member(Data, ["INSERT", "UPDATE", "DELETE", "MERGE"])};
 encode_helper(param, Data) ->
     Values =
     [
