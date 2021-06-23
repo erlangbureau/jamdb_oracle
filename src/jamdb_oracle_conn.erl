@@ -243,7 +243,9 @@ send_req(exec, State, {Query, Bind, Batch}) when is_map(Bind) ->
         string:tokens(Query," \t;,)")),
     send_req(exec, State, {Query, get_param(Data, Bind, []), [get_param(Data, B, []) || B <- Batch]});
 send_req(exec, #oraclient{charset=Charset,fetch=Fetch,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
-    {Type, Fetch2} = get_param(type, {lists:nth(1, string:tokens(string:to_upper(Query)," \t\r\n")), [B || {out, B} <- Bind], Fetch}),
+    KeyWord = lists:nth(1, string:tokens(string:to_upper(Query)," \t\r\n")),
+    {Select, Change} = ?ENCODER:encode_helper(type, KeyWord),
+    {Type, Fetch2} = get_param(type, {Select, Change, [B || {out, B} <- Bind], Fetch}),
     Sum = erlang:crc32(?ENCODER:encode_str(Query)),
     DefCol = get_param(defcols, {Sum, Cursors}),
     {LCursor, Cursor} = get_param(defcols, DefCol),
@@ -364,13 +366,10 @@ get_param(defcols, {{_Sum, {_LCursor, _Cursor, RowFormat}}, Ver, _RowFormat, Typ
     {Ver, RowFormat, Type};
 get_param(defcols, {{_Sum, {LCursor, _Cursor, RowFormat}}, _Ver, _RowFormat, Type}) ->
     {LCursor, RowFormat, Type};
-get_param(type, {"ALTER", _Bind, _Fetch}) -> {block, 0};
-get_param(type, {"BEGIN", _Bind, _Fetch}) -> {block, 0};
-get_param(type, {"EXPLAIN", _Bind, _Fetch}) -> {block, 0};
-get_param(type, {"SELECT", [], Fetch}) -> {select, Fetch};
-get_param(type, {"WITH", [], Fetch}) -> {select, Fetch};
-get_param(type, {_Value, [], _Fetch}) -> {change, 0};
-get_param(type, {_Value, _Bind, _Fetch}) -> {return, 0};
+get_param(type, {true, false, [], Fetch}) -> {select, Fetch};
+get_param(type, {false, true, [], _Fetch}) -> {change, 0};
+get_param(type, {false, true, _Bind, _Fetch}) -> {return, 0};
+get_param(type, {false, false, _Bind, _Fetch}) -> {block, 0};
 get_param(type, {_Type, fetch}) -> fetch;
 get_param(type, {Type, []}) -> Type;
 get_param(data, {out, Data}) -> ?ENCODER:encode_helper(param, Data);
