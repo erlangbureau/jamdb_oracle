@@ -1,5 +1,5 @@
 -module(jamdb_oracle).
--vsn("0.4.7").
+-vsn("0.4.8").
 -behaviour(gen_server).
 
 %% API
