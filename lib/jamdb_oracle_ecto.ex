@@ -136,6 +136,23 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
       iex> YourApp.Repo.insert_all(YourSchema,[[id: 100]], [returning: [:created_at], out: [:date]])
 
+  Using quoted identifiers:
+
+      defmodule YourApp.Users do
+        use Ecto.Schema
+
+        schema "\\"USERS\\"" do
+          field :id, :integer
+          field :name, :string, source: :'"NAME"'
+          field :namae, :string, source: :'"名まえ"'
+        end
+
+      end
+
+      iex> YourApp.Repo.all(from(u in "\\"USERS\\"", select: u.'"NAME"', where: u.id == 1))
+
+      iex> YourApp.Repo.all(from(u in YourApp.Users, select: u.namae, where: u.id == 1))
+
   Imagine you have this migration:
 
       defmodule YourApp.Migration do
