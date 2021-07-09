@@ -150,9 +150,8 @@ handle_login(#oraclient{socket=Socket, env=Env, sdu=Length, timeouts=Touts} = St
             handle_login(State2);
         {ok, ?TNS_MARKER, _BinaryData} ->
             handle_req(marker, State, []);
-        {ok, ?TNS_REFUSE, BinaryData} ->
-            _ = handle_error(remote, BinaryData, State),
-            disconnect(State, 0);
+        {ok, ?TNS_REFUSE, _BinaryData} ->
+            handle_error(local, Env, State);
         {error, Type, Reason} ->
             handle_error(Type, Reason, State)
     end.
@@ -178,12 +177,11 @@ handle_token(<<Token, Data/binary>>, State) ->
             {error, remote, undefined}
     end.
 
-handle_error(socket, Reason, State) ->
-    _ = disconnect(State, 0),
-    {error, socket, Reason, State#oraclient{conn_state=disconnected}};
+handle_error(remote, Reason, State) ->
+    {error, remote, Reason, State};
 handle_error(Type, Reason, State) ->
-%%  io:format("~p~n", [Reason]),
-    {error, Type, Reason, State}.
+    _ = disconnect(State, 0),
+    {error, Type, Reason, State#oraclient{conn_state=disconnected}}.
 
 handle_req(pig, #oraclient{cursors=Cursors,seq=Task} = State, {Type, Request}) ->
     {LPig, LPig2} = unzip([get_param(defcols, DefCol) || DefCol <- get_result(Cursors)]),
