@@ -1,5 +1,5 @@
 -module(jamdb_oracle).
--vsn("0.4.8").
+-vsn("0.4.9").
 -behaviour(gen_server).
 
 %% API
@@ -35,10 +35,7 @@ sql_query(Pid, Query) ->
 init(Opts) ->
     case jamdb_oracle_conn:connect(Opts) of
         {ok, State} ->
-            case State of
-                Opts -> {stop, Opts};
-                _ -> {ok, State}
-            end;
+            {ok, State};
         {ok, Result, _State} ->
             {stop, Result};
         {error, Type, Result, _State} ->
@@ -47,7 +44,6 @@ init(Opts) ->
 
 %% Error types: socket, remote, local
 handle_call({sql_query, Query}, _From, State) ->
-%% io:format("~p~n", [Query]),
     try jamdb_oracle_conn:sql_query(State, Query) of
         {ok, Result, State2} -> 
             {reply, {ok, Result}, State2};
@@ -57,8 +53,6 @@ handle_call({sql_query, Query}, _From, State) ->
         error:Reason ->
             {reply, {error, local, Reason}, State}
     end;
-%handle_call({prepare, Query}, _From, State) ->
-%handle_call({execute, Query}, _From, State) ->
 handle_call(stop, _From, State) ->
     {ok, _InitOpts} = jamdb_oracle_conn:disconnect(State),
     {stop, normal, ok, State};
