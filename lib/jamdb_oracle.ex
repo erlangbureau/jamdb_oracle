@@ -1,5 +1,5 @@
 defmodule Jamdb.Oracle do
-  @vsn "0.4.8"
+  @vsn "0.4.9"
   @moduledoc """
   Adapter module for Oracle. `DBConnection` behaviour implementation.
 
@@ -247,6 +247,9 @@ defmodule Jamdb.Oracle do
   def json_library() do
     Application.get_env(:jamdb_oracle, :json_library, Jason)
   end
+
+  defdelegate loaders(t, type), to: Ecto.Adapters.Jamdb.Oracle
+  defdelegate dumpers(t, type), to: Ecto.Adapters.Jamdb.Oracle
 
 end
 
