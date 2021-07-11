@@ -190,6 +190,11 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   def loaders(:binary_id, type),  do: [Ecto.UUID, type]
   def loaders(_, type),           do: [type]
 
+  @impl true
+  def dumpers({:map, _}, type),   do: [&Ecto.Type.embedded_dump(type, &1, :json)]
+  def dumpers(:binary_id, type),  do: [type, Ecto.UUID]
+  def dumpers(_, type),           do: [type]
+
   defp bool_decode("0"), do: {:ok, false}
   defp bool_decode("1"), do: {:ok, true}
   defp bool_decode(0), do: {:ok, false}
