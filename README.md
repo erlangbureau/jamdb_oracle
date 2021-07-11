@@ -52,7 +52,7 @@ Getting Started
 
 Running Tests
 ======
-First, supply connection details for your test database in test/jamdb_oracle_test.hrl or config/test.exs. Once the connection configuration is saved, run the test suite with `rebar3 ct` or `mix test`.
+`mix test` loads up `test/jamdb_oracle_test.exs` and runs the tests.
 
 Author
 ======
