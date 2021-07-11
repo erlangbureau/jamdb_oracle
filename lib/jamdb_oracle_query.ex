@@ -16,8 +16,8 @@ defmodule Jamdb.Oracle.Query do
     sources = create_names(query, as_prefix)
 
     cte      = cte(query, sources)
-    from     = from(query, sources)
-    select   = select(query, sources)
+    {from, hints} = from(query, sources)
+    {select, fields} = select(query, sources)
     window   = window(query, sources)
     join     = join(query, sources)
     where    = where(query, sources)
@@ -29,7 +29,8 @@ defmodule Jamdb.Oracle.Query do
     offset   = offset(query, sources)
     lock     = lock(query.lock)
 
-    [cte, select, window, from, join, where, group_by, having, combinations, order_by, offset, limit | lock]
+    [cte, select, hints, fields, window, from, join, where,
+     group_by, having, combinations, order_by, offset, limit | lock]
   end
 
   @doc false
@@ -145,13 +146,18 @@ defmodule Jamdb.Oracle.Query do
   defp handle_call(fun, _arity), do: {:fun, Atom.to_string(fun)}
 
   defp select(%{select: %{fields: fields}, distinct: distinct} = query, sources) do
-    ["SELECT ", distinct(distinct, sources, query) | select_fields(fields, sources, query)]
+    {["SELECT "], [distinct(distinct, sources, query) | select_fields(fields, sources, query)]}
   end
 
   defp select_fields([], _sources, _query),
     do: "NULL"
   defp select_fields(fields, sources, query) do
     intersperse_map(fields, ", ", fn
+      {:&, _, [idx]} ->
+        case elem(sources, idx) do
+          {_, source, nil} -> [source, ?. | "*"]
+          {_, source, _} -> source
+        end
       {key, value} ->
         [expr(value, sources, query), ?\s | quote_name(key)]
       value ->
@@ -159,19 +165,18 @@ defmodule Jamdb.Oracle.Query do
     end)
   end
 
+  defp hints([_ | _] = hints), do: ["/*+ ", Enum.intersperse(hints, " "), " */ "]
+  defp hints([]), do: []
+
   defp distinct(nil, _, _), do: []
   defp distinct(%QueryExpr{expr: []}, _, _), do: {[], []}
   defp distinct(%QueryExpr{expr: true}, _, _), do: "DISTINCT "
   defp distinct(%QueryExpr{expr: false}, _, _), do: []
   defp distinct(%QueryExpr{expr: exprs}, _, _) when is_list(exprs), do: "DISTINCT "
 
-  defp from(%{from: %{hints: [_ | _]}} = query, _sources) do
-    error!(query, "table hints are not supported")
-  end
-
-  defp from(%{from: %{source: source}} = query, sources) do
+  defp from(%{from: %{source: source, hints: hints}} = query, sources) do
     {from, name} = get_source(query, sources, 0, source)
-    [" FROM ", from, ?\s | name]
+    {[" FROM ", from, ?\s | name], hints(hints)}
   end
 
   defp cte(%{with_ctes: %WithExpr{queries: [_ | _] = queries}} = query, sources) do
@@ -211,17 +216,14 @@ defmodule Jamdb.Oracle.Query do
   defp join(%{joins: []}, _sources), do: []
   defp join(%{joins: joins} = query, sources) do
     [?\s | intersperse_map(joins, ?\s, fn
-      %JoinExpr{on: %QueryExpr{expr: expr}, qual: qual, ix: ix, source: source, hints: hints} ->
-        if hints != [] do
-          error!(query, "table hints are not supported")
-        end
-
+      %JoinExpr{on: %QueryExpr{expr: expr}, qual: qual, ix: ix, source: source} ->
         {join, name} = get_source(query, sources, ix, source)
         [join_qual(qual), join, ?\s, name | join_on(qual, expr, sources, query)]
     end)]
   end
 
   defp join_on(:cross, true, _sources, _query), do: []
+  defp join_on(_qual, true, _sources, _query), do: [" ON 1 = 1"]
   defp join_on(_qual, expr, sources, query), do: [" ON " | expr(expr, sources, query)]
 
   defp join_qual(:inner), do: "INNER JOIN "
@@ -360,7 +362,7 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp expr({:in, _, [_left, []]}, _sources, _query) do
-    "false"
+    "0 = 1"
   end
 
   defp expr({:in, _, [left, right]}, sources, query) when is_list(right) do
@@ -426,6 +428,10 @@ defmodule Jamdb.Oracle.Query do
     interval(DateTime.utc_now, " - ", count, interval, sources, query)
   end
 
+  defp expr({:filter, _, _}, _sources, query) do
+    error!(query, "aggregate filters are not supported")
+  end
+
   defp expr({:over, _, [agg, name]}, sources, query) when is_atom(name) do
     aggregate = expr(agg, sources, query)
     [aggregate, " OVER "]
@@ -441,28 +447,33 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp expr({:count, _, []}, _sources, _query), do: "count(*)"
-  defp expr({:count, _, [literal, :distinct]}, sources, query) do
-    exprs = expr(literal, sources, query)
-    ["count (", distinct(%QueryExpr{expr: exprs}, sources, query), exprs, ?)]
-  end
 
   defp expr({fun, _, args}, sources, query) when is_atom(fun) and is_list(args) do
+    {modifier, args} =
+      case args do
+        [rest, :distinct] -> {"DISTINCT ", [rest]}
+        _ -> {[], args}
+      end
+
     case handle_call(fun, length(args)) do
       {:binary_op, op} ->
         [left, right] = args
         [op_to_binary(left, sources, query), op | op_to_binary(right, sources, query)]
       {:fun, fun} ->
-        [fun, ?(, [], intersperse_map(args, ", ", &expr(&1, sources, query)), ?)]
+        [fun, ?(, modifier, intersperse_map(args, ", ", &expr(&1, sources, query)), ?)]
     end
   end
 
-  defp expr(%Ecto.Query.Tagged{value: literal}, sources, query) do
-    expr(literal, sources, query)
+  defp expr(%Ecto.Query.Tagged{value: binary, type: :binary}, sources, query) do
+    expr(binary, sources, query)
+  end
+  defp expr(%Ecto.Query.Tagged{value: literal, type: type}, sources, query) do
+    ["CAST(", expr(literal, sources, query), " AS ", ecto_to_db(type), ?)]
   end
 
   defp expr(nil, _sources, _query),   do: "NULL"
-  defp expr(true, _sources, _query),  do: "TRUE"
-  defp expr(false, _sources, _query), do: "FALSE"
+  defp expr(true, _sources, _query),  do: "1"
+  defp expr(false, _sources, _query), do: "0"
 
   defp expr(literal, _sources, _query) when is_binary(literal) or is_list(literal) do
      ["'", escape_string(literal), "'"]
