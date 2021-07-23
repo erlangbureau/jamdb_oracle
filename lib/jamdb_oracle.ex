@@ -61,17 +61,16 @@ defmodule Jamdb.Oracle do
   
   @impl true
   def connect(opts) do
-    database = Keyword.fetch!(opts, :database) |> to_charlist
-    env = if( hd(database) == ?:, do: [sid: tl(database)], else: [service_name: database] )
-    |> Keyword.put_new(:host, Keyword.fetch!(opts, :hostname) |> to_charlist)
-    |> Keyword.put_new(:port, Keyword.fetch!(opts, :port))
-    |> Keyword.put_new(:user, Keyword.fetch!(opts, :username) |> to_charlist)
-    |> Keyword.put_new(:password, Keyword.fetch!(opts, :password) |> to_charlist)
-    |> Keyword.put_new(:timeout, Keyword.fetch!(opts, :timeout))
-    params = if( Keyword.has_key?(opts, :parameters) == true,
-      do: opts[:parameters], else: [] )
-    sock_opts = if( Keyword.has_key?(opts, :socket_options) == true,
-      do: [socket_options: opts[:socket_options]], else: [] )
+    host = opts[:hostname] |> Jamdb.Oracle.to_list
+    port = opts[:port]
+    timeout = opts[:timeout]
+    user = opts[:username] |> Jamdb.Oracle.to_list
+    password = opts[:password] |> Jamdb.Oracle.to_list
+    database = opts[:database] |> Jamdb.Oracle.to_list
+    env = [host: host, port: port, timeout: timeout, user: user, password: password]
+	  ++ if( hd(database) == ?:, do: [sid: tl(database)], else: [service_name: database] )
+    params = opts[:parameters] || []
+    sock_opts = opts[:socket_options] || []
     case :jamdb_oracle.start_link(sock_opts ++ params ++ env) do
       {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle}}
       {:error, [{:proc_result, _, msg}]} -> {:error, error!(msg)}
@@ -87,7 +86,7 @@ defmodule Jamdb.Oracle do
   @impl true
   def handle_execute(%{batch: true} = query, params, _opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
-    case query(s, {:batch, statement |> to_charlist, params}, []) do
+    case query(s, {:batch, statement |> Jamdb.Oracle.to_list, params}, []) do
       {:ok, result} -> {:ok, query, result, s}
       {:error, err} -> {:error, error!(err), s}
       {:disconnect, err} -> {:disconnect, error!(err), s}
@@ -96,7 +95,7 @@ defmodule Jamdb.Oracle do
   def handle_execute(query, params, opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
     returning = Enum.map(Keyword.get(opts, :out, []), fn elem -> {:out, elem} end)
-    case query(s, statement |> to_charlist, Enum.concat(params, returning)) do
+    case query(s, statement |> Jamdb.Oracle.to_list, Enum.concat(params, returning)) do
       {:ok, result} -> {:ok, query, result, s}
       {:error, err} -> {:error, error!(err), s}
       {:disconnect, err} -> {:disconnect, error!(err), s}
@@ -150,7 +149,7 @@ defmodule Jamdb.Oracle do
   end
 
   defp handle_transaction(statement, _opts, s) do
-    case query(s, statement |> to_charlist) do
+    case query(s, statement |> Jamdb.Oracle.to_list) do
       {:ok, result} -> {:ok, result, s}
       {:error, err} -> {:error, error!(err), s}
       {:disconnect, err} -> {:disconnect, error!(err), s}
@@ -165,7 +164,7 @@ defmodule Jamdb.Oracle do
   @impl true
   def handle_fetch(query, %{params: params}, _opts, %{cursors: nil} = s) do
     %Jamdb.Oracle.Query{statement: statement} = query
-    case query(s, {:fetch, statement |> to_charlist, params}) do
+    case query(s, {:fetch, statement |> Jamdb.Oracle.to_list, params}) do
       {:cont, {_, cursor, row_format, rows}} ->
         cursors = %{cursor: cursor, row_format: row_format, last_row: List.last(rows)}
         {:cont,  %{num_rows: length(rows), rows: rows}, %{s | cursors: cursors}}
@@ -248,7 +247,14 @@ defmodule Jamdb.Oracle do
     Application.get_env(:jamdb_oracle, :json_library, Jason)
   end
 
+  @doc false
+  def to_list(string) when is_binary(string) do
+    :binary.bin_to_list(string)
+  end
+
+  @doc false
   defdelegate loaders(t, type), to: Ecto.Adapters.Jamdb.Oracle
+  @doc false
   defdelegate dumpers(t, type), to: Ecto.Adapters.Jamdb.Oracle
 
 end
@@ -295,7 +301,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp encode(%NaiveDateTime{} = naive), do: NaiveDateTime.to_erl(naive)
   defp encode(%Date{} = date), do: Date.to_erl(date)
   defp encode(%Ecto.Query.Tagged{value: elem, type: :binary}) when is_binary(elem), do: elem
-  defp encode(elem) when is_binary(elem), do: elem |> to_charlist
+  defp encode(elem) when is_binary(elem), do: Jamdb.Oracle.to_list(elem)
   defp encode(elem) when is_map(elem),
     do: encode(Jamdb.Oracle.json_library().encode!(elem))
   defp encode(elem), do: elem
