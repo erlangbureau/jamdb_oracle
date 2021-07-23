@@ -411,19 +411,154 @@ defmodule Jamdb.OracleTest do
 
   test "limit and offset" do
     query = Schema |> limit([r], 3) |> select([], true) |> plan()
-    assert all(query) == ~s{SELECT NULL FROM schema s0 FETCH NEXT 3 ROWS ONLY}
+    assert all(query) == ~s{SELECT 1 FROM schema s0 FETCH NEXT 3 ROWS ONLY}
 
     query = Schema |> offset([r], 5) |> select([], true) |> plan()
-    assert all(query) == ~s{SELECT NULL FROM schema s0 OFFSET 5 ROWS}
+    assert all(query) == ~s{SELECT 1 FROM schema s0 OFFSET 5 ROWS}
 
     query = Schema |> offset([r], 5) |> limit([r], 3) |> select([], true) |> plan()
-    assert all(query) == ~s{SELECT NULL FROM schema s0 OFFSET 5 ROWS FETCH NEXT 3 ROWS ONLY}
+    assert all(query) == ~s{SELECT 1 FROM schema s0 OFFSET 5 ROWS FETCH NEXT 3 ROWS ONLY}
   end
 
   test "string escape" do
     query = "\"Schema\"" |> where('"Foo"': "\" ") |> select([], true) |> plan()
-    assert all(query) == ~s{SELECT NULL FROM \"Schema\" t0 WHERE (t0.\"Foo\" = '\" ')}
+    assert all(query) == ~s{SELECT 1 FROM \"Schema\" t0 WHERE (t0.\"Foo\" = '\" ')}
   end
 
+  test "binary ops" do
+    query = Schema |> select([r], r.x == 2) |> plan()
+    assert all(query) == ~s{SELECT s0.x = 2 FROM schema s0}
+
+    query = Schema |> select([r], r.x != 2) |> plan()
+    assert all(query) == ~s{SELECT s0.x != 2 FROM schema s0}
+
+    query = Schema |> select([r], r.x <= 2) |> plan()
+    assert all(query) == ~s{SELECT s0.x <= 2 FROM schema s0}
+
+    query = Schema |> select([r], r.x >= 2) |> plan()
+    assert all(query) == ~s{SELECT s0.x >= 2 FROM schema s0}
+
+    query = Schema |> select([r], r.x < 2) |> plan()
+    assert all(query) == ~s{SELECT s0.x < 2 FROM schema s0}
+
+    query = Schema |> select([r], r.x > 2) |> plan()
+    assert all(query) == ~s{SELECT s0.x > 2 FROM schema s0}
+  end
+
+  test "is_nil" do
+    query = Schema |> select([r], r.x) |> where([r], is_nil(r.x)) |> plan()
+    assert all(query) == ~s{SELECT s0.x FROM schema s0 WHERE (s0.x IS NULL)}
+
+    query = Schema |> select([r], r.x) |> where([r], not is_nil(r.x)) |> plan()
+    assert all(query) == ~s{SELECT s0.x FROM schema s0 WHERE (NOT (s0.x IS NULL))}
+  end
+
+  test "fragments" do
+    query = Schema |> select([r], fragment("sysdate")) |> plan()
+    assert all(query) == ~s{SELECT sysdate FROM schema s0}
+
+    query = Schema |> select([r], fragment("lower(?)", r.x)) |> plan()
+    assert all(query) == ~s{SELECT lower(s0.x) FROM schema s0}
+
+    value = 13
+    query = Schema |> select([r], fragment("nullif(?, ?)", r.x, ^value)) |> plan()
+    assert all(query) == ~s{SELECT nullif(s0.x, :1) FROM schema s0}
+  end
+
+  test "literals" do
+    query = "schema" |> where(foo: true) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE (s0.foo = 1)}
+
+    query = "schema" |> where(foo: false) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE (s0.foo = 0)}
+
+    query = "schema" |> where(foo: "abc") |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE (s0.foo = 'abc')}
+
+    query = "schema" |> where(foo: <<0, ?a, ?b, ?c>>) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE (s0.foo = '00616263')}
+
+    query = "schema" |> where(foo: 123) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE (s0.foo = 123)}
+
+    query = "schema" |> where(foo: 123.0) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE (s0.foo = 123.0)}
+  end
+
+  test "datetime_add" do
+    query = "schema" |> where([s], datetime_add(s.foo, 1, "month") > s.bar) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE ((s0.foo +  INTERVAL '1' month) > s0.bar)}
+
+    query = "schema" |> where([s], datetime_add(type(s.foo, :string), 1, "month") > s.bar) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE ((CAST(s0.foo AS varchar2) +  INTERVAL '1' month) > s0.bar)}
+  end
+
+  test "tagged type" do
+    query = Schema |> select([], type(^"601d74e4-a8d3-4b6e-8365-eddb4c893327", Ecto.UUID)) |> plan()
+    assert all(query) == ~s{SELECT CAST(:1 AS raw(16)) FROM schema s0}
+  end
+
+  test "in subquery" do
+    posts = subquery("posts" |> where(title: ^"hello") |> select([p], p.id))
+    query = "comments" |> where([c], c.post_id in subquery(posts)) |> select([c], c.x) |> plan()
+    assert all(query) ==
+           ~s{SELECT c0.x FROM comments c0 } <>
+           ~s{WHERE (c0.post_id IN (SELECT sp0.id FROM posts sp0 WHERE (sp0.title = :1)))}
+
+    posts = subquery("posts" |> where(title: parent_as(:comment).subtitle) |> select([p], p.id))
+    query = "comments" |> from(as: :comment) |> where([c], c.post_id in subquery(posts)) |> select([c], c.x) |> plan()
+    assert all(query) ==
+           ~s{SELECT c0.x FROM comments c0 } <>
+           ~s{WHERE (c0.post_id IN (SELECT sp0.id FROM posts sp0 WHERE (sp0.title = c0.subtitle)))}
+  end
+
+  test "having" do
+    query = Schema |> having([p], p.x == p.x) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 HAVING (s0.x = s0.x)}
+
+    query = Schema |> having([p], p.x == p.x) |> having([p], p.y == p.y) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 HAVING (s0.x = s0.x) AND (s0.y = s0.y)}
+  end
+
+  test "or_having" do
+    query = Schema |> or_having([p], p.x == p.x) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 HAVING (s0.x = s0.x)}
+
+    query = Schema |> or_having([p], p.x == p.x) |> or_having([p], p.y == p.y) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 HAVING (s0.x = s0.x) OR (s0.y = s0.y)}
+  end
+
+  test "group by" do
+    query = Schema |> group_by([r], r.x) |> select([r], r.x) |> plan()
+    assert all(query) == ~s{SELECT s0.x FROM schema s0 GROUP BY s0.x}
+
+    query = Schema |> group_by([r], 2) |> select([r], r.x) |> plan()
+    assert all(query) == ~s{SELECT s0.x FROM schema s0 GROUP BY 2}
+
+    query = Schema3 |> group_by([r], 2) |> select([r], r.binary) |> plan()
+    assert all(query) == ~s{SELECT s0.binary FROM foo.schema3 s0 GROUP BY 2}
+
+    query = Schema |> group_by([r], [r.x, r.y]) |> select([r], r.x) |> plan()
+    assert all(query) == ~s{SELECT s0.x FROM schema s0 GROUP BY s0.x, s0.y}
+
+    query = Schema |> group_by([r], []) |> select([r], r.x) |> plan()
+    assert all(query) == ~s{SELECT s0.x FROM schema s0}
+  end
+
+  test "fragments allow ? to be escaped with backslash" do
+    query =
+      plan(
+        from(e in "schema",
+          where: fragment("? = \"query\\?\"", e.start_time),
+          select: true
+        )
+      )
+
+    result =
+      "SELECT 1 FROM schema s0 " <>
+        "WHERE (s0.start_time = \"query?\")"
+
+    assert all(query) == String.trim(result)
+  end
 
 end
