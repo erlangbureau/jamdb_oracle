@@ -150,7 +150,7 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp select_fields([], _sources, _query),
-    do: "NULL"
+    do: "1"
   defp select_fields(fields, sources, query) do
     intersperse_map(fields, ", ", fn
       {:&, _, [idx]} ->
@@ -362,7 +362,7 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp expr({:in, _, [_left, []]}, _sources, _query) do
-    "0 = 1"
+    "0"
   end
 
   defp expr({:in, _, [left, right]}, sources, query) when is_list(right) do
@@ -464,9 +464,9 @@ defmodule Jamdb.Oracle.Query do
     end
   end
 
-  defp expr(%Ecto.Query.Tagged{value: binary, type: :binary}, sources, query) do
-    expr(binary, sources, query)
-  end
+  defp expr(%Ecto.Query.Tagged{value: binary, type: :binary}, _sources, _query) do
+    ["'", Base.encode16(binary, case: :upper), "'"]
+  end 
   defp expr(%Ecto.Query.Tagged{value: literal, type: type}, sources, query) do
     ["CAST(", expr(literal, sources, query), " AS ", ecto_to_db(type), ?)]
   end
@@ -828,15 +828,13 @@ defmodule Jamdb.Oracle.Query do
   defp ecto_to_db(:uuid),                do: "raw(16)"
   defp ecto_to_db(:bigint),              do: "integer"
   defp ecto_to_db(:bigserial),           do: "integer"
-  defp ecto_to_db(:integer),             do: "integer"
   defp ecto_to_db(:float),               do: "number"
   defp ecto_to_db(:boolean),             do: "char(1)"
   defp ecto_to_db(:string),              do: "varchar2"
-  defp ecto_to_db(:binary),              do: "clob"
-  defp ecto_to_db({:array, _}),          do: "blob"
-  defp ecto_to_db(:map),                 do: "clob"
-  defp ecto_to_db({:map, _}),            do: "clob"
-  defp ecto_to_db(:decimal),             do: "decimal"
+  defp ecto_to_db(:binary),              do: "raw(2000)"
+  defp ecto_to_db({:array, _}),          do: "varchar2"
+  defp ecto_to_db(:map),                 do: "varchar2"
+  defp ecto_to_db({:map, _}),            do: "varchar2"
   defp ecto_to_db(:naive_datetime),      do: "timestamp"
   defp ecto_to_db(:naive_datetime_usec), do: "timestamp"
   defp ecto_to_db(:utc_datetime),        do: "timestamp with time zone"
