@@ -503,11 +503,17 @@ defmodule Jamdb.Oracle.Query do
   defp returning(%{select: nil}, _sources),
     do: []
   defp returning(%{select: %{fields: fields}} = query, sources) do
-    [{:&, _, [_idx, returning, _counter]}] = fields
+    {returning, _count} = intersperse_reduce(fields, ", ", 1, fn
+	  {{:., _, [{:&, _, [0]}, field]}, _, []} , acc ->
+        {[?: | quote_name(field)], acc + 1}
+
+	  _field, acc ->
+        {[?: | Integer.to_string(acc)], acc + 1}
+    end)
     [" RETURN ", select_fields(fields, sources, query),
-     " INTO ", intersperse_map(returning, ", ", &[?: | quote_name(&1)])]
+     " INTO ", returning]
   end
-  
+
   defp returning([]),
     do: []
   defp returning(fields) do
@@ -830,11 +836,11 @@ defmodule Jamdb.Oracle.Query do
   defp ecto_to_db(:bigserial),           do: "integer"
   defp ecto_to_db(:float),               do: "number"
   defp ecto_to_db(:boolean),             do: "char(1)"
-  defp ecto_to_db(:string),              do: "varchar2"
   defp ecto_to_db(:binary),              do: "raw(2000)"
-  defp ecto_to_db({:array, _}),          do: "varchar2"
-  defp ecto_to_db(:map),                 do: "varchar2"
-  defp ecto_to_db({:map, _}),            do: "varchar2"
+  defp ecto_to_db(:string),              do: "varchar2(2000)"
+  defp ecto_to_db({:array, _}),          do: "varchar2(2000)"
+  defp ecto_to_db(:map),                 do: "varchar2(2000)"
+  defp ecto_to_db({:map, _}),            do: "varchar2(2000)"
   defp ecto_to_db(:naive_datetime),      do: "timestamp"
   defp ecto_to_db(:naive_datetime_usec), do: "timestamp"
   defp ecto_to_db(:utc_datetime),        do: "timestamp with time zone"
