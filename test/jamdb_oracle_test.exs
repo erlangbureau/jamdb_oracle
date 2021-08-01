@@ -3,6 +3,7 @@ defmodule Jamdb.OracleTest do
 
   import Ecto.Query
 
+  alias Ecto.Queryable
   alias Ecto.Adapters.Jamdb.Oracle.Connection, as: SQL
 
   defmodule Schema do
@@ -425,26 +426,6 @@ defmodule Jamdb.OracleTest do
     assert all(query) == ~s{SELECT 1 FROM \"Schema\" t0 WHERE (t0.\"Foo\" = '\" ')}
   end
 
-  test "binary ops" do
-    query = Schema |> select([r], r.x == 2) |> plan()
-    assert all(query) == ~s{SELECT s0.x = 2 FROM schema s0}
-
-    query = Schema |> select([r], r.x != 2) |> plan()
-    assert all(query) == ~s{SELECT s0.x != 2 FROM schema s0}
-
-    query = Schema |> select([r], r.x <= 2) |> plan()
-    assert all(query) == ~s{SELECT s0.x <= 2 FROM schema s0}
-
-    query = Schema |> select([r], r.x >= 2) |> plan()
-    assert all(query) == ~s{SELECT s0.x >= 2 FROM schema s0}
-
-    query = Schema |> select([r], r.x < 2) |> plan()
-    assert all(query) == ~s{SELECT s0.x < 2 FROM schema s0}
-
-    query = Schema |> select([r], r.x > 2) |> plan()
-    assert all(query) == ~s{SELECT s0.x > 2 FROM schema s0}
-  end
-
   test "is_nil" do
     query = Schema |> select([r], r.x) |> where([r], is_nil(r.x)) |> plan()
     assert all(query) == ~s{SELECT s0.x FROM schema s0 WHERE (s0.x IS NULL)}
@@ -454,15 +435,12 @@ defmodule Jamdb.OracleTest do
   end
 
   test "fragments" do
-    query = Schema |> select([r], fragment("sysdate")) |> plan()
-    assert all(query) == ~s{SELECT sysdate FROM schema s0}
-
     query = Schema |> select([r], fragment("lower(?)", r.x)) |> plan()
     assert all(query) == ~s{SELECT lower(s0.x) FROM schema s0}
 
     value = 13
-    query = Schema |> select([r], fragment("nullif(?, ?)", r.x, ^value)) |> plan()
-    assert all(query) == ~s{SELECT nullif(s0.x, :1) FROM schema s0}
+    query = Schema |> select([r], fragment("CASE WHEN ? THEN ? ELSE ? END", r.x == ^value, true, false)) |> plan()
+    assert all(query) == ~s{SELECT CASE WHEN s0.x = :1 THEN 1 ELSE 0 END FROM schema s0}
   end
 
   test "literals" do
@@ -490,7 +468,7 @@ defmodule Jamdb.OracleTest do
     assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE ((s0.foo +  INTERVAL '1' month) > s0.bar)}
 
     query = "schema" |> where([s], datetime_add(type(s.foo, :string), 1, "month") > s.bar) |> select([], true) |> plan()
-    assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE ((CAST(s0.foo AS varchar2) +  INTERVAL '1' month) > s0.bar)}
+    assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE ((CAST(s0.foo AS varchar2(2000)) +  INTERVAL '1' month) > s0.bar)}
   end
 
   test "tagged type" do
@@ -513,33 +491,33 @@ defmodule Jamdb.OracleTest do
   end
 
   test "having" do
-    query = Schema |> having([p], p.x == p.x) |> select([], true) |> plan()
-    assert all(query) == ~s{SELECT 1 FROM schema s0 HAVING (s0.x = s0.x)}
+    query = Schema |> having([p], max(p.x) == max(p.x)) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 HAVING (max(s0.x) = max(s0.x))}
 
-    query = Schema |> having([p], p.x == p.x) |> having([p], p.y == p.y) |> select([], true) |> plan()
-    assert all(query) == ~s{SELECT 1 FROM schema s0 HAVING (s0.x = s0.x) AND (s0.y = s0.y)}
+    query = Schema |> having([p], max(p.x) == max(p.x)) |> having([p], max(p.y) == max(p.y)) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 HAVING (max(s0.x) = max(s0.x)) AND (max(s0.y) = max(s0.y))}
   end
 
   test "or_having" do
-    query = Schema |> or_having([p], p.x == p.x) |> select([], true) |> plan()
-    assert all(query) == ~s{SELECT 1 FROM schema s0 HAVING (s0.x = s0.x)}
+    query = Schema |> or_having([p], max(p.x) == max(p.x)) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 HAVING (max(s0.x) = max(s0.x))}
 
-    query = Schema |> or_having([p], p.x == p.x) |> or_having([p], p.y == p.y) |> select([], true) |> plan()
-    assert all(query) == ~s{SELECT 1 FROM schema s0 HAVING (s0.x = s0.x) OR (s0.y = s0.y)}
+    query = Schema |> or_having([p], max(p.x) == max(p.x)) |> or_having([p], max(p.y) == max(p.y)) |> select([], true) |> plan()
+    assert all(query) == ~s{SELECT 1 FROM schema s0 HAVING (max(s0.x) = max(s0.x)) OR (max(s0.y) = max(s0.y))}
   end
 
   test "group by" do
     query = Schema |> group_by([r], r.x) |> select([r], r.x) |> plan()
     assert all(query) == ~s{SELECT s0.x FROM schema s0 GROUP BY s0.x}
 
-    query = Schema |> group_by([r], 2) |> select([r], r.x) |> plan()
-    assert all(query) == ~s{SELECT s0.x FROM schema s0 GROUP BY 2}
-
-    query = Schema3 |> group_by([r], 2) |> select([r], r.binary) |> plan()
-    assert all(query) == ~s{SELECT s0.binary FROM foo.schema3 s0 GROUP BY 2}
-
     query = Schema |> group_by([r], [r.x, r.y]) |> select([r], r.x) |> plan()
     assert all(query) == ~s{SELECT s0.x FROM schema s0 GROUP BY s0.x, s0.y}
+
+    query = Schema |> group_by([r], [r.x, r.y]) |> having([r], r.x > 2) |> select([r], [r.x, r.y, count()]) |> plan()
+    assert all(query) == ~s{SELECT s0.x, s0.y, count(*) FROM schema s0 GROUP BY s0.x, s0.y HAVING (s0.x > 2)}
+
+    query = Schema |> group_by([r], [r.x]) |> having(count(fragment("*")) > 2) |> select([r], r.x) |> plan()
+    assert all(query) == ~s{SELECT s0.x FROM schema s0 GROUP BY s0.x HAVING (count(*) > 2)}
 
     query = Schema |> group_by([r], []) |> select([r], r.x) |> plan()
     assert all(query) == ~s{SELECT s0.x FROM schema s0}
@@ -559,6 +537,137 @@ defmodule Jamdb.OracleTest do
         "WHERE (s0.start_time = \"query?\")"
 
     assert all(query) == String.trim(result)
+  end
+
+  test "update all" do
+    query = from(m in Schema, update: [set: [x: 0]]) |> plan(:update_all)
+    assert update_all(query) ==
+           ~s{UPDATE schema s0 SET x = 0}
+
+    query = from(m in Schema, update: [set: [x: 0], inc: [y: 1, z: -3]]) |> plan(:update_all)
+    assert update_all(query) ==
+           ~s{UPDATE schema s0 SET x = 0, y = s0.y + 1, z = s0.z + -3}
+
+    query = from(e in Schema, where: e.x == 123, update: [set: [x: 0]]) |> plan(:update_all)
+    assert update_all(query) ==
+           ~s{UPDATE schema s0 SET x = 0 WHERE (s0.x = 123)}
+
+    query = from(m in Schema, update: [set: [x: ^0]]) |> plan(:update_all)
+    assert update_all(query) ==
+           ~s{UPDATE schema s0 SET x = :1}
+  end
+
+  test "update all with returning" do
+    query = from(m in Schema, update: [set: [x: 0]]) |> select([m], m) |> plan(:update_all)
+    assert update_all(query) ==
+           ~s{UPDATE schema s0 SET x = 0 RETURN s0.id, s0.x, s0.y, s0.z, s0.w INTO :id, :x, :y, :z, :w}
+
+    query = from(m in Schema, update: [set: [x: ^1]]) |> where([m], m.x == ^2) |> select([m], m.y) |> plan(:update_all)
+    assert update_all(query) ==
+           ~s{UPDATE schema s0 SET x = :1 WHERE (s0.x = :2) RETURN s0.y INTO :y}
+  end
+
+  test "update all with prefix" do
+    query =
+      from(m in Schema, update: [set: [x: 0]]) |> Map.put(:prefix, "prefix") |> plan(:update_all)
+
+    assert update_all(query) ==
+             ~s{UPDATE prefix.schema s0 SET x = 0}
+
+    query =
+      from(m in Schema, prefix: "first", update: [set: [x: 0]])
+      |> Map.put(:prefix, "prefix")
+      |> plan(:update_all)
+
+    assert update_all(query) ==
+             ~s{UPDATE first.schema s0 SET x = 0}
+  end
+
+  test "delete all" do
+    query = Schema |> Queryable.to_query() |> plan()
+    assert delete_all(query) == ~s{DELETE FROM schema s0}
+
+    query = from(e in Schema, where: e.x == 123)|> plan()
+    assert delete_all(query) == ~s{DELETE FROM schema s0 WHERE (s0.x = 123)}
+  end
+
+  test "delete all with returning" do
+    query = Schema |> Queryable.to_query |> select([m], m) |> plan()
+    assert delete_all(query) == ~s{DELETE FROM schema s0 RETURN s0.id, s0.x, s0.y, s0.z, s0.w INTO :id, :x, :y, :z, :w}
+
+    query = from(e in Schema, where: e.x == 123) |> select([e], e.y) |> plan()
+    assert delete_all(query) == ~s{DELETE FROM schema s0 WHERE (s0.x = 123) RETURN s0.y INTO :y}
+  end
+
+  test "delete all with prefix" do
+    query = Schema |> Queryable.to_query() |> Map.put(:prefix, "prefix") |> plan()
+    assert delete_all(query) == ~s{DELETE FROM prefix.schema s0}
+
+    query = Schema |> from(prefix: "first") |> Map.put(:prefix, "prefix") |> plan()
+    assert delete_all(query) == ~s{DELETE FROM first.schema s0}
+  end
+
+  ## Partitions and windows
+
+  describe "windows and partitions" do
+    test "count over window" do
+      query = Schema
+              |> windows([r], w: [partition_by: r.x])
+              |> select([r], count(r.x) |> over(:w))
+              |> plan()
+      assert all(query) == ~s{SELECT count(s0.x) OVER (PARTITION BY s0.x) FROM schema s0}
+    end
+
+    test "count over window order by" do
+      query = Schema
+              |> select([r], count(r.x) |> over(partition_by: [r.x, r.z], order_by: r.x))
+              |> plan()
+      assert all(query) == ~s{SELECT count(s0.x) OVER (PARTITION BY s0.x, s0.z ORDER BY s0.x) FROM schema s0}
+    end
+
+    test "count over all" do
+      query = Schema
+              |> select([r], count(r.x) |> over)
+              |> plan()
+      assert all(query) == ~s{SELECT count(s0.x) OVER () FROM schema s0}
+    end
+
+    test "nth_value over all" do
+      query = Schema
+              |> select([r], nth_value(r.x, 42) |> over)
+              |> plan()
+      assert all(query) == ~s{SELECT nth_value(s0.x, 42) OVER () FROM schema s0}
+    end
+
+    test "custom aggregation over all" do
+      query = Schema
+              |> select([r], fragment("custom_function(?)", r.x) |> over)
+              |> plan()
+      assert all(query) == ~s{SELECT custom_function(s0.x) OVER () FROM schema s0}
+    end
+
+    test "row_number over window order by" do
+      query = Schema
+              |> select([r], row_number |> over(partition_by: [r.x, r.z], order_by: r.x))
+              |> plan()
+      assert all(query) == ~s{SELECT row_number() OVER (PARTITION BY s0.x, s0.z ORDER BY s0.x) FROM schema s0}
+    end
+
+    test "lag/2 over window order by" do
+      query = Schema
+              |> select([r], lag(r.x, 42) |> over(partition_by: [r.x, r.z], order_by: r.x))
+              |> plan()
+      assert all(query) == ~s{SELECT lag(s0.x, 42) OVER (PARTITION BY s0.x, s0.z ORDER BY s0.x) FROM schema s0}
+    end
+
+    test "frame clause" do
+      query = Schema
+              |> select([r], count(r.x) |> over(partition_by: [r.x, r.z], order_by: r.x, 
+			    frame: fragment("ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING")))
+              |> plan()
+      assert all(query) == ~s{SELECT count(s0.x) OVER (PARTITION BY s0.x, s0.z ORDER BY s0.x } <>
+               ~s{ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING) FROM schema s0}
+    end
   end
 
 end
