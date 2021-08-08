@@ -670,4 +670,157 @@ defmodule Jamdb.OracleTest do
     end
   end
 
+  ## Joins
+
+  test "join" do
+    query =
+      Schema |> join(:inner, [p], q in Schema2, on: p.x == q.z) |> select([], true) |> plan()
+
+    assert all(query) ==
+             ~s{SELECT 1 FROM schema s0 INNER JOIN schema2 s1 ON s0.x = s1.z}
+
+    query =
+      Schema
+      |> join(:inner, [p], q in Schema2, on: p.x == q.z)
+      |> join(:inner, [], Schema, on: true)
+      |> select([], true)
+      |> plan()
+
+    assert all(query) ==
+             ~s{SELECT 1 FROM schema s0 INNER JOIN schema2 s1 ON s0.x = s1.z INNER JOIN schema s2 ON 1 = 1}
+  end
+
+  test "join with nothing bound" do
+    query = Schema |> join(:inner, [], q in Schema2, on: q.z == q.z) |> select([], true) |> plan()
+
+    assert all(query) ==
+             ~s{SELECT 1 FROM schema s0 INNER JOIN schema2 s1 ON s1.z = s1.z}
+  end
+
+  test "join with fragment" do
+    query = Schema
+            |> join(:inner, [p], q in fragment("SELECT * FROM schema2 s2 WHERE s2.id = ? AND s2.field = ?", p.x, ^10))
+            |> select([p], {p.id, ^0})
+            |> where([p], p.id > 0 and p.id < ^100)
+            |> plan()
+    assert all(query) ==
+             ~s{SELECT s0.id, :1 FROM schema s0 INNER JOIN } <>
+             ~s{((SELECT * FROM schema2 s2 WHERE s2.id = s0.x AND s2.field = :2)) f1 ON 1 = 1 } <>
+             ~s{WHERE ((s0.id > 0) AND (s0.id < :3))}
+  end
+
+  test "join with fragment and on defined" do
+    query =
+      Schema
+      |> join(:inner, [p], q in fragment("SELECT * FROM schema2"), on: q.id == p.id)
+      |> select([p], {p.id, ^0})
+      |> plan()
+
+    assert all(query) ==
+              ~s{SELECT s0.id, :1 FROM schema s0 INNER JOIN ((SELECT * FROM schema2)) f1 ON f1.id = s0.id}
+  end
+
+  test "join with query interpolation" do
+    inner = Ecto.Queryable.to_query(Schema2)
+    query = from(p in Schema, left_join: c in ^inner, select: {p.id, c.id}) |> plan()
+
+    assert all(query) ==
+             ~s{SELECT s0.id, s1.id FROM schema s0 LEFT OUTER JOIN schema2 s1 ON 1 = 1}
+  end
+
+  test "cross join" do
+    query = from(p in Schema, cross_join: c in Schema2, select: {p.id, c.id}) |> plan()
+    assert all(query) ==
+			 ~s{SELECT s0.id, s1.id FROM schema s0 CROSS JOIN schema2 s1}
+  end
+
+  test "join produces correct bindings" do
+    query = from(p in Schema, join: c in Schema2, on: true)
+    query = from(p in query, join: c in Schema2, on: true, select: {p.id, c.id})
+    query = plan(query)
+
+    assert all(query) ==
+             ~s{SELECT s0.id, s2.id FROM schema s0 INNER JOIN schema2 s1 ON 1 = 1 INNER JOIN schema2 s2 ON 1 = 1}
+  end
+
+  ## Associations
+
+  test "association join belongs_to" do
+    query = Schema2 |> join(:inner, [c], p in assoc(c, :post)) |> select([], true) |> plan()
+
+    assert all(query) ==
+             ~s{SELECT 1 FROM schema2 s0 INNER JOIN schema s1 ON s1.x = s0.z}
+  end
+
+  test "association join has_many" do
+    query = Schema |> join(:inner, [p], c in assoc(p, :comments)) |> select([], true) |> plan()
+
+    assert all(query) ==
+             ~s{SELECT 1 FROM schema s0 INNER JOIN schema2 s1 ON s1.z = s0.x}
+  end
+
+  test "association join has_one" do
+    query = Schema |> join(:inner, [p], pp in assoc(p, :permalink)) |> select([], true) |> plan()
+
+    assert all(query) ==
+             ~s{SELECT 1 FROM schema s0 INNER JOIN foo.schema3 s1 ON s1.id = s0.y}
+  end
+
+  # Schema based
+
+  test "insert" do
+    query = insert(nil, "schema", [:x, :y], [[:x, :y]], {:raise, [], []}, [:id])
+    assert query == ~s{INSERT INTO schema (x,y) VALUES (:1,:2) RETURN id INTO :id}
+
+    query = insert(nil, "schema", [], [[:x, :y]], {:raise, [], []}, [:id])
+    assert query == ~s{INSERT INTO schema VALUES (:1,:2) RETURN id INTO :id}
+
+    query = insert(nil, "schema", [], [[nil, :z]], {:raise, [], []}, [])
+    assert query == ~s{INSERT INTO schema VALUES (DEFAULT,:1)}
+
+    query = insert("prefix", "schema", [], [[:x, :y]], {:raise, [], []}, [])
+    assert query == ~s{INSERT INTO prefix.schema VALUES (:1,:2)}
+  end
+
+  test "insert with query as rows" do
+    subquery = from(s in "schema", select: %{ foo: fragment("3"), bar: s.bar }) |> plan(:all)
+
+    query = insert(nil, "schema", [:foo, :bar], subquery, {:raise, [], []}, [:foo])
+    assert query == ~s{INSERT INTO schema (foo,bar) (SELECT 3, s0.bar FROM schema s0) RETURN foo INTO :foo}
+
+    query = insert(nil, "schema", [], subquery, {:raise, [], []}, [])
+    assert query == ~s{INSERT INTO schema (SELECT 3, s0.bar FROM schema s0)}
+
+    query = insert("prefix", "schema", [], subquery, {:raise, [], []}, [])
+    assert query == ~s{INSERT INTO prefix.schema (SELECT 3, s0.bar FROM schema s0)}
+  end
+
+  test "update" do
+    query = update(nil, "schema", [:x, :y], [id: 1], [])
+    assert query == ~s{UPDATE schema SET x = :1, y = :2 WHERE id = :3}
+
+    query = update(nil, "schema", [:x, :y], [id: 1], [:z])
+    assert query == ~s{UPDATE schema SET x = :1, y = :2 WHERE id = :3 RETURN z INTO :z}
+
+    query = update("prefix", "schema", [:x, :y], [id: 1], [])
+    assert query == ~s{UPDATE prefix.schema SET x = :1, y = :2 WHERE id = :3}
+
+    query = update("prefix", "schema", [:x, :y], [id: 1, updated_at: nil], [])
+    assert query == ~s{UPDATE prefix.schema SET x = :1, y = :2 WHERE id = :3 AND updated_at IS NULL}
+  end
+
+  test "delete" do
+    query = delete(nil, "schema", [x: 1, y: 2], [])
+    assert query == ~s{DELETE FROM schema WHERE x = :1 AND y = :2}
+
+    query = delete(nil, "schema", [x: 1, y: 2], [:z])
+    assert query == ~s{DELETE FROM schema WHERE x = :1 AND y = :2 RETURN z INTO :z}
+
+    query = delete("prefix", "schema", [x: 1, y: 2], [])
+    assert query == ~s{DELETE FROM prefix.schema WHERE x = :1 AND y = :2}
+
+    query = delete("prefix", "schema", [x: nil, y: 1], [])
+    assert query == ~s{DELETE FROM prefix.schema WHERE x IS NULL AND y = :1}
+  end
+
 end
