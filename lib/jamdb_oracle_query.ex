@@ -60,7 +60,7 @@ defmodule Jamdb.Oracle.Query do
     counter_offset = length(placeholders) + 1
     values =
       if header == [] do
-		[?\s | insert_all(rows, counter_offset)]
+        [?\s | insert_all(rows, counter_offset)]
       else
         [?\s, ?(, intersperse_map(header, ?,, &quote_name/1), ?),
          ?\s | insert_all(rows, counter_offset)]
@@ -476,7 +476,7 @@ defmodule Jamdb.Oracle.Query do
     ["'", Base.encode16(binary, case: :upper), "'"]
   end 
   defp expr(%Ecto.Query.Tagged{value: literal, type: type}, sources, query) do
-    ["CAST(", expr(literal, sources, query), " AS ", ecto_to_db(type), ?)]
+    ["CAST(", expr(literal, sources, query), " AS ", column_type(type, []), ?)]
   end
 
   defp expr(nil, _sources, _query),   do: "NULL"
@@ -577,7 +577,6 @@ defmodule Jamdb.Oracle.Query do
              "CREATE TABLE ",
              table_name, ?\s, ?(,
              column_definitions(table, columns), pk_definition(columns, ", "), ?),
-             options_expr(table.options),
              if_do(command == :create_if_not_exists, :end)]
     
     [query] ++
@@ -660,7 +659,7 @@ defmodule Jamdb.Oracle.Query do
 
   defp comments_on(_object, _name, nil), do: []
   defp comments_on(object, name, comment) do
-    [["COMMENT ON ", object, ?\s, name, " IS ", single_quote(comment)]]
+    [["COMMENT ON ", object, ?\s, name, " IS ", ?', escape_string(comment), ?']]
   end
 
   defp comments_for_columns(table_name, columns) do
@@ -682,61 +681,44 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp column_definition(_table, {:add, name, type, opts}) do
-    [column_source(name, opts), ?\s, column_type(type, opts), column_options(type, opts)]
+    [column_source(name, opts), ?\s, column_type(type, opts),
+    column_options(type, opts)]
   end
 
   defp column_changes(table, columns) do
     intersperse_map(columns, ", ", &column_change(table, &1))
   end
 
-  defp column_change(table, {:add, name, %Reference{} = ref, opts}) do
-    ["ADD COLUMN ", column_source(name, opts), ?\s, column_type(ref.type, opts),
-     column_options(ref.type, opts), reference_expr(ref, table, name)]
+  defp column_change(_table, {:add, name, %Reference{} = ref, opts}) do
+    ["ADD ", column_source(name, opts), ?\s, column_type(ref.type, opts),
+     column_options(ref.type, opts)]
   end
 
   defp column_change(_table, {:add, name, type, opts}) do
-    ["ADD COLUMN ", column_source(name, opts), ?\s, column_type(type, opts),
-     column_options(type, opts)]
+    ["ADD ", column_source(name, opts), ?\s, column_type(type, opts),
+    column_options(type, opts)]
   end
 
-  defp column_change(table, {:modify, name, %Reference{} = ref, opts}) do
-    [drop_constraint_expr(opts[:from], table, name),
-     "ALTER COLUMN ", column_source(name, opts), " TYPE ", column_type(ref.type, opts),
-     constraint_expr(ref, table, name), modify_null(name, opts), modify_default(name, ref.type, opts)]
+  defp column_change(_table, {:modify, name, %Reference{} = ref, opts}) do
+    ["MODIFY ", ?(, column_source(name, opts), ?\s, column_type(ref.type, opts),
+     column_options(ref.type, opts), ?)]
   end
 
-  defp column_change(table, {:modify, name, type, opts}) do
-    [drop_constraint_expr(opts[:from], table, name),
-     "ALTER COLUMN ", column_source(name, opts), " TYPE ", column_type(type, opts),
-     modify_null(name, opts), modify_default(name, type, opts)]
+  defp column_change(_table, {:modify, name, type, opts}) do
+    ["MODIFY ", ?(, column_source(name, opts), ?\s, column_type(type, opts),
+     column_options(type, opts), ?)]
   end
 
-  defp column_change(_table, {:remove, name}), do: ["DROP COLUMN ", quote_name(name)]
-  defp column_change(table, {:remove, name, %Reference{} = ref, opts}) do
-    [drop_constraint_expr(ref, table, name), "DROP COLUMN ", column_source(name, opts)]
-  end
+  defp column_change(_table, {:remove, name}),
+    do: ["DROP COLUMN ", quote_name(name)]
   defp column_change(_table, {:remove, name, _type, opts}),
     do: ["DROP COLUMN ", column_source(name, opts)]
 
-  defp modify_null(name, opts) do
-    case Keyword.get(opts, :null) do
-      true  -> [", ALTER COLUMN ", column_source(name, opts), " DROP NOT NULL"]
-      false -> [", ALTER COLUMN ", column_source(name, opts), " SET NOT NULL"]
-      nil   -> []
-    end
-  end
-
-  defp modify_default(name, _type, opts) do
-    case Keyword.fetch(opts, :default) do
-      {:ok, val} -> [", ALTER COLUMN ", column_source(name, opts), " SET", default_expr({:ok, val})]
-      :error -> []
-    end
-  end
-
-  defp column_options(_type, opts) do
+  defp column_options(type, opts) do
     default = Keyword.fetch(opts, :default)
     null    = Keyword.get(opts, :null)
-    [default_expr(default), null_expr(null)]
+
+    [default_expr(default, type), null_expr(null)]
   end
 
   defp column_source(name, opts) do
@@ -750,45 +732,39 @@ defmodule Jamdb.Oracle.Query do
   defp null_expr(true), do: " NULL"
   defp null_expr(_), do: []
 
-  defp default_expr({:ok, nil}),
-    do: " DEFAULT NULL"
-  defp default_expr({:ok, literal}) when is_binary(literal),
-    do: [" DEFAULT '", escape_string(literal), ?']
-  defp default_expr({:ok, literal}) when is_number(literal) or is_boolean(literal),
-    do: [" DEFAULT ", to_string(literal)]
-  defp default_expr({:ok, {:fragment, expr}}),
-    do: [" DEFAULT ", expr]
-  defp default_expr({:ok, value}) when is_map(value),
-    do: error!(nil, "json defaults are not supported")
-  defp default_expr(:error),
-    do: []
+  defp default_expr({:ok, nil}, _type),    do: " DEFAULT NULL"
+  defp default_expr({:ok, literal}, type), do: [" DEFAULT ", default_type(literal, type)]
+  defp default_expr(:error, _),            do: []
+
+  defp default_type(true, _type),  do: [?', "1", ?']
+  defp default_type(false, _type),  do: [?', "0", ?']
+  defp default_type(literal, _type) when is_binary(literal), do: [?', escape_string(literal), ?']
+  defp default_type(literal, _type) when is_number(literal),do: to_string(literal)
+  defp default_type({:fragment, expr}, _type), do: [expr]
+  defp default_type(expr, type),
+    do: error!(nil, "unknown default `#{inspect expr}` for type `#{inspect type}`")
 
   defp index_expr(literal) when is_binary(literal),
     do: literal
   defp index_expr(literal),
     do: quote_name(literal)
 
-  defp options_expr(nil),
-    do: []
-  defp options_expr(keyword) when is_list(keyword),
-    do: error!(nil, "keyword lists in :options are not supported")
-  defp options_expr(options),
-    do: [?\s, options]
+  defp column_type(type, _opts) when type in ~w(utc_datetime naive_datetime)a do
+    type_name = [ecto_to_db(type), "(0)"]
 
-  defp column_type({:array, type}, opts),
-    do: [column_type(type, opts), "[]"]
-
-  defp column_type(type, _opts) when type in ~w(utc_datetime naive_datetime)a,
-    do: [ecto_to_db(type), "(0)"]
+    cond do
+      type == :utc_datetime -> [type_name, " with time zone"]
+      true                  -> type_name
+    end
+  end
 
   defp column_type(type, opts) when type in ~w(utc_datetime_usec naive_datetime_usec)a do
     precision = Keyword.get(opts, :precision)
-    type_name = ecto_to_db(type)
+    type_name = [ecto_to_db(type), if_do(precision, [?(, to_string(precision), ?)])]
 
-    if precision do
-      [type_name, ?(, to_string(precision), ?)]
-    else
-      type_name
+    cond do
+      type == :utc_datetime_usec -> [type_name, " with time zone"]
+      true                       -> type_name
     end
   end
 
@@ -800,10 +776,14 @@ defmodule Jamdb.Oracle.Query do
     type_name = [if_do(national and type in [:string, :binary], "n"), ecto_to_db(type)]
 
     cond do
-      size            -> [type_name, ?(, to_string(size), ?)]
-      precision       -> [type_name, ?(, to_string(precision), ?,, to_string(scale || 0), ?)]
-      type == :string -> [type_name, "(255)"]
-      true            -> type_name
+      size               -> [type_name, ?(, to_string(size), ?)]
+      precision          -> [type_name, ?(, to_string(precision), ?,, to_string(scale || 0), ?)]
+      type == :binary_id -> [type_name, "(16)"]
+      type == :uuid      -> [type_name, "(16)"]
+      type == :boolean   -> [type_name, "(1)"]
+      type == :binary    -> [type_name, "(2000)"]
+      type == :string    -> [type_name, "(2000)"]
+      true               -> type_name
     end
   end
 
@@ -811,17 +791,6 @@ defmodule Jamdb.Oracle.Query do
     do: [" CONSTRAINT ", reference_name(ref, table, name), " REFERENCES ",
          quote_table(ref.prefix || table.prefix, ref.table), ?(, quote_name(ref.column), ?),
          reference_on_delete(ref.on_delete)]
-
-  defp constraint_expr(%Reference{} = ref, table, name),
-    do: [" ADD CONSTRAINT ", reference_name(ref, table, name), ?\s,
-         "FOREIGN KEY (", quote_name(name), ") REFERENCES ",
-         quote_table(ref.prefix || table.prefix, ref.table), ?(, quote_name(ref.column), ?),
-         reference_on_delete(ref.on_delete)]
-
-  defp drop_constraint_expr(%Reference{} = ref, table, name),
-    do: [" DROP CONSTRAINT ", reference_name(ref, table, name), ", "]
-  defp drop_constraint_expr(_, _, _),
-    do: []
 
   defp reference_name(%Reference{name: nil}, table, column),
     do: quote_name("#{table.name}_#{column}_fkey")
@@ -838,24 +807,26 @@ defmodule Jamdb.Oracle.Query do
   defp reference_on_delete(_), do: []
 
   defp ecto_to_db(:id),                  do: "integer"
-  defp ecto_to_db(:binary_id),           do: "raw(16)"
-  defp ecto_to_db(:uuid),                do: "raw(16)"
-  defp ecto_to_db(:bigint),              do: "integer"
-  defp ecto_to_db(:bigserial),           do: "integer"
+  defp ecto_to_db(:binary_id),           do: "raw"
+  defp ecto_to_db(:uuid),                do: "raw"
+  defp ecto_to_db(:serial),              do: "int"
+  defp ecto_to_db(:bigserial),           do: "int"
+  defp ecto_to_db(:identity),            do: "int"
+  defp ecto_to_db(:bigint),              do: "int"
   defp ecto_to_db(:float),               do: "number"
-  defp ecto_to_db(:boolean),             do: "char(1)"
-  defp ecto_to_db(:binary),              do: "raw(2000)"
-  defp ecto_to_db(:string),              do: "varchar2(2000)"
-  defp ecto_to_db({:array, _}),          do: "varchar2(2000)"
-  defp ecto_to_db(:map),                 do: "varchar2(2000)"
-  defp ecto_to_db({:map, _}),            do: "varchar2(2000)"
+  defp ecto_to_db(:boolean),             do: "char"
+  defp ecto_to_db(:binary),              do: "raw"
+  defp ecto_to_db(:string),              do: "varchar2"
+  defp ecto_to_db(:time),                do: "date"
+  defp ecto_to_db(:time_usec),           do: "date"
   defp ecto_to_db(:naive_datetime),      do: "timestamp"
   defp ecto_to_db(:naive_datetime_usec), do: "timestamp"
-  defp ecto_to_db(:utc_datetime),        do: "timestamp with time zone"
-  defp ecto_to_db(:utc_datetime_usec),   do: "timestamp with time zone"
-  defp ecto_to_db(other),                do: Atom.to_string(other)
-
-  defp single_quote(value), do: [?', escape_string(value), ?']
+  defp ecto_to_db(:utc_datetime),        do: "timestamp"
+  defp ecto_to_db(:utc_datetime_usec),   do: "timestamp"
+  defp ecto_to_db(atom) when is_atom(atom),
+    do: Atom.to_string(atom)
+  defp ecto_to_db(type),
+    do: error!(nil, "unsupported type `#{inspect(type)}`")
 
   defp if_do(condition, :begin) do
     if condition, do: "BEGIN EXECUTE IMMEDIATE '", else: []
