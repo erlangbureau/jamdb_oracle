@@ -5,6 +5,7 @@ defmodule Jamdb.OracleTest do
 
   alias Ecto.Queryable
   alias Ecto.Adapters.Jamdb.Oracle.Connection, as: SQL
+  alias Ecto.Migration.Reference
 
   defmodule Schema do
     use Ecto.Schema
@@ -823,4 +824,77 @@ defmodule Jamdb.OracleTest do
     assert query == ~s{DELETE FROM prefix.schema WHERE x IS NULL AND y = :1}
   end
 
+  ## DDL
+
+  import Ecto.Migration,
+    only: [table: 1, table: 2, index: 2, index: 3, constraint: 2, constraint: 3]
+
+  test "executing a string during migration" do
+    assert execute_ddl("example") == ["example"]
+  end
+
+  test "create table" do
+    create =
+      {:create, table(:posts),
+       [
+         {:add, :name, :string, [default: "Untitled", size: 20, null: false]},
+         {:add, :price, :numeric, [precision: 8, scale: 2, default: {:fragment, "expr"}]},
+         {:add, :on_hand, :integer, [default: 0, null: true]},
+         {:add, :likes, :"smallint", [default: 0, null: false]},
+         {:add, :published_at, :"date", [null: true]},
+         {:add, :is_active, :boolean, [default: true]}
+       ]}
+
+    assert execute_ddl(create) == [
+             """
+             CREATE TABLE posts (name varchar2(20) DEFAULT 'Untitled' NOT NULL,
+             price numeric(8,2) DEFAULT expr,
+             on_hand integer DEFAULT 0 NULL,
+             likes smallint DEFAULT 0 NOT NULL,
+             published_at date NULL,
+             is_active char(1) DEFAULT '1')
+             """
+             |> remove_newlines
+           ]
+  end
+
+  test "create table with prefix" do
+    create =
+      {:create, table(:posts, prefix: :foo),
+       [{:add, :category_0, %Reference{table: :categories}, []}]}
+
+    assert execute_ddl(create) == [
+             """
+             CREATE TABLE foo.posts (category_0 int
+             CONSTRAINT posts_category_0_fkey REFERENCES foo.categories(id))
+             """
+             |> remove_newlines
+           ]
+  end
+
+  test "create table with an unsupported type" do
+    create =
+      {:create, table(:posts),
+       [
+         {:add, :a, {:a, :b, :c}, [default: %{}]}
+       ]}
+
+    assert_raise ArgumentError,
+                 "unsupported type `{:a, :b, :c}`",
+                 fn -> execute_ddl(create) end
+  end
+
+  test "drop table" do
+    drop = {:drop, table(:posts)}
+    assert execute_ddl(drop) == ["DROP TABLE posts"]
+  end
+
+  test "drop table with prefixes" do
+    drop = {:drop, table(:posts, prefix: :foo)}
+    assert execute_ddl(drop) == ["DROP TABLE foo.posts"]
+  end
+
+  defp remove_newlines(string) when is_binary(string) do
+    string |> String.trim() |> String.replace("\n", " ")
+  end
 end
