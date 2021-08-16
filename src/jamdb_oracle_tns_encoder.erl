@@ -102,13 +102,15 @@ encode_record(auth, #oraclient{env=EnvOpts,passwd=Passwd,req=Request,seq=Tseq}) 
     (encode_sb2(byte_size(User2)))/binary,
     (encode_sb2((Role * 32) bor (Prelim * 128) bor PassMode bor 256))/binary,  %logon mode
     1,
-    (encode_sb2(2 + KeyInd + PassInd))/binary,                                 %keyval count
+    (encode_sb2(4 + KeyInd + PassInd))/binary,                                 %keyval count
     1,1,
     User2/binary,
     (encode_keyval("AUTH_PASSWORD", AuthPass))/binary,
     (if PassInd =/= 0 -> encode_keyval("AUTH_NEWPASSWORD", AuthNewPass); true -> <<>> end)/binary,
     (if KeyInd =/= 0 -> encode_keyval("AUTH_PBKDF2_SPEEDY_KEY", SpeedyKey); true -> <<>> end)/binary,
-    (encode_keyval(<<"AUTH_SESSKEY">>, AuthSess, 1))/binary
+    (encode_keyval(<<"AUTH_SESSKEY">>, AuthSess, 1))/binary,
+    (encode_keyval("SESSION_CLIENT_DRIVER_NAME", "beam"))/binary,
+    (encode_keyval("SESSION_CLIENT_VERSION", "4"))/binary
     >>,
     KeyConn};
 encode_record(dty, #oraclient{charset=Charset}) ->
