@@ -34,36 +34,47 @@ defmodule Jamdb.Oracle.Query do
   end
 
   @doc false
-  def update_all(%{from: %{source: source}} = query, prefix \\ nil) do
+  def update_all(%{from: %{source: source}, select: select} = query) do
     sources = create_names(query, [])
-    {from, name} = get_source(query, sources, 0, source)
 
-    prefix = prefix || ["UPDATE ", from, ?\s, name | " SET "]
+    {rows, where} =
+      if select do
+        {[insert_all(query, 0)], []}
+      else
+        {from, name} = get_source(query, sources, 0, source)
+        {[from, ?\s, name], where(%{query | wheres: query.wheres}, sources)}
+      end
     fields = update_fields(query, sources)
-    where = where(%{query | wheres: query.wheres}, sources)
 
-    [prefix, fields, where | returning(query, sources)]
+    ["UPDATE ", rows, " SET ", fields, where]
+    ## ++ returning(query, sources)
   end
 
   @doc false
-  def delete_all(%{from: from} = query) do
+  def delete_all(%{from: from, select: select} = query) do
     sources = create_names(query, [])
-    {from, name} = get_source(query, sources, 0, from)
 
-    where = where(%{query | wheres: query.wheres}, sources)
+    {rows, where} =
+      if select do
+        {[insert_all(query, 0)], []}
+      else
+        {from, name} = get_source(query, sources, 0, from)
+        {[from, ?\s, name], where(%{query | wheres: query.wheres}, sources)}
+      end
 
-    ["DELETE FROM ", from, ?\s, name, where | returning(query, sources)]
+    ["DELETE FROM ", rows, where]
+    ## ++ returning(query, sources)
   end
 
   @doc false
   def insert(prefix, table, header, rows, _on_conflict, returning, placeholders \\ []) do
     counter_offset = length(placeholders) + 1
+	from = insert_all(rows, counter_offset)
     values =
       if header == [] do
-        [?\s | insert_all(rows, counter_offset)]
+        [?\s | from]
       else
-        [?\s, ?(, intersperse_map(header, ?,, &quote_name/1), ?),
-         ?\s | insert_all(rows, counter_offset)]
+        [?\s, ?(, intersperse_map(header, ?,, &quote_name/1), ?), ?\s | from]
       end
 
     ["INSERT INTO ", quote_table(prefix, table), values | returning(returning)]
@@ -573,15 +584,11 @@ defmodule Jamdb.Oracle.Query do
 
   def execute_ddl({command, %Table{} = table, columns}) when command in [:create, :create_if_not_exists] do
     table_name = quote_table(table.prefix, table.name)
-    query = [if_do(command == :create_if_not_exists, :begin),
-             "CREATE TABLE ",
-             table_name, ?\s, ?(,
-             column_definitions(table, columns), pk_definition(columns, ", "), ?),
-             if_do(command == :create_if_not_exists, :end)]
-    
-    [query] ++
-      comments_on("TABLE", table_name, table.comment) ++
-      comments_for_columns(table_name, columns)
+    [[if_do(command == :create_if_not_exists, :begin),
+      "CREATE TABLE ", table_name, ?\s,
+      ?(, column_definitions(table, columns), pk_definition(table, columns, ", "), ?),
+      options_expr(table.options),
+      if_do(command == :create_if_not_exists, :end)]]
   end
 
   def execute_ddl({command, %Table{} = table}) when command in [:drop, :drop_if_exists] do
@@ -592,21 +599,20 @@ defmodule Jamdb.Oracle.Query do
 
   def execute_ddl({:alter, %Table{} = table, changes}) do
     table_name = quote_table(table.prefix, table.name)
-    query = ["ALTER TABLE ", table_name, ?\s,
-             column_changes(table, changes), pk_definition(changes, ", ADD ")]
+    if_do = length(changes) > 1
+    query =
+      for change <- changes,
+        do: if_do(if_do, :execute, [["ALTER TABLE ", table_name, ?\s], column_change(table, change)])
 
-    [query] ++
-      comments_on("TABLE", table_name, table.comment) ++
-      comments_for_columns(table_name, changes)
+    [[if_do(if_do, :begin, []), query, if_do(if_do, :end, [])]]
   end
 
   def execute_ddl({command, %Index{} = index}) when command in [:create, :create_if_not_exists] do
     [[if_do(command == :create_if_not_exists, :begin),
-      "CREATE", if_do(index.unique, " UNIQUE"), " INDEX ",
-      quote_name(index.name),
-      " ON ",
-      quote_table(index.prefix, index.table), ?\s,
+      "CREATE", if_do(index.unique, " UNIQUE"), " INDEX ", quote_name(index.name),
+      " ON ", quote_table(index.prefix, index.table), ?\s,
       ?(, intersperse_map(index.columns, ", ", &index_expr/1), ?),
+      if_do(index.concurrently, " ONLINE"), options_expr(index.options),
       if_do(command == :create_if_not_exists, :end)]]
   end
 
@@ -645,7 +651,8 @@ defmodule Jamdb.Oracle.Query do
   def execute_ddl(keyword) when is_list(keyword),
     do: error!(nil, "keyword lists in execute are not supported")
 
-  defp pk_definition(columns, prefix) do
+  defp pk_definition(table, columns, prefix) do
+    constraint_name = quote_name("#{table.name}_pkey")
     pks =
       for {_, name, _, opts} <- columns,
           opts[:primary_key],
@@ -653,23 +660,45 @@ defmodule Jamdb.Oracle.Query do
 
     case pks do
       [] -> []
-      _  -> [prefix, "PRIMARY KEY (", intersperse_map(pks, ", ", &quote_name/1), ")"]
+      _  -> [prefix, "CONSTRAINT ", constraint_name, ?\s, "PRIMARY KEY (", quote_names(pks), ")"]
     end
   end
 
-  defp comments_on(_object, _name, nil), do: []
-  defp comments_on(object, name, comment) do
-    [["COMMENT ON ", object, ?\s, name, " IS ", ?', escape_string(comment), ?']]
+  defp reference_expr(%Reference{} = ref, table, name) do
+    {current_columns, reference_columns} = Enum.unzip([{name, ref.column}])
+
+    ["CONSTRAINT ", reference_name(ref, table, name), ?\s,
+     "FOREIGN KEY (", quote_names(current_columns), ") REFERENCES ",
+     quote_table(ref.prefix || table.prefix, ref.table), ?(, quote_names(reference_columns), ?),
+     reference_on_delete(ref.on_delete), validate(ref.validate)]
   end
 
-  defp comments_for_columns(table_name, columns) do
-    Enum.flat_map(columns, fn
-      {_operation, column_name, _column_type, opts} ->
-        column_name = [table_name, ?. | quote_name(column_name)]
-        comments_on("COLUMN", column_name, opts[:comment])
-      _ -> []
-    end)
-  end
+  defp reference_name(%Reference{name: nil}, table, column),
+    do: quote_name("#{table.name}_#{column}_fkey")
+  defp reference_name(%Reference{name: name}, _table, _column),
+    do: quote_name(name)
+
+  defp reference_on_delete(:nilify_all), do: " ON DELETE SET NULL"
+  defp reference_on_delete(:delete_all), do: " ON DELETE CASCADE"
+  defp reference_on_delete(_), do: []
+
+  defp validate(false), do: " NOVALIDATE"
+  defp validate(_), do: []
+
+  defp constraint_expr(%Constraint{check: check}) when is_binary(check), 
+    do: [" CHECK ", ?(, check, ?)]
+  defp constraint_expr(_),
+    do: []
+
+  defp index_expr(literal) when is_binary(literal),
+    do: literal
+  defp index_expr(literal),
+    do: quote_name(literal)
+
+  defp options_expr(nil),
+    do: []
+  defp options_expr(options),
+    do: [?\s, options]
 
   defp column_definitions(table, columns) do
     intersperse_map(columns, ", ", &column_definition(table, &1))
@@ -677,7 +706,7 @@ defmodule Jamdb.Oracle.Query do
 
   defp column_definition(table, {:add, name, %Reference{} = ref, opts}) do
     [column_source(name, opts), ?\s, column_type(ref.type, opts),
-     column_options(ref.type, opts), reference_expr(ref, table, name)]
+     column_options(ref.type, opts), ", ", reference_expr(ref, table, name)]
   end
 
   defp column_definition(_table, {:add, name, type, opts}) do
@@ -685,23 +714,9 @@ defmodule Jamdb.Oracle.Query do
     column_options(type, opts)]
   end
 
-  defp column_changes(table, columns) do
-    intersperse_map(columns, ", ", &column_change(table, &1))
-  end
-
-  defp column_change(_table, {:add, name, %Reference{} = ref, opts}) do
-    ["ADD ", column_source(name, opts), ?\s, column_type(ref.type, opts),
-     column_options(ref.type, opts)]
-  end
-
   defp column_change(_table, {:add, name, type, opts}) do
     ["ADD ", column_source(name, opts), ?\s, column_type(type, opts),
     column_options(type, opts)]
-  end
-
-  defp column_change(_table, {:modify, name, %Reference{} = ref, opts}) do
-    ["MODIFY ", ?(, column_source(name, opts), ?\s, column_type(ref.type, opts),
-     column_options(ref.type, opts), ?)]
   end
 
   defp column_change(_table, {:modify, name, type, opts}) do
@@ -744,11 +759,6 @@ defmodule Jamdb.Oracle.Query do
   defp default_type(expr, type),
     do: error!(nil, "unknown default `#{inspect expr}` for type `#{inspect type}`")
 
-  defp index_expr(literal) when is_binary(literal),
-    do: literal
-  defp index_expr(literal),
-    do: quote_name(literal)
-
   defp column_type(type, _opts) when type in ~w(utc_datetime naive_datetime)a do
     type_name = [ecto_to_db(type), "(0)"]
 
@@ -787,25 +797,6 @@ defmodule Jamdb.Oracle.Query do
     end
   end
 
-  defp reference_expr(%Reference{} = ref, table, name),
-    do: [" CONSTRAINT ", reference_name(ref, table, name), " REFERENCES ",
-         quote_table(ref.prefix || table.prefix, ref.table), ?(, quote_name(ref.column), ?),
-         reference_on_delete(ref.on_delete)]
-
-  defp reference_name(%Reference{name: nil}, table, column),
-    do: quote_name("#{table.name}_#{column}_fkey")
-  defp reference_name(%Reference{name: name}, _table, _column),
-    do: quote_name(name)
-
-  defp constraint_expr(%Constraint{check: check}) when is_binary(check), 
-    do: [" CHECK ", ?(, check, ?)]
-  defp constraint_expr(_),
-    do: []
-
-  defp reference_on_delete(:nilify_all), do: " ON DELETE SET NULL"
-  defp reference_on_delete(:delete_all), do: " ON DELETE CASCADE"
-  defp reference_on_delete(_), do: []
-
   defp ecto_to_db(:id),                  do: "integer"
   defp ecto_to_db(:binary_id),           do: "raw"
   defp ecto_to_db(:uuid),                do: "raw"
@@ -838,6 +829,16 @@ defmodule Jamdb.Oracle.Query do
     if condition, do: value, else: []
   end
 
+  defp if_do(condition, :begin, expr) do
+    if condition, do: ["BEGIN", expr], else: expr
+  end
+  defp if_do(condition, :end, expr) do
+    if condition, do: [expr, " END;"], else: expr
+  end
+  defp if_do(condition, :execute, expr) do
+    if condition, do: [" EXECUTE IMMEDIATE '", expr, "';"], else: expr
+  end
+
   ## Helpers
 
   defp get_source(query, sources, ix, source) do
@@ -848,6 +849,10 @@ defmodule Jamdb.Oracle.Query do
   defp quote_qualified_name(name, sources, ix) do
     {_, source, _} = elem(sources, ix)
     [source, ?. | quote_name(name)]
+  end
+
+  defp quote_names(names) do
+    intersperse_map(names, ?,, &quote_name/1)
   end
 
   defp quote_name(name) when is_atom(name) do
