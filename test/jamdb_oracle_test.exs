@@ -257,6 +257,44 @@ defmodule Jamdb.OracleTest do
                ~s{INNER JOIN tree t1 ON t1.id = s0.category_id}
   end
 
+  test "CTE update_all" do
+    cte_query =
+      from(x in Schema, order_by: [asc: :id], limit: 10, select: %{id: x.id})
+
+    query =
+      Schema
+      |> with_cte("target_rows", as: ^cte_query)
+      |> join(:inner, [row], target in "target_rows", on: target.id == row.id)
+      |> select([r, t], r)
+      |> update(set: [x: 123])
+      |> plan(:update_all)
+
+    assert update_all(query) ==
+      ~s{UPDATE (WITH target_rows AS } <>
+      ~s{(SELECT s0.id id FROM schema s0 ORDER BY s0.id FETCH NEXT 10 ROWS ONLY) } <>
+      ~s{SELECT s0.id, s0.x, s0.y, s0.z, s0.w FROM schema s0 INNER JOIN target_rows t1 ON t1.id = s0.id) } <>
+      ~s{SET x = 123}
+    ## RETURN s0.id, s0.x, s0.y, s0.z, s0.w INTO :id, :x, :y, :z, :w	  
+  end
+
+  test "CTE delete_all" do
+    cte_query =
+      from(x in Schema, order_by: [asc: :id], limit: 10, select: %{id: x.id})
+
+    query =
+      Schema
+      |> with_cte("target_rows", as: ^cte_query)
+      |> join(:inner, [row], target in "target_rows", on: target.id == row.id)
+      |> select([r, t], r)
+      |> plan(:delete_all)
+
+    assert delete_all(query) ==
+      ~s{DELETE FROM (WITH target_rows AS } <>
+      ~s{(SELECT s0.id id FROM schema s0 ORDER BY s0.id FETCH NEXT 10 ROWS ONLY) } <>
+      ~s{SELECT s0.id, s0.x, s0.y, s0.z, s0.w FROM schema s0 INNER JOIN target_rows t1 ON t1.id = s0.id)}
+    ## RETURN s0.id, s0.x, s0.y, s0.z, s0.w INTO :id, :x, :y, :z, :w	  
+  end
+
   test "select" do
     query = Schema |> select([r], {r.x, r.y}) |> plan()
     assert all(query) == ~s{SELECT s0.x, s0.y FROM schema s0}
@@ -561,11 +599,13 @@ defmodule Jamdb.OracleTest do
   test "update all with returning" do
     query = from(m in Schema, update: [set: [x: 0]]) |> select([m], m) |> plan(:update_all)
     assert update_all(query) ==
-           ~s{UPDATE schema s0 SET x = 0 RETURN s0.id, s0.x, s0.y, s0.z, s0.w INTO :id, :x, :y, :z, :w}
+           ~s{UPDATE (SELECT s0.id, s0.x, s0.y, s0.z, s0.w FROM schema s0) SET x = 0}
+    ##  RETURN s0.id, s0.x, s0.y, s0.z, s0.w INTO :id, :x, :y, :z, :w
 
-    query = from(m in Schema, update: [set: [x: ^1]]) |> where([m], m.x == ^2) |> select([m], m.y) |> plan(:update_all)
+    query = from(m in Schema, update: [set: [x: ^1]]) |> where([m], m.x == ^2) |> select([m], {m.x, m.y}) |> plan(:update_all)
     assert update_all(query) ==
-           ~s{UPDATE schema s0 SET x = :1 WHERE (s0.x = :2) RETURN s0.y INTO :y}
+           ~s{UPDATE (SELECT s0.x, s0.y FROM schema s0 WHERE (s0.x = :2)) SET x = :1}
+    ##  RETURN s0.x, s0.y INTO :x, :y
   end
 
   test "update all with prefix" do
@@ -594,10 +634,12 @@ defmodule Jamdb.OracleTest do
 
   test "delete all with returning" do
     query = Schema |> Queryable.to_query |> select([m], m) |> plan()
-    assert delete_all(query) == ~s{DELETE FROM schema s0 RETURN s0.id, s0.x, s0.y, s0.z, s0.w INTO :id, :x, :y, :z, :w}
+    assert delete_all(query) == ~s{DELETE FROM (SELECT s0.id, s0.x, s0.y, s0.z, s0.w FROM schema s0)}
+    ## RETURN s0.id, s0.x, s0.y, s0.z, s0.w INTO :id, :x, :y, :z, :w
 
     query = from(e in Schema, where: e.x == 123) |> select([e], e.y) |> plan()
-    assert delete_all(query) == ~s{DELETE FROM schema s0 WHERE (s0.x = 123) RETURN s0.y INTO :y}
+    assert delete_all(query) == ~s{DELETE FROM (SELECT s0.y FROM schema s0 WHERE (s0.x = 123))}
+    ## RETURN s0.y INTO :y
   end
 
   test "delete all with prefix" do
@@ -846,16 +888,16 @@ defmodule Jamdb.OracleTest do
        ]}
 
     assert execute_ddl(create) == [
-             """
-             CREATE TABLE posts (name varchar2(20) DEFAULT 'Untitled' NOT NULL,
-             price numeric(8,2) DEFAULT expr,
-             on_hand integer DEFAULT 0 NULL,
-             likes smallint DEFAULT 0 NOT NULL,
-             published_at date NULL,
-             is_active char(1) DEFAULT '1')
-             """
-             |> remove_newlines
-           ]
+      """
+      CREATE TABLE posts (name varchar2(20) DEFAULT 'Untitled' NOT NULL,
+      price numeric(8,2) DEFAULT expr,
+      on_hand integer DEFAULT 0 NULL,
+      likes smallint DEFAULT 0 NOT NULL,
+      published_at date NULL,
+      is_active char(1) DEFAULT '1')
+      """
+      |> remove_newlines
+    ]
   end
 
   test "create table with prefix" do
@@ -864,12 +906,76 @@ defmodule Jamdb.OracleTest do
        [{:add, :category_0, %Reference{table: :categories}, []}]}
 
     assert execute_ddl(create) == [
-             """
-             CREATE TABLE foo.posts (category_0 int
-             CONSTRAINT posts_category_0_fkey REFERENCES foo.categories(id))
-             """
-             |> remove_newlines
-           ]
+      """
+      CREATE TABLE foo.posts (category_0 int,
+      CONSTRAINT posts_category_0_fkey FOREIGN KEY (category_0) REFERENCES foo.categories(id))
+      """
+      |> remove_newlines
+    ]
+  end
+
+  test "create table with reference" do
+    create =
+      {:create, table(:posts),
+       [
+         {:add, :id, :serial, [primary_key: true]},
+         {:add, :category_0, %Reference{table: :categories}, []},
+         {:add, :category_1, %Reference{table: :categories, name: :foo_bar}, []},
+         {:add, :category_2, %Reference{table: :categories, on_delete: :nothing}, []},
+         {:add, :category_3, %Reference{table: :categories, on_delete: :delete_all}, [null: false]},
+         {:add, :category_4, %Reference{table: :categories, on_delete: :nilify_all}, []},
+         {:add, :category_5, %Reference{table: :categories, prefix: :foo, on_delete: :nilify_all}, []},
+         {:add, :category_6, %Reference{table: :categories, validate: false}, []}
+       ]}
+
+    assert execute_ddl(create) == [
+      """
+      CREATE TABLE posts (id int, category_0 int, CONSTRAINT posts_category_0_fkey FOREIGN KEY (category_0) REFERENCES categories(id),
+      category_1 int, CONSTRAINT foo_bar FOREIGN KEY (category_1) REFERENCES categories(id),
+      category_2 int, CONSTRAINT posts_category_2_fkey FOREIGN KEY (category_2) REFERENCES categories(id),
+      category_3 int NOT NULL, CONSTRAINT posts_category_3_fkey FOREIGN KEY (category_3) REFERENCES categories(id) ON DELETE CASCADE,
+      category_4 int, CONSTRAINT posts_category_4_fkey FOREIGN KEY (category_4) REFERENCES categories(id) ON DELETE SET NULL,
+      category_5 int, CONSTRAINT posts_category_5_fkey FOREIGN KEY (category_5) REFERENCES foo.categories(id) ON DELETE SET NULL,
+      category_6 int, CONSTRAINT posts_category_6_fkey FOREIGN KEY (category_6) REFERENCES categories(id) NOVALIDATE,
+      CONSTRAINT posts_pkey PRIMARY KEY (id))
+      """
+      |> remove_newlines
+    ]
+  end
+
+  test "create table with options" do
+    create =
+      {:create, table(:posts, [options: "TABLESPACE FOO"]),
+       [
+         {:add, :id, :serial, [primary_key: true]},
+         {:add, :created_at, :naive_datetime, []}
+       ]}
+
+    assert execute_ddl(create) == [
+      """
+      CREATE TABLE posts (id int, created_at timestamp(0), CONSTRAINT posts_pkey PRIMARY KEY (id))
+      TABLESPACE FOO
+      """
+      |> remove_newlines
+    ]
+  end
+
+  test "create table with composite key" do
+    create =
+      {:create, table(:posts),
+       [
+         {:add, :a, :integer, [primary_key: true]},
+         {:add, :b, :integer, [primary_key: true]},
+         {:add, :name, :string, []}
+       ]}
+
+    assert execute_ddl(create) == [
+      """
+      CREATE TABLE posts (a integer, b integer, name varchar2(2000),
+      CONSTRAINT posts_pkey PRIMARY KEY (a,b))
+      """
+      |> remove_newlines
+    ]
   end
 
   test "create table with an unsupported type" do
@@ -892,6 +998,190 @@ defmodule Jamdb.OracleTest do
   test "drop table with prefixes" do
     drop = {:drop, table(:posts, prefix: :foo)}
     assert execute_ddl(drop) == ["DROP TABLE foo.posts"]
+  end
+
+  test "alter table" do
+    alter =
+      {:alter, table(:posts),
+       [
+         {:add, :title, :string, [default: "Untitled", size: 100, null: false]}
+       ]}
+
+    expected_ddl = [
+      """
+      ALTER TABLE posts ADD title varchar2(100) DEFAULT 'Untitled' NOT NULL
+      """
+      |> remove_newlines
+    ]
+
+    assert execute_ddl(alter) == expected_ddl
+
+    alter =
+      {:alter, table(:posts),
+       [
+         {:add, :title, :string, [default: "Untitled", size: 100, null: false]},
+         {:modify, :price, :numeric, [precision: 8, scale: 2, null: true]},
+         {:remove, :summary}
+       ]}
+
+    expected_ddl = [
+      """
+      BEGIN EXECUTE IMMEDIATE 'ALTER TABLE posts ADD title varchar2(100) DEFAULT 'Untitled' NOT NULL';
+      EXECUTE IMMEDIATE 'ALTER TABLE posts MODIFY (price numeric(8,2) NULL)';
+      EXECUTE IMMEDIATE 'ALTER TABLE posts DROP COLUMN summary'; END;
+      """
+      |> remove_newlines
+    ]
+
+    assert execute_ddl(alter) == expected_ddl
+  end
+
+  test "alter table with prefix" do
+    alter =
+      {:alter, table(:posts, prefix: "foo"),
+       [
+         {:add, :title, :string, [default: "Untitled", size: 100, null: false]},
+         {:modify, :price, :numeric, [precision: 8, scale: 2]},
+         {:remove, :summary}
+       ]}
+
+    expected_ddl = [
+      """
+      BEGIN EXECUTE IMMEDIATE 'ALTER TABLE foo.posts ADD title varchar2(100) DEFAULT 'Untitled' NOT NULL';
+      EXECUTE IMMEDIATE 'ALTER TABLE foo.posts MODIFY (price numeric(8,2))';
+      EXECUTE IMMEDIATE 'ALTER TABLE foo.posts DROP COLUMN summary'; END;
+      """
+      |> remove_newlines
+    ]
+
+    assert execute_ddl(alter) == expected_ddl
+  end
+
+  test "create check constraint" do
+    create =
+      {:create, constraint(:products, "price_must_be_positive", check: "price > 0")}
+
+    assert execute_ddl(create) == [
+      """
+      ALTER TABLE products ADD CONSTRAINT price_must_be_positive CHECK (price > 0)
+      """
+      |> remove_newlines
+    ]
+  end
+
+  test "drop constraint" do
+    drop = {:drop, constraint(:products, "price_must_be_positive")}
+
+    assert execute_ddl(drop) == [
+      """
+      ALTER TABLE products DROP CONSTRAINT price_must_be_positive
+      """
+      |> remove_newlines
+    ]
+  end
+
+  test "drop_if_exists constraint" do
+    drop = {:drop_if_exists, constraint(:products, "price_must_be_positive")}
+
+    assert execute_ddl(drop) == [
+      """
+      BEGIN EXECUTE IMMEDIATE 'ALTER TABLE products DROP CONSTRAINT price_must_be_positive';
+      EXCEPTION WHEN OTHERS THEN NULL; END;
+      """
+      |> remove_newlines
+    ]
+  end
+
+  test "create index" do
+    create =
+      {:create, index(:posts, [:category_id, :permalink])}
+
+    assert execute_ddl(create) == [
+      """
+      CREATE INDEX posts_category_id_permalink_index ON posts (category_id, permalink)
+      """
+      |> remove_newlines
+    ]
+  end
+
+  test "create index with prefix" do
+    create =
+      {:create, index(:posts, [:category_id, :permalink], prefix: :foo)}
+
+    assert execute_ddl(create) == [
+      """
+      CREATE INDEX posts_category_id_permalink_index ON foo.posts (category_id, permalink)
+      """
+      |> remove_newlines
+    ]
+  end
+
+  test "create index with prefix if not exists" do
+    create =
+      {:create_if_not_exists, index(:posts, [:category_id, :permalink], prefix: :foo)}
+
+    assert execute_ddl(create) == [
+      """
+      BEGIN EXECUTE IMMEDIATE 'CREATE INDEX posts_category_id_permalink_index ON foo.posts (category_id, permalink)';
+      EXCEPTION WHEN OTHERS THEN NULL; END;
+      """
+      |> remove_newlines
+    ]
+  end
+
+  test "create index with options" do
+    create =
+      {:create, index(:posts, [:category_id, :permalink], options: "TABLESPACE FOO")}
+
+    assert execute_ddl(create) == [
+      """
+      CREATE INDEX posts_category_id_permalink_index ON posts (category_id, permalink)
+      TABLESPACE FOO
+      """
+      |> remove_newlines
+    ]
+  end
+
+  test "create unique index concurrently" do
+    create =
+      {:create, index(:posts, [:permalink], name: "posts_0_index", unique: true, concurrently: true)}
+
+    assert execute_ddl(create) == [
+      """
+      CREATE UNIQUE INDEX posts_0_index ON posts (permalink) ONLINE
+      """
+      |> remove_newlines
+    ]
+  end
+
+  test "drop index" do
+    drop = {:drop, index(:posts, [:id], name: "posts_0_index")}
+    assert execute_ddl(drop) == ["DROP INDEX posts_0_index"]
+  end
+
+  test "drop index with prefix" do
+    drop = {:drop, index(:posts, [:id], name: "posts_0_index", prefix: :foo)}
+    assert execute_ddl(drop) == ["DROP INDEX foo.posts_0_index"]
+  end
+
+  test "rename table" do
+    rename = {:rename, table(:posts), table(:new_posts)}
+    assert execute_ddl(rename) == ["RENAME posts TO new_posts"]
+  end
+
+  test "rename table with prefix" do
+    rename = {:rename, table(:posts, prefix: :foo), table(:new_posts, prefix: :foo)}
+    assert execute_ddl(rename) == ["RENAME foo.posts TO new_posts"]
+  end
+
+  test "rename column" do
+    rename = {:rename, table(:posts), :given_name, :first_name}
+    assert execute_ddl(rename) == ["ALTER TABLE posts RENAME COLUMN given_name TO first_name"]
+  end
+
+  test "rename column in prefixed table" do
+    rename = {:rename, table(:posts, prefix: :foo), :given_name, :first_name}
+    assert execute_ddl(rename) == ["ALTER TABLE foo.posts RENAME COLUMN given_name TO first_name"]
   end
 
   defp remove_newlines(string) when is_binary(string) do
