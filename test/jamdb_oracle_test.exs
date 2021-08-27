@@ -191,7 +191,7 @@ defmodule Jamdb.OracleTest do
 
     assert all(query) ==
              ~s{WITH tree AS (} <>
-               ~s{SELECT c0.id id, 1 depth FROM categories c0 WHERE (c0.parent_id IS NULL) } <>
+               ~s{SELECT sc0.id id, 1 depth FROM categories sc0 WHERE (sc0.parent_id IS NULL) } <>
                ~s{UNION ALL } <>
                ~s{(SELECT c0.id, t1.depth + 1 FROM categories c0 } <>
                ~s{INNER JOIN tree t1 ON t1.id = c0.parent_id)) } <>
@@ -230,8 +230,8 @@ defmodule Jamdb.OracleTest do
 
     assert all(query) ==
              ~s{WITH comments_scope AS (} <>
-               ~s{SELECT c0.entity_id entity_id, c0.text text } <>
-               ~s{FROM comments c0 WHERE (c0.deleted_at IS NULL)) } <>
+               ~s{SELECT sc0.entity_id entity_id, sc0.text text } <>
+               ~s{FROM comments sc0 WHERE (sc0.deleted_at IS NULL)) } <>
                ~s{SELECT p0.title, c1.text } <>
                ~s{FROM posts p0 } <>
                ~s{INNER JOIN comments_scope c1 ON c1.entity_id = p0.guid } <>
@@ -271,7 +271,7 @@ defmodule Jamdb.OracleTest do
 
     assert update_all(query) ==
       ~s{UPDATE (WITH target_rows AS } <>
-      ~s{(SELECT s0.id id FROM schema s0 ORDER BY s0.id FETCH NEXT 10 ROWS ONLY) } <>
+      ~s{(SELECT ss0.id id FROM schema ss0 ORDER BY ss0.id FETCH NEXT 10 ROWS ONLY) } <>
       ~s{SELECT s0.id, s0.x, s0.y, s0.z, s0.w FROM schema s0 INNER JOIN target_rows t1 ON t1.id = s0.id) } <>
       ~s{SET x = 123}
     ## RETURN s0.id, s0.x, s0.y, s0.z, s0.w INTO :id, :x, :y, :z, :w	  
@@ -290,7 +290,7 @@ defmodule Jamdb.OracleTest do
 
     assert delete_all(query) ==
       ~s{DELETE FROM (WITH target_rows AS } <>
-      ~s{(SELECT s0.id id FROM schema s0 ORDER BY s0.id FETCH NEXT 10 ROWS ONLY) } <>
+      ~s{(SELECT ss0.id id FROM schema ss0 ORDER BY ss0.id FETCH NEXT 10 ROWS ONLY) } <>
       ~s{SELECT s0.id, s0.x, s0.y, s0.z, s0.w FROM schema s0 INNER JOIN target_rows t1 ON t1.id = s0.id)}
     ## RETURN s0.id, s0.x, s0.y, s0.z, s0.w INTO :id, :x, :y, :z, :w	  
   end
