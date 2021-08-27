@@ -685,6 +685,12 @@ defmodule Jamdb.Oracle.Query do
   defp validate(false), do: " NOVALIDATE"
   defp validate(_), do: []
 
+  defp constraint_expr(%Reference{} = ref, table, name) do
+    ["CONSTRAINT ", reference_name(ref, table, name), " REFERENCES ",
+     quote_table(ref.prefix || table.prefix, ref.table), ?(, quote_names([ref.column]), ?),
+     reference_on_delete(ref.on_delete), validate(ref.validate)]
+  end
+
   defp constraint_expr(%Constraint{check: check}) when is_binary(check), 
     do: [" CHECK ", ?(, check, ?)]
   defp constraint_expr(_),
@@ -712,6 +718,11 @@ defmodule Jamdb.Oracle.Query do
   defp column_definition(_table, {:add, name, type, opts}) do
     [column_source(name, opts), ?\s, column_type(type, opts),
     column_options(type, opts)]
+  end
+
+  defp column_change(table, {:add, name, %Reference{} = ref, opts}) do
+    ["ADD ", column_source(name, opts), ?\s, column_type(ref.type, opts),
+    column_options(ref.type, opts), ?\s, constraint_expr(ref, table, name)]
   end
 
   defp column_change(_table, {:add, name, type, opts}) do
