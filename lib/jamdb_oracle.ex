@@ -1,5 +1,5 @@
 defmodule Jamdb.Oracle do
-  @vsn "0.4.9"
+  @vsn "0.4.10"
   @moduledoc """
   Adapter module for Oracle. `DBConnection` behaviour implementation.
 
