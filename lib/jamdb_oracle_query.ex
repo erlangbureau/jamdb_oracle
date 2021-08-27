@@ -210,8 +210,14 @@ defmodule Jamdb.Oracle.Query do
     [quote_name(name), " AS ", cte_query(cte, sources, query)]
   end
 
-  defp cte_query(%Ecto.Query{} = query, _, _), do: ["(", all(query), ")"]
-  defp cte_query(%QueryExpr{expr: expr}, sources, query), do: expr(expr, sources, query)
+  defp cte_query(%Ecto.Query{} = query, sources, parent_query) do
+    query = put_in(query.aliases[@parent_as], {parent_query, sources})
+    ["(", all(query, subquery_as_prefix(sources)), ")"]
+  end
+
+  defp cte_query(%QueryExpr{expr: expr}, sources, query) do
+    expr(expr, sources, query)
+  end
 
   defp update_fields(%{updates: updates} = query, sources) do
     for(%{expr: expr} <- updates,
@@ -366,9 +372,10 @@ defmodule Jamdb.Oracle.Query do
     [?: | Integer.to_string(ix + 1)]
   end
 
-  defp expr({{:., _, [{:parent_as, _, [{:&, _, [idx]}]}, field]}, _, []}, _sources, query)
-      when is_atom(field) do
-    quote_qualified_name(field, query.aliases[@parent_as], idx)
+  defp expr({{:., _, [{:parent_as, _, [as]}, field]}, _, []}, _sources, query)
+       when is_atom(field) do
+    {ix, sources} = get_parent_sources_ix(query, as)
+    quote_qualified_name(field, sources, ix)
   end
 
   defp expr({{:., _, [{:&, _, [idx]}, field]}, _, []}, sources, _query) when is_atom(field) do
@@ -414,8 +421,8 @@ defmodule Jamdb.Oracle.Query do
     ["NOT (", expr(expr, sources, query), ?)]
   end
 
-  defp expr(%Ecto.SubQuery{query: query}, sources, _query) do
-    query = put_in(query.aliases[@parent_as], sources)
+  defp expr(%Ecto.SubQuery{query: query}, sources, parent_query) do
+    query = put_in(query.aliases[@parent_as], {parent_query, sources})
     [?(, all(query, subquery_as_prefix(sources)), ?)]
   end
 
@@ -477,7 +484,7 @@ defmodule Jamdb.Oracle.Query do
     case handle_call(fun, length(args)) do
       {:binary_op, op} ->
         [left, right] = args
-        [op_to_binary(left, sources, query), op | op_to_binary(right, sources, query)]
+        [maybe_paren(left, sources, query), op | maybe_paren(right, sources, query)]
       {:fun, fun} ->
         [fun, ?(, modifier, intersperse_map(args, ", ", &expr(&1, sources, query)), ?)]
     end
@@ -511,13 +518,14 @@ defmodule Jamdb.Oracle.Query do
          expr(count, sources, query), "' ", interval, ?)]
   end
 
-  defp op_to_binary({op, _, [_, _]} = expr, sources, query) when op in @binary_ops do
-    paren_expr(expr, sources, query)
-  end
+  defp maybe_paren({op, _, [_, _]} = expr, sources, query) when op in @binary_ops,
+    do: paren_expr(expr, sources, query)
 
-  defp op_to_binary(expr, sources, query) do
-    expr(expr, sources, query)
-  end
+  defp maybe_paren({:is_nil, _, [_]} = expr, sources, query),
+    do: paren_expr(expr, sources, query)
+
+  defp maybe_paren(expr, sources, query),
+    do: expr(expr, sources, query)
 
   defp returning(%{select: nil}, _sources),
     do: []
@@ -855,6 +863,13 @@ defmodule Jamdb.Oracle.Query do
   defp get_source(query, sources, ix, source) do
     {expr, name, _schema} = elem(sources, ix)
     {expr || paren_expr(source, sources, query), name}
+  end
+
+  defp get_parent_sources_ix(query, as) do
+    case query.aliases[@parent_as] do
+      {%{aliases: %{^as => ix}}, sources} -> {ix, sources}
+      {%{} = parent, _sources} -> get_parent_sources_ix(parent, as)
+    end
   end
 
   defp quote_qualified_name(name, sources, ix) do
