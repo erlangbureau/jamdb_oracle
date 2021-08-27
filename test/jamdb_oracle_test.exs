@@ -1020,6 +1020,7 @@ defmodule Jamdb.OracleTest do
       {:alter, table(:posts),
        [
          {:add, :title, :string, [default: "Untitled", size: 100, null: false]},
+         {:add, :author_id, %Reference{table: :author}, []},
          {:modify, :price, :numeric, [precision: 8, scale: 2, null: true]},
          {:remove, :summary}
        ]}
@@ -1027,6 +1028,7 @@ defmodule Jamdb.OracleTest do
     expected_ddl = [
       """
       BEGIN EXECUTE IMMEDIATE 'ALTER TABLE posts ADD title varchar2(100) DEFAULT 'Untitled' NOT NULL';
+      EXECUTE IMMEDIATE 'ALTER TABLE posts ADD author_id int CONSTRAINT posts_author_id_fkey REFERENCES author(id)';
       EXECUTE IMMEDIATE 'ALTER TABLE posts MODIFY (price numeric(8,2) NULL)';
       EXECUTE IMMEDIATE 'ALTER TABLE posts DROP COLUMN summary'; END;
       """
