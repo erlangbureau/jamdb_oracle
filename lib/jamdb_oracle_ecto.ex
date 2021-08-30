@@ -12,6 +12,11 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   @behaviour Ecto.Adapter.Structure
 
   @impl true
+  def ensure_all_started(config, type) do
+    Ecto.Adapters.SQL.ensure_all_started(:jamdb_oracle, config, type)
+  end
+
+  @impl true
   def loaders({:array, _}, type), do: [&array_decode/1, type]
   def loaders({:embed, _}, type), do: [&json_decode/1, &Ecto.Type.embedded_load(type, &1, :json)]
   def loaders({:map, _}, type),   do: [&json_decode/1, &Ecto.Type.embedded_load(type, &1, :json)]
