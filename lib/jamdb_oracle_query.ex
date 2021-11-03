@@ -490,6 +490,9 @@ defmodule Jamdb.Oracle.Query do
     end
   end
 
+  defp expr(%Ecto.Query.Tagged{value: {:^, [], [ix]}, type: :binary}, _sources, _query) do
+    [?: | Integer.to_string(ix + 1)]
+  end
   defp expr(%Ecto.Query.Tagged{value: binary, type: :binary}, _sources, _query) do
     ["'", Base.encode16(binary, case: :upper), "'"]
   end
