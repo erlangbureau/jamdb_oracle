@@ -289,7 +289,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp encode(params, []), do: params
   defp encode([%Ecto.Query.Tagged{type: :binary} = elem | next1], [_type | next2]),
     do: [ elem | encode(next1, next2)]
-  defp encode([elem | next1], [type | next2]) when type in [:binary, :binary_id],
+  defp encode([elem | next1], [type | next2]) when type in [:binary, :binary_id, Ecto.UUID],
     do: [ %Ecto.Query.Tagged{value: elem, type: :binary} | encode(next1, next2)]
   defp encode([elem | next1], [_type | next2]), do: [ elem | encode(next1, next2)]
 
