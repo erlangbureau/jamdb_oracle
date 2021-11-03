@@ -493,7 +493,8 @@ defmodule Jamdb.Oracle.Query do
   defp expr(%Ecto.Query.Tagged{value: binary, type: :binary}, _sources, _query) do
     ["'", Base.encode16(binary, case: :upper), "'"]
   end
-  defp expr(%Ecto.Query.Tagged{value: literal, type: :uuid}, sources, query) do
+  defp expr(%Ecto.Query.Tagged{value: literal, type: type}, sources, query)
+    when type in ~w(binary_id uuid)a  do
     ["HEXTORAW(", expr(literal, sources, query), ?)]
   end
   defp expr(%Ecto.Query.Tagged{value: literal, type: type}, sources, query) do
@@ -810,7 +811,6 @@ defmodule Jamdb.Oracle.Query do
     cond do
       size               -> [type_name, ?(, to_string(size), ?)]
       precision          -> [type_name, ?(, to_string(precision), ?,, to_string(scale || 0), ?)]
-      type == :binary_id -> [type_name, "(16)"]
       type == :boolean   -> [type_name, "(1)"]
       type == :binary    -> [type_name, "(2000)"]
       type == :string    -> [type_name, "(2000)"]
@@ -819,7 +819,6 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp ecto_to_db(:id),                  do: "integer"
-  defp ecto_to_db(:binary_id),           do: "raw"
   defp ecto_to_db(:serial),              do: "int"
   defp ecto_to_db(:bigserial),           do: "int"
   defp ecto_to_db(:identity),            do: "int"
