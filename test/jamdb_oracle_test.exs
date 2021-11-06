@@ -511,8 +511,14 @@ defmodule Jamdb.OracleTest do
   end
 
   test "tagged type" do
+    query = Schema |> select([], type(^<<0, ?a, ?b, ?c>>, :binary)) |> plan()
+    assert all(query) == ~s{SELECT :1 FROM schema s0}
+
+    query = Schema |> select([], type(^"601d74e4-a8d3-4b6e-8365-eddb4c893327", :binary_id)) |> plan()
+    assert all(query) == ~s{SELECT HEXTORAW(:1) FROM schema s0}
+
     query = Schema |> select([], type(^"601d74e4-a8d3-4b6e-8365-eddb4c893327", Ecto.UUID)) |> plan()
-    assert all(query) == ~s{SELECT CAST(:1 AS raw(16)) FROM schema s0}
+    assert all(query) == ~s{SELECT HEXTORAW(:1) FROM schema s0}
   end
 
   test "in subquery" do

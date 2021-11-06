@@ -134,8 +134,6 @@ Ecto types              | Oracle types                     | Literal syntax in p
     iex> bin = <<231,153,190>>
     iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", [bin]], [in: [:binary]])
 
-    iex> YourApp.Repo.insert_all(YourSchema,[[id: 100]], [returning: [:created_at], out: [:date]])
-
 Using quoted identifiers:
 
     defmodule YourApp.Users do
@@ -143,6 +141,7 @@ Using quoted identifiers:
 
       schema "\\"USERS\\"" do
         field :id, :integer
+        field :uuid, :binary_id
         field :name, :string, source: :'"NAME"'
         field :namae, :string, source: :'"名まえ"'
       end
@@ -152,6 +151,10 @@ Using quoted identifiers:
     iex> YourApp.Repo.all(from(u in "\\"USERS\\"", select: u.'"NAME"', where: u.id == 1))
 
     iex> YourApp.Repo.all(from(u in YourApp.Users, select: u.namae, where: u.id == 1))
+
+    iex> uuid = "601d74e4-a8d3-4b6e-8365-eddb4c893327"
+    iex> YourApp.Repo.all(from(u in YourApp.Users, select: u.name,
+    iex> where: u.uuid == type(^uuid, :binary_id)), [in: [:binary_id]])
 
 Imagine you have this migration:
 
