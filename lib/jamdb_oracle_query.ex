@@ -47,7 +47,6 @@ defmodule Jamdb.Oracle.Query do
     fields = update_fields(query, sources)
 
     ["UPDATE ", rows, " SET ", fields, where]
-    ## ++ returning(query, sources)
   end
 
   @doc false
@@ -63,7 +62,6 @@ defmodule Jamdb.Oracle.Query do
       end
 
     ["DELETE FROM ", rows, where]
-    ## ++ returning(query, sources)
   end
 
   @doc false
@@ -533,20 +531,6 @@ defmodule Jamdb.Oracle.Query do
 
   defp maybe_paren(expr, sources, query),
     do: expr(expr, sources, query)
-
-  defp returning(%{select: nil}, _sources),
-    do: []
-  defp returning(%{select: %{fields: fields}} = query, sources) do
-    {returning, _count} = intersperse_reduce(fields, ", ", 1, fn
-	  {{:., _, [{:&, _, [0]}, field]}, _, []} , acc ->
-        {[?: | quote_name(field)], acc + 1}
-
-	  _field, acc ->
-        {[?: | Integer.to_string(acc)], acc + 1}
-    end)
-    [" RETURN ", select_fields(fields, sources, query),
-     " INTO ", returning]
-  end
 
   defp returning([]),
     do: []
