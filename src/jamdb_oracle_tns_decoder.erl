@@ -664,6 +664,13 @@ lid(N,I,Acc) ->
 
 decode_clob(Data) ->
     A = decode_next(ub4,Data),
+    case decode_ub1(A) of
+        114 -> {[], decode_next(A)};   %LobLocator
+        _ -> decode_clob_value(Data)
+    end.
+
+decode_clob_value(Data) ->
+    A = decode_next(ub4,Data),
     B = decode_next(ub4,A),        %LobSize
     C = decode_next(ub4,B),        %LobChunkSize
     Vary = decode_ub1(C),
@@ -679,6 +686,13 @@ decode_clob(Data) ->
     {Value, decode_next(G)}.
 
 decode_blob(Data) ->
+    A = decode_next(ub4,Data),
+    case decode_ub1(A) of
+        114 -> {[], decode_next(A)};   %LobLocator
+        _ -> decode_blob_value(Data)
+    end.
+
+decode_blob_value(Data) ->
     A = decode_next(ub4,Data),
     B = decode_next(ub4,A),        %LobSize
     C = decode_next(ub4,B),        %LobChunkSize
