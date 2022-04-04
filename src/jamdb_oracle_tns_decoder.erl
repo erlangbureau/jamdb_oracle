@@ -82,7 +82,7 @@ decode_token(oac, Data) ->
     Scale = decode_ub2(C),
     D = decode_next(ub2,C),        %data scale
     Length = decode_ub4(D),
-    E = decode_next(ub4,D),        %max data lenght
+    E = decode_next(ub4,D),        %max data length
     F = decode_next(ub4,E),        %mal
     G = decode_next(ub4,F),        %fl2
     J = decode_next(dalc,G),       %toid
@@ -314,7 +314,7 @@ decode_next(rxh,Data) ->
     B = decode_next(ub2,A),        %Number of Requests
     C = decode_next(ub2,B),        %Iteration Number
     D = decode_next(ub2,C),        %Num. Iterations this time
-    E = decode_next(ub2,D),        %UAC bufffer length
+    E = decode_next(ub2,D),        %UAC buffer length
     F = decode_next(dalc,E),       %Bitvec
     decode_next(dalc,F);
 decode_next(rpa,Data) ->
