@@ -318,7 +318,7 @@ encode_token(oac, DataType, Length, Flag, Charset, Max) ->
     3,                              %flg
     0,                              %pre
     0,                              %data scale
-    (encode_sb4(Length))/binary,    %max data lenght
+    (encode_sb4(Length))/binary,    %max data length
     0,                              %mal
     (encode_sb4(Flag))/binary,      %fl2
     0,                              %toid
