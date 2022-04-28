@@ -204,7 +204,7 @@ defmodule Jamdb.Oracle do
     {mode, s}
   end
 
-  @impl false
+  @doc false
   def checkin(s) do
     {:ok, s}
   end
