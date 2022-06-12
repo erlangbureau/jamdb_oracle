@@ -156,6 +156,20 @@ Using quoted identifiers:
     iex> YourApp.Repo.all(from(u in YourApp.Users, select: u.name,
     iex> where: u.uuid == type(^uuid, :binary_id)), [in: [:binary_id]])
 
+Update batching:
+
+    query = %Jamdb.Oracle.Query{statement: "insert into users (uuid, namae) values (:1, :2)", 
+	  batch: true}
+
+    params = Enum.map(1..9, fn _x -> 
+	  DBConnection.Query.encode(%Jamdb.Oracle.Query{}, 
+	  [String.replace(Ecto.UUID.generate(), "-", ""), nil], [])
+    end)
+
+    DBConnection.transaction(conn, fn conn ->
+      DBConnection.execute!(conn, query, params)
+    end)
+
 Imagine you have this migration:
 
     defmodule YourApp.Migration do
