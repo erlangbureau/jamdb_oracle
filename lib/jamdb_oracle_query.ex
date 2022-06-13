@@ -436,6 +436,10 @@ defmodule Jamdb.Oracle.Query do
     |> parens_for_select
   end
 
+  defp expr({:literal, _, [literal]}, _sources, _query) do
+    quote_name(literal)
+  end
+
   defp expr({:date_add, _, [date, count, interval]}, sources, query) do
     interval(date, " + ", count, interval, sources, query)
   end
