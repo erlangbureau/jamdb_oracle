@@ -729,9 +729,6 @@ decode_long(Data) ->
     A = decode_next(chr,Data),
     {Value, decode_next(ub2,A,2)}.
 
-decode_helper(fetch, _, Format) ->
-    [DataType || #format{data_type=DataType} <- Format,
-    lists:member(DataType, [?TNS_TYPE_CLOB,?TNS_TYPE_BLOB,?TNS_TYPE_LONG,?TNS_TYPE_LONGRAW])];
 decode_helper(param, Data, Format) -> decode_token(oac, ?ENCODER:encode_token(oac, Data, Format));
 decode_helper(tz, Data, _) -> ltz(Data);
 decode_helper(dump, Data, DataType) -> decode_value(Data, DataType).
