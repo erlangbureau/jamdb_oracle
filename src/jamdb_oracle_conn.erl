@@ -270,10 +270,7 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
             {Type2, Request} =
             case LCursor =:= Cursor of
                 true -> {Type, {Cursor, if RowNumber =:= 0 -> RowFormat; true -> [] end}};
-                _ -> case length(?DECODER:decode_helper(fetch, Cursor, RowFormat)) of
-                         0 -> {cursor, Cursor};
-                         _ -> {cursor, {Cursor, RowFormat}}
-                     end
+                _ -> {cursor, {Cursor, RowFormat}}
             end,
             {ok, State2} = send_req(fetch, State, Request),
             #oraclient{auto=Auto, defcols=DefCol} = State2,
