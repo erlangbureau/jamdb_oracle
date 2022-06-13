@@ -173,6 +173,9 @@ decode_token(rxd, Data, {Ver, _RowFormat, fetch}) ->
     Cursor = decode_ub4(A),
     B = decode_next(ub4,A),
     {{Cursor, CursorRowFormat}, decode_next(ub2,B)};
+decode_token(rxd, Data, {Ver, _RowFormat, select}) ->
+    {A, _CursorRowFormat} = decode_token(dcb, decode_next(ub1,Data), Ver),
+    {decode_ub4(A), decode_next(ub4,A)};
 decode_token(rxd, Data, {Ver, RowFormat, Type}) when is_atom(Type) ->
     case decode_data(Data, [], {[], RowFormat, Ver, Type}) of
     	{{Cursor, CursorRowFormat}, A} ->
@@ -415,8 +418,8 @@ decode_data(Data, #format{data_type=DataType}) when ?IS_FIXED_TYPE(DataType) ->
     <<Length, Bin:Length/binary, Rest/binary>> = Data,
     {decode_value(Bin, DataType), Rest};
 decode_data(Data, #format{data_type=?TNS_TYPE_REFCURSOR}) ->
-    {_DefCol, Bin} = decode_token(rxd, Data, {0, [], fetch}),
-    {null, decode_next(ub1,Bin)};
+    {_Value, RestData} = decode_token(rxd, Data, {0, [], select}),
+    {null, RestData};
 decode_data(Data, #format{data_type=DataType}) ->
     decode_value(Data, DataType).
 
