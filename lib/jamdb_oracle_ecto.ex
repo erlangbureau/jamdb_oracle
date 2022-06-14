@@ -85,22 +85,22 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
 
   @impl true
   def execute(conn, query, params, opts) do
-    DBConnection.execute(conn, query!(query, ""), params, opts)
+    DBConnection.execute(conn, query!(query, "", opts), params, opts)
   end
 
   @impl true
   def prepare_execute(conn, name, query, params, opts) do
-    DBConnection.prepare_execute(conn, query!(query, name), params, opts)
+    DBConnection.prepare_execute(conn, query!(query, name, opts), params, opts)
   end
 
   @impl true
   def stream(conn, query, params, opts) do
-    DBConnection.stream(conn, query!(query, ""), params, opts)
+    DBConnection.stream(conn, query!(query, "", opts), params, opts)
   end
 
   @impl true
   def query(conn, query, params, opts) do
-    case DBConnection.prepare_execute(conn, query!(query, ""), params, opts) do
+    case DBConnection.prepare_execute(conn, query!(query, "", opts), params, opts) do
       {:ok, _, result}  -> {:ok, result}
       {:error, err} -> {:error, err}
     end
@@ -119,10 +119,10 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
     end
   end
 
-  defp query!(sql, name) when is_binary(sql) or is_list(sql) do
-    %Jamdb.Oracle.Query{statement: IO.iodata_to_binary(sql), name: name}
+  defp query!(sql, name, opts) when is_binary(sql) or is_list(sql) do
+    %Jamdb.Oracle.Query{statement: IO.iodata_to_binary(sql), name: name, batch: opts[:batch]}
   end
-  defp query!(%{} = query, _name) do
+  defp query!(%{} = query, _name, _opts) do
     query
   end
 
