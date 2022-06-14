@@ -419,7 +419,7 @@ decode_data(Data, #format{data_type=DataType}) when ?IS_FIXED_TYPE(DataType) ->
     {decode_value(Bin, DataType), Rest};
 decode_data(Data, #format{data_type=?TNS_TYPE_REFCURSOR}) ->
     {_Value, RestData} = decode_token(rxd, Data, {0, [], cursor}),
-    {null, RestData};  %% TODO
+    {null, RestData};
 decode_data(Data, #format{data_type=DataType}) ->
     decode_value(Data, DataType).
 
@@ -459,14 +459,6 @@ decode_param({Data, #format{param=in}=ValueFormat}) when Data =/= 32 ->
     ValueFormat#format{param=out};
 decode_param({_Data, ValueFormat}) ->
     ValueFormat.
-
-%decode_len(L, DataType) ->
-%    case L of
-%        L when DataType =:= ?TNS_TYPE_NUMBER -> 22;
-%        L when DataType =:= ?TNS_TYPE_DATE -> 7;
-%        L when DataType =:= ?TNS_TYPE_TIMESTAMPTZ -> 13;
-%        L -> L
-%    end.
 
 decode_keyval(_Data,0,Acc) ->
     Acc;
