@@ -267,16 +267,12 @@ handle_resp(Acc, #oraclient{socket=Socket, sdu=Length, timeouts=Touts} = State) 
 handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
     case ?DECODER:decode_token(Data, Acc) of
         {0, RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->
-            {Type2, Request} =
-            case LCursor =:= Cursor of
-                true -> {Type, {Cursor, if RowNumber =:= 0 -> RowFormat; true -> [] end}};
-                _ -> {cursor, {Cursor, RowFormat}}
-            end,
-            {ok, State2} = send_req(fetch, State, Request),
+            Type2 = if LCursor =:= Cursor -> Type; true -> cursor end,
+            {ok, State2} = send_req(fetch, State, {Cursor, RowFormat}),
             #oraclient{auto=Auto, defcols=DefCol} = State2,
-            {_, Result} = get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
-            handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=Result, type=Type2});
-            {RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
+            {_, DefCol2} = get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
+            handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=DefCol2, type=Type2});
+        {RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
             case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
                 more when Type =:= fetch ->
                     {ok, [{fetched_rows, Cursor, RowFormat, Rows}], State};
