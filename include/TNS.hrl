@@ -41,24 +41,24 @@
 -define(TNS_TYPE_ADT, 109).
 -define(TNS_TYPE_REF, 111).
 
--define(TTI_PRO, 1).
--define(TTI_DTY, 2).
--define(TTI_FUN, 3).
--define(TTI_OER, 4).
--define(TTI_RXH, 6).
--define(TTI_RXD, 7).
--define(TTI_RPA, 8).
--define(TTI_STA, 9).
--define(TTI_ROW, 10).
--define(TTI_IOV, 11).
+-define(TTI_PRO, 1).    %protocol
+-define(TTI_DTY, 2).    %data types
+-define(TTI_FUN, 3).    %function
+-define(TTI_OER, 4).    %error
+-define(TTI_RXH, 6).    %row header
+-define(TTI_RXD, 7).    %row data
+-define(TTI_RPA, 8).    %parameter
+-define(TTI_STA, 9).    %status
+-define(TTI_ROW, 10).   %row
+-define(TTI_IOV, 11).   %io vector
 -define(TTI_UDS, 12).
 -define(TTI_OAC, 13).
--define(TTI_LOB, 14).
--define(TTI_WRN, 15).
--define(TTI_DCB, 16).
--define(TTI_PFN, 17).
--define(TTI_FOB, 19).
--define(TTI_BVC, 21).
+-define(TTI_LOB, 14).   %lob data
+-define(TTI_WRN, 15).   %warning
+-define(TTI_DCB, 16).   %describe info
+-define(TTI_PFN, 17).   %piggyback
+-define(TTI_FOB, 19).   %flush out binds
+-define(TTI_BVC, 21).   %bit vector
 
 -define(TTI_OPEN, 2).
 -define(TTI_EXEC, 4).
