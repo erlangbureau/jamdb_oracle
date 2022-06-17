@@ -131,8 +131,9 @@ Ecto types              | Oracle types                     | Literal syntax in p
     iex> bin = %Ecto.Query.Tagged{value: <<0xE7,0x99,0xBE>>, type: :binary}
     iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", [bin])
     
-    iex> bin = <<231,153,190>>
-    iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", [bin]], [in: [:binary]])
+    iex> opts = [batch: true, in: [Ecto.UUID, :number]]
+    iex> row = [Ecto.UUID.bingenerate, 1]
+    iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1, :2)", [row, row]], opts)
 
 Using quoted identifiers:
 
@@ -155,20 +156,6 @@ Using quoted identifiers:
     iex> uuid = "601d74e4-a8d3-4b6e-8365-eddb4c893327"
     iex> YourApp.Repo.all(from(u in YourApp.Users, select: u.name,
     iex> where: u.uuid == type(^uuid, :binary_id)), [in: [:binary_id]])
-
-Update batching:
-
-    query = %Jamdb.Oracle.Query{statement: "insert into users (uuid, namae) values (:1, :2)", 
-	  batch: true}
-
-    params = Enum.map(1..9, fn _x -> 
-	  DBConnection.Query.encode(%Jamdb.Oracle.Query{}, 
-	  [String.replace(Ecto.UUID.generate(), "-", ""), nil], [])
-    end)
-
-    DBConnection.transaction(conn, fn conn ->
-      DBConnection.execute!(conn, query, params)
-    end)
 
 Imagine you have this migration:
 
