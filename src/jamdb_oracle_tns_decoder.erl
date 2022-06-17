@@ -77,27 +77,27 @@ decode_token(rpa, Data) ->
 decode_token(oac, Data) ->
     DataType = decode_ub1(Data),
     A = decode_next(ub1,Data),     %data type
-    B = decode_next(ub1,A),        %flg
-    C = decode_next(ub1,B),        %pre
+    B = decode_next(ub1,A),        %flags
+    C = decode_next(ub1,B),        %precision
     Scale = decode_ub2(C),
     D = decode_next(ub2,C),        %data scale
     Length = decode_ub4(D),
     E = decode_next(ub4,D),        %max data length
-    F = decode_next(ub4,E),        %mal
-    G = decode_next(ub4,F),        %fl2
-    J = decode_next(dalc,G),       %toid
-    K = decode_next(ub2,J),        %vsn
+    F = decode_next(ub4,E),        %max number of array elem
+    G = decode_next(ub4,F),        %cont flags
+    J = decode_next(dalc,G),       %OID
+    K = decode_next(ub2,J),        %version
     Charset = decode_ub2(K),
-    L = decode_next(ub2,K),        %charset
-    M = decode_next(ub1,L),        %form of use
+    L = decode_next(ub2,K),        %character set id
+    M = decode_next(ub1,L),        %character set form
     N = decode_next(ub4,M),        %mxlc
     {N, DataType, Length, Scale, Charset};
 decode_token(wrn, Data) ->
-    A = decode_next(ub2,Data),     %retCode
+    A = decode_next(ub2,Data),     %error number
     Length = decode_ub2(A),
-    B = decode_next(ub2,A),        %warnLength
-    C = decode_next(ub2,B),        %warnFlag
-    decode_next(ub1, C, Length).   %warnMsg
+    B = decode_next(ub2,A),        %length of error message
+    C = decode_next(ub2,B),        %flags
+    decode_next(ub1, C, Length).
 
 decode_token(dcb, Data, {Ver, _RowFormat, Type}) when is_atom(Type) ->
     {A, RowFormat} = decode_token(dcb, decode_next(Data), Ver),
@@ -112,10 +112,10 @@ decode_token(dcb, Data, Ver) ->
         _ -> decode_next(ub1,B)
     end,
     {RowFormat, D} = decode_token(uds, C, {Ver, [], Num}),
-    E = decode_next(dalc,D),
-    F = decode_next(ub4,E),
-    G = decode_next(ub4,F),
-    J = decode_next(ub4,G),
+    E = decode_next(dalc,D),       %flag
+    F = decode_next(ub4,E),        %mdbz
+    G = decode_next(ub4,F),        %mnpr
+    J = decode_next(ub4,G),        %mxpr
     K = decode_next(ub4,J),
     L =
     case Ver of
@@ -127,13 +127,13 @@ decode_token(uds, Data, {_Ver, RowFormat, 0}) ->
     {lists:reverse(RowFormat), Data};
 decode_token(uds, Data, {Ver, RowFormat, Num}) ->
     {A, DataType, Length, Scale, Charset} = decode_token(oac, Data),
-    B = decode_next(ub1,A),        %nullable
-    C = decode_next(ub1,B),
+    B = decode_next(ub1,A),        %nulls allowed
+    C = decode_next(ub1,B),        %v7 length of name
     Column = decode_dalc(C),
     D = decode_next(dalc,C),       %column name
     E = decode_next(dalc,D),       %schema name
     F = decode_next(dalc,E),       %type name
-    G = decode_next(ub2,F),
+    G = decode_next(ub2,F),        %column position
     J =
     case Ver of
         10 -> G;
@@ -145,12 +145,12 @@ decode_token(rxh, Data, {Cursor, RowFormat, Type}) when is_atom(Type) ->
     A = decode_next(rxh,Data),
     decode_token(A, {Cursor, RowFormat, [0], []});
 decode_token(rxh, Data, {Cursor, RowFormat, Rows}) ->
-    A = decode_next(ub1,Data),
-    B = decode_next(ub2,A),
-    C = decode_next(ub2,B),
-    D = decode_next(ub2,C),
-    E = decode_next(ub2,D),
-    Bitvec = decode_dalc(E),
+    A = decode_next(ub1,Data),     %flag
+    B = decode_next(ub2,A),        %num requests
+    C = decode_next(ub2,B),        %iter num
+    D = decode_next(ub2,C),        %num iters this time
+    E = decode_next(ub2,D),        %uac buffer length
+    Bitvec = decode_dalc(E),       %bit vector for fast fetch
     {Bvc, _Num} =
     case length(Bitvec) of
         0 -> {[0], 0};
@@ -173,6 +173,9 @@ decode_token(rxd, Data, {Ver, _RowFormat, fetch}) ->
     Cursor = decode_ub4(A),
     B = decode_next(ub4,A),
     {{Cursor, CursorRowFormat}, decode_next(ub2,B)};
+decode_token(rxd, Data, {Ver, _RowFormat, cursor}) ->
+    {A, _CursorRowFormat} = decode_token(dcb, decode_next(ub1,Data), Ver),
+    {decode_ub4(A), decode_next(ub4,A)};
 decode_token(rxd, Data, {Ver, RowFormat, Type}) when is_atom(Type) ->
     case decode_data(Data, [], {[], RowFormat, Ver, Type}) of
     	{{Cursor, CursorRowFormat}, A} ->
@@ -222,10 +225,10 @@ decode_token(oer, Data, {_Ver, RowFormat, Type}) when is_atom(Type) ->
 decode_token(oer, Data, {Cursor, RowFormat, _Bvc, Rows}) ->
     decode_token(oer, Data, {Cursor, RowFormat, Rows});
 decode_token(oer, Data, {Cursor, RowFormat, Rows}) ->
-    A = decode_next(ub2,Data),
-    B = decode_next(ub2,A),              %Sequence Number
+    A = decode_next(ub2,Data),           %end of call status
+    B = decode_next(ub2,A),              %end to end seq number
     RowNumber = decode_ub4(B),
-    C = decode_next(ub4,B),              %Current Row Number
+    C = decode_next(ub4,B),              %current row number
     RetCode = decode_ub2(C),
     RetFormat =
     case lists:member(RetCode, [0,1403]) of
@@ -235,27 +238,27 @@ decode_token(oer, Data, {Cursor, RowFormat, Rows}) ->
             F = decode_next(ub2,E),
             {decode_ub2(F), RowFormat};  %defcols
         false ->
-            D = decode_next(ub2,C),      %Returned Code
-            E = decode_next(ub2,D),      %Array Element w/error
-            F = decode_next(ub2,E),      %Array Element errno
-            G = decode_next(ub2,F),      %Current Cursor ID
-            H = decode_next(ub2,G),      %Error Position 
-            I = decode_next(ub1,H),      %SQL command type 
-            J = decode_next(ub2,I),      %Fatal 
-            K = decode_next(ub2,J),      %Various flags
-            L = decode_next(ub2,K),      %User cursor options
-            M = decode_next(ub1,L),      %UPI parameter that generated the error
-            N = decode_next(ub1,M),      %Warning flags
-            O = decode_next(ub4,N),      %Row ID rba
+            D = decode_next(ub2,C),      %error number
+            E = decode_next(ub2,D),      %array elem w/error
+            F = decode_next(ub2,E),      %array elem errno
+            G = decode_next(ub2,F),      %cursor id
+            H = decode_next(ub2,G),      %error position 
+            I = decode_next(ub1,H),      %sql type 
+            J = decode_next(ub2,I),      %fatal 
+            K = decode_next(ub2,J),      %flags
+            L = decode_next(ub2,K),      %user cursor options
+            M = decode_next(ub1,L),      %UPI parameter
+            N = decode_next(ub1,M),      %warning flag
+            O = decode_next(ub4,N),      %rowid rba
             P = decode_next(ub2,O),      %partitionid
             Q = decode_next(ub1,P),      %tableid
             R = decode_next(ub4,Q),      %blocknumber
             S = decode_next(ub2,R),      %slotnumber
-            T = decode_next(ub4,S),      %Operating System Error
-            U = decode_next(ub1,T),      %Statement number
-            V = decode_next(ub1,U),      %Procedure call number
-            W = decode_next(ub2,V),      %Pad
-            X = decode_next(ub4,W),      %Successful iterations
+            T = decode_next(ub4,S),      %OS error
+            U = decode_next(ub1,T),      %statement number
+            V = decode_next(ub1,U),      %call number
+            W = decode_next(ub2,V),      %padding
+            X = decode_next(ub4,W),      %success iters
             {Cursor, decode_dalc(X)}
     end,
     {RetCode, RowNumber, Cursor, RetFormat, Rows}.
@@ -310,12 +313,12 @@ decode_next(keyword,Data) ->
     end,
     decode_next(ub2,B);
 decode_next(rxh,Data) ->
-    A = decode_next(ub1,Data),     %Flags
-    B = decode_next(ub2,A),        %Number of Requests
-    C = decode_next(ub2,B),        %Iteration Number
-    D = decode_next(ub2,C),        %Num. Iterations this time
-    E = decode_next(ub2,D),        %UAC buffer length
-    F = decode_next(dalc,E),       %Bitvec
+    A = decode_next(ub1,Data),
+    B = decode_next(ub2,A),
+    C = decode_next(ub2,B),
+    D = decode_next(ub2,C),
+    E = decode_next(ub2,D),
+    F = decode_next(dalc,E),
     decode_next(dalc,F);
 decode_next(rpa,Data) ->
     I = decode_ub2(Data),
@@ -415,8 +418,8 @@ decode_data(Data, #format{data_type=DataType}) when ?IS_FIXED_TYPE(DataType) ->
     <<Length, Bin:Length/binary, Rest/binary>> = Data,
     {decode_value(Bin, DataType), Rest};
 decode_data(Data, #format{data_type=?TNS_TYPE_REFCURSOR}) ->
-    {_DefCol, Bin} = decode_token(rxd, Data, {0, [], fetch}),
-    {null, decode_next(ub1,Bin)};
+    {_Value, RestData} = decode_token(rxd, Data, {0, [], cursor}),
+    {null, RestData};
 decode_data(Data, #format{data_type=DataType}) ->
     decode_value(Data, DataType).
 
@@ -456,14 +459,6 @@ decode_param({Data, #format{param=in}=ValueFormat}) when Data =/= 32 ->
     ValueFormat#format{param=out};
 decode_param({_Data, ValueFormat}) ->
     ValueFormat.
-
-%decode_len(L, DataType) ->
-%    case L of
-%        L when DataType =:= ?TNS_TYPE_NUMBER -> 22;
-%        L when DataType =:= ?TNS_TYPE_DATE -> 7;
-%        L when DataType =:= ?TNS_TYPE_TIMESTAMPTZ -> 13;
-%        L -> L
-%    end.
 
 decode_keyval(_Data,0,Acc) ->
     Acc;

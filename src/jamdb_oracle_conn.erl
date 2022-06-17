@@ -10,11 +10,11 @@
 
 -opaque state() :: #oraclient{}.
 -type error_type() :: socket | remote | local.
--type columns() :: list().  %% TODO
--type metainfo() :: list(). %%TODO
--type rows() :: list().  %% TODO
+-type columns() :: list().
+-type metainfo() :: list().
+-type rows() :: list().
 -type return_status() :: non_neg_integer().
--type out_params() :: list().  %% TODO
+-type out_params() :: list().
 -type empty_result() :: {ok, state()} | {error, error_type(), binary(), state()}.
 -type fetched_rows() :: {fetched_rows, non_neg_integer(), metainfo(), rows()}.
 -type affected_rows() :: {affected_rows, non_neg_integer()}.
@@ -266,17 +266,13 @@ handle_resp(Acc, #oraclient{socket=Socket, sdu=Length, timeouts=Touts} = State) 
 
 handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
     case ?DECODER:decode_token(Data, Acc) of
-        {0, RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->
-            {Type2, Request} =
-            case LCursor =:= Cursor of
-                true -> {Type, {Cursor, if RowNumber =:= 0 -> RowFormat; true -> [] end}};
-                _ -> {cursor, Cursor}
-            end,
-            {ok, State2} = send_req(fetch, State, Request),
+        {0, _RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->
+            Type2 = if LCursor =:= Cursor -> Type; true -> cursor end,
+            {ok, State2} = send_req(fetch, State, {Cursor, RowFormat}),
             #oraclient{auto=Auto, defcols=DefCol} = State2,
-            {_, Result} = get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
-            handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=Result, type=Type2});
-            {RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
+            {_, DefCol2} = get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
+            handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=DefCol2, type=Type2});
+        {RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
             case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
                 more when Type =:= fetch ->
                     {ok, [{fetched_rows, Cursor, RowFormat, Rows}], State};
