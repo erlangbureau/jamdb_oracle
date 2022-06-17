@@ -282,8 +282,11 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
 
   def encode(_, [], _), do: []
   def encode(_, params, opts) do
-    types = Enum.map(Keyword.get(opts, :in, []), fn elem -> elem end)
-    Enum.map(encode(params, types), fn elem -> encode(elem) end)
+    types = Keyword.get(opts, :in, [])
+    case Keyword.get(opts, :batch) do
+      true -> Enum.map(params, fn row -> Enum.map(encode(row, types), fn elem -> encode(elem) end) end)
+      _ -> Enum.map(encode(params, types), fn elem -> encode(elem) end)
+    end
   end
 
   defp encode(params, []), do: params
