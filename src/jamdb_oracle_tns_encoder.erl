@@ -70,12 +70,12 @@ encode_record(sess, #oraclient{env=EnvOpts,seq=Tseq}) ->
     <<
     ?TTI_FUN,
     ?TTI_SESS, Tseq,
-    1,
+    1,                                                                         %authusr
     (encode_sb2(byte_size(User2)))/binary,
-    (encode_sb2((Role * 32) bor (Prelim * 128) bor 1))/binary,                 %logon mode
-    1,
-    (encode_sb2(4))/binary,                                                    %keyval count
-    1,1,
+    (encode_sb2((Role * 32) bor (Prelim * 128) bor 1))/binary,                 %auth mode
+    1,                                                                         %authivl
+    (encode_sb2(4))/binary,                                                    %number of keyval pairs
+    1,1,                                                                       %authovl
     User2/binary,
     (encode_keyval("AUTH_PROGRAM_NM", AppName))/binary,
     (encode_keyval("AUTH_MACHINE", UserHost))/binary,
@@ -98,12 +98,12 @@ encode_record(auth, #oraclient{env=EnvOpts,passwd=Passwd,req=Request,seq=Tseq}) 
     {<<
     ?TTI_FUN,
     ?TTI_AUTH, Tseq,
-    1,
+    1,                                                                         %authusr
     (encode_sb2(byte_size(User2)))/binary,
-    (encode_sb2((Role * 32) bor (Prelim * 128) bor PassMode bor 256))/binary,  %logon mode
-    1,
-    (encode_sb2(4 + KeyInd + PassInd))/binary,                                 %keyval count
-    1,1,
+    (encode_sb2((Role * 32) bor (Prelim * 128) bor PassMode bor 256))/binary,  %auth mode
+    1,                                                                         %authivl
+    (encode_sb2(4 + KeyInd + PassInd))/binary,                                 %number of keyval pairs
+    1,1,                                                                       %authovl
     User2/binary,
     (encode_keyval("AUTH_PASSWORD", AuthPass))/binary,
     (if PassInd =/= 0 -> encode_keyval("AUTH_NEWPASSWORD", AuthNewPass); true -> <<>> end)/binary,
@@ -330,16 +330,16 @@ encode_token(oac, #format{data_type=DataType,data_length=Length,charset=Charset}
 encode_token(oac, DataType, Length, Flag, Charset, Max) ->
     <<
     (encode_ub1(DataType))/binary,  %data type
-    3,                              %flg
-    0,                              %pre
+    3,                              %flags
+    0,                              %precision
     0,                              %data scale
     (encode_sb4(Length))/binary,    %max data length
-    0,                              %mal
-    (encode_sb4(Flag))/binary,      %fl2
-    0,                              %toid
-    0,                              %vsn
-    (encode_sb4(Charset))/binary,   %charset
-    case Charset of                 %form of use
+    0,                              %max number of array elem
+    (encode_sb4(Flag))/binary,      %cont flags
+    0,                              %OID
+    0,                              %version
+    (encode_sb4(Charset))/binary,   %character set id
+    case Charset of                 %character set form
         ?AL16UTF16_CHARSET -> 2;
         _ -> 1
     end,
