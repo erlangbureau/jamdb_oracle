@@ -1,0 +1,19 @@
+--- ssl_gen_statem.erl.orig
++++ ssl_gen_statem.erl
+@@ -617,6 +617,16 @@
+     hibernate_after(?FUNCTION_NAME, State,
+ 		    [{reply, From, {ok, SelectedProtocol}}]);
+ connection({call, From}, 
++           {close,{NewController, _Timeout}},
++           #state{connection_env = #connection_env{socket_tls_closed = false} = CEnv,
++                 protocol_specific = PS} = State) ->
++            {next_state, downgrade, State#state{connection_env =
++                                                    CEnv#connection_env{downgrade = {NewController, From}},
++                                                protocol_specific = PS#{active_n_toggle => true,
++                                                                        active_n => 1}
++                                               },
++            [{next_event, internal, ?ALERT_REC(?WARNING, ?CLOSE_NOTIFY)}]};
++connection({call, From}, 
+            {close,{NewController, Timeout}},
+            #state{connection_states = ConnectionStates,
+                   static_env = #static_env{protocol_cb = Connection},
