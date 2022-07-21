@@ -1,0 +1,14 @@
+use Mix.Config
+
+config :jamdb, Jamdb.Repo,
+  hostname: "jamdb-oracle-dev.erlangbureau.dp.ua",
+  database: "JAMDBTEST",
+  username: "jamdbtest",
+  password: "jamdbtest",
+  port: 2484,
+  pool_size: 1,
+  idle_interval: 1000000,
+  parameters: [autocommit: 1, fetch: 15, read_timeout: 500, ssl: [cert_pem: 'ewallet.pem', verify: :verify_none]]
+
+config :jamdb,
+  ecto_repos: [Jamdb.Repo]
