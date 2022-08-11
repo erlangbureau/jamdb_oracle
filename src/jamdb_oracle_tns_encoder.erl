@@ -270,8 +270,8 @@ encode_record(close, #oraclient{seq=Tseq}) ->
     >>.
 
 setopts(all8, {Opts, Fetch, Type}) -> [Opts,Fetch,0,0,0,0,0,Type,0,0,0,0,0];
-%setopts(size, Data) when length(Data) > 4000 -> 33554432;  %clob
-setopts(size, _Data) -> 33554432.
+setopts(size, Data) when length(Data) > 4000 -> 33554432;  %clob
+setopts(size, _Data) -> 4000.
 
 setopts(fetch, DefInd, _BatchLen, Fetch) ->
     {32832 bor (DefInd * 16), 0, 2147483647, setopts(all8, {0, Fetch, 1})};
