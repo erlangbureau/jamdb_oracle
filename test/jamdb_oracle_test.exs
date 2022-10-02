@@ -50,8 +50,7 @@ defmodule Jamdb.OracleTest do
   end
 
   defp plan(query, operation \\ :all) do
-    {query, _} = Ecto.Adapter.Queryable.plan_query(operation, Jamdb.Oracle, query)
-    query
+    Ecto.Adapter.Queryable.plan_query(operation, Jamdb.Oracle, query) |> elem(0)
   end
 
   defp all(query), do: query |> SQL.all() |> IO.iodata_to_binary()
