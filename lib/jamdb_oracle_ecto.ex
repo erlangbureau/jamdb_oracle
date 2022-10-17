@@ -51,8 +51,6 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     false
   end
 
-  defp err, do: {:error, false}
-
 end
 
 defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
