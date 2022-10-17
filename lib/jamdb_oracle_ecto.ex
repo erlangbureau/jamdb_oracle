@@ -8,9 +8,6 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   use Ecto.Adapters.SQL, driver: Jamdb.Oracle, migration_lock: nil
 
-  @behaviour Ecto.Adapter.Storage
-  @behaviour Ecto.Adapter.Structure
-
   @impl true
   def ensure_all_started(config, type) do
     Ecto.Adapters.SQL.ensure_all_started(:jamdb_oracle, config, type)
@@ -45,21 +42,6 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   defp array_decode(x) when is_binary(x), do: {:ok, Jamdb.Oracle.to_list(x)}
   defp array_decode(x), do: {:ok, x}
-
-  @impl true
-  def storage_up(_opts), do: err()
-
-  @impl true
-  def storage_down(_opts), do: err()
-
-  @impl true
-  def storage_status(_opts), do: err()
-
-  @impl true
-  def structure_dump(_default, _config), do: err()
-
-  @impl true
-  def structure_load(_default, _config), do: err()
 
   @impl true
   def lock_for_migrations(_meta, _opts, fun), do: fun.()
