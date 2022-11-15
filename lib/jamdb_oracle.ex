@@ -39,10 +39,11 @@ defmodule Jamdb.Oracle do
   """
   @spec query(conn :: any(), sql :: any(), params :: any()) ::
     {:ok, any()} | {:error | :disconnect, any()}
-  def query(conn, sql, params \\ [])
-  def query(pid, sql, params) when is_pid(pid), do: query(%{pid: pid}, sql, params)
-  def query(%{pid: pid}, sql, params) do
-    case :jamdb_oracle.sql_query(pid, stmt(sql, params)) do
+  def query(conn, sql, params, opts \\ [])
+  def query(pid, sql, params, opts) when is_pid(pid), do: query(%{pid: pid}, sql, params, opts)
+
+  def query(%{pid: pid}, sql, params, opts) do
+    case :jamdb_oracle.sql_query(pid, stmt(sql, params), Keyword.get(opts, :timeout, 15_000)) do
       {:ok, [{:result_set, columns, _, rows}]} ->
         {:ok, %{num_rows: length(rows), rows: rows, columns: columns}}
       {:ok, [{:fetched_rows, _, _, _} = result]} -> {:cont, result}
@@ -84,18 +85,21 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def handle_execute(%{batch: true} = query, params, _opts, s) do
+  def handle_execute(%{batch: true} = query, params, opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
-    case query(s, {:batch, statement |> Jamdb.Oracle.to_list, params}, []) do
+
+    case query(s, {:batch, Jamdb.Oracle.to_list(statement), params}, [], opts) do
       {:ok, result} -> {:ok, query, result, s}
       {:error, err} -> {:error, error!(err), s}
       {:disconnect, err} -> {:disconnect, error!(err), s}
     end
   end
+
   def handle_execute(query, params, opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
     returning = Enum.map(Keyword.get(opts, :out, []), fn elem -> {:out, elem} end)
-    case query(s, statement |> Jamdb.Oracle.to_list, Enum.concat(params, returning)) do
+
+    case query(s, Jamdb.Oracle.to_list(statement), Enum.concat(params, returning), opts) do
       {:ok, result} -> {:ok, query, result, s}
       {:error, err} -> {:error, error!(err), s}
       {:disconnect, err} -> {:disconnect, error!(err), s}
@@ -113,9 +117,11 @@ defmodule Jamdb.Oracle do
       :transaction when mode == :idle ->
         statement = "SAVEPOINT tran"
         handle_transaction(statement, opts, %{s | mode: :transaction})
+
       :savepoint when mode == :transaction ->
         statement = "SAVEPOINT " <> Keyword.get(opts, :name, "svpt")
         handle_transaction(statement, opts, %{s | mode: :transaction})
+
       status when status in [:transaction, :savepoint] ->
         {status, s}
     end
@@ -127,8 +133,10 @@ defmodule Jamdb.Oracle do
       :transaction when mode == :transaction ->
         statement = "COMMIT"
         handle_transaction(statement, opts, %{s | mode: :idle})
+
       :savepoint when mode == :transaction ->
         {:ok, [], %{s | mode: :transaction}}
+
       status when status in [:transaction, :savepoint] ->
         {status, s}
     end
@@ -140,16 +148,18 @@ defmodule Jamdb.Oracle do
       :transaction when mode in [:transaction, :error] ->
         statement = "ROLLBACK TO tran"
         handle_transaction(statement, opts, %{s | mode: :idle})
+
       :savepoint when mode in [:transaction, :error] ->
         statement = "ROLLBACK TO " <> Keyword.get(opts, :name, "svpt")
         handle_transaction(statement, opts, %{s | mode: :transaction})
+
       status when status in [:transaction, :savepoint] ->
         {status, s}
     end
   end
 
-  defp handle_transaction(statement, _opts, s) do
-    case query(s, statement |> Jamdb.Oracle.to_list) do
+  defp handle_transaction(statement, opts, s) do
+    case query(s, Jamdb.Oracle.to_list(statement), [], opts) do
       {:ok, result} -> {:ok, result, s}
       {:error, err} -> {:error, error!(err), s}
       {:disconnect, err} -> {:disconnect, error!(err), s}
@@ -162,9 +172,10 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def handle_fetch(query, %{params: params}, _opts, %{cursors: nil} = s) do
+  def handle_fetch(query, %{params: params}, opts, %{cursors: nil} = s) do
     %Jamdb.Oracle.Query{statement: statement} = query
-    case query(s, {:fetch, statement |> Jamdb.Oracle.to_list, params}) do
+
+    case query(s, {:fetch, Jamdb.Oracle.to_list(statement), params}, [], opts) do
       {:cont, {_, cursor, row_format, rows}} ->
         cursors = %{cursor: cursor, row_format: row_format, last_row: List.last(rows)}
         {:cont,  %{num_rows: length(rows), rows: rows}, %{s | cursors: cursors}}
@@ -174,9 +185,11 @@ defmodule Jamdb.Oracle do
       {:disconnect, err} -> {:disconnect, error!(err), s}
     end
   end
-  def handle_fetch(_query, _cursor, _opts, %{cursors: cursors} = s) do
+
+  def handle_fetch(_query, _cursor, opts, %{cursors: cursors} = s) do
     %{cursor: cursor, row_format: row_format, last_row: last_row} = cursors
-    case query(s, {:fetch, cursor, row_format, last_row}) do
+
+    case query(s, {:fetch, cursor, row_format, last_row}, [], opts) do
       {:cont, {_, _, _, rows}} ->
         rows = tl(rows)
         {:cont,  %{num_rows: length(rows), rows: rows}, 
@@ -211,7 +224,7 @@ defmodule Jamdb.Oracle do
 
   @impl true
   def checkout(s) do
-    case query(s, 'SESSION') do
+    case query(s, 'SESSION', []) do
       {:ok, _} -> {:ok, s}
       {:error, err} ->  {:disconnect, error!(err), s}
     end
@@ -219,7 +232,7 @@ defmodule Jamdb.Oracle do
 
   @impl true
   def ping(%{mode: :idle} = s) do
-    case query(s, 'PING') do
+    case query(s, 'PING', []) do
       {:ok, _} -> {:ok, s}
       {:error, err} -> {:disconnect, error!(err), s}
       {:disconnect, err} -> {:disconnect, error!(err), s}
