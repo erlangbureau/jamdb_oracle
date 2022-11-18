@@ -259,7 +259,8 @@ decode_token(oer, Data, {Cursor, RowFormat, Rows}) ->
             V = decode_next(ub1,U),      %call number
             W = decode_next(ub2,V),      %padding
             X = decode_next(ub4,W),      %success iters
-            {Cursor, decode_dalc(X)}
+            Y = decode_next(dalc,X,4),
+            {Cursor, decode_dalc(Y)}
     end,
     {RetCode, RowNumber, Cursor, RetFormat, Rows}.
 
