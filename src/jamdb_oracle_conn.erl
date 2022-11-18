@@ -420,7 +420,9 @@ recv(read_timeout, Socket, Length, {_Tout, ReadTout} = Touts, Acc, Data) ->
 
 recv(Socket, Length, {Tout, _ReadTout} = Touts, Acc, Data) ->
     case ?DECODER:decode_packet(Acc, Length) of
-        {ok, ?TNS_MARKER, _PacketBody, _Rest} ->
+        {ok, ?TNS_MARKER, <<1,0,1>>, _Rest} ->
+            recv(Socket, Length, Touts);
+        {ok, ?TNS_MARKER, <<1,0,2>>, _Rest} ->
             {ok, ?TNS_MARKER, <<>>};
         {ok, Type, PacketBody, <<>>} ->
             {ok, Type, <<Data/bits, PacketBody/bits>>};
