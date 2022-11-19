@@ -429,7 +429,7 @@ recv(Socket, Length, {Tout, _ReadTout} = Touts, Acc, Data) ->
         {error, more, PacketBody, Rest} ->
             recv(Socket, Length, Touts, Rest, <<Data/bits, PacketBody/bits>>);
         {ok, ?TNS_MARKER, <<1,0,1>>, _Rest} ->
-            recv(Socket, Length, Touts, <<>>, <<>>);
+            recv(read_timeout, Socket, Length, Touts, <<>>, <<>>);
         {ok, ?TNS_MARKER, <<1,0,2>>, _Rest} ->
             {ok, ?TNS_MARKER, <<>>};
         {error, more} ->
