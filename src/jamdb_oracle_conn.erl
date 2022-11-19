@@ -121,6 +121,7 @@ sql_query(#oraclient{conn_state=connected, timeouts={_Tout, ReadTout}} = State, 
         "STOP" -> handle_req(stop, State, hd(Bind));
         "START" -> handle_req(spfp, State, []), handle_req(start, State, hd(Bind));
         "CLOSE" -> disconnect(State, 1), {ok, [], State#oraclient{conn_state=disconnected}};
+        "CURRESET" -> send_req(reset, State), {ok, [], State};
         "TIMEOUT" -> {ok, [], State#oraclient{timeouts={hd(Bind), ReadTout}}};
         "FETCH" -> {ok, [], State#oraclient{fetch=hd(Bind)}};
         _ -> {ok, undefined, State}
@@ -184,7 +185,7 @@ handle_error(Type, Reason, State) ->
     {error, Type, Reason, State#oraclient{conn_state=disconnected}}.
 
 handle_req(pig, #oraclient{cursors=Cursors,seq=Task} = State, {Type, Request}) ->
-    {LPig, LPig2} = unzip([get_param(defcols, DefCol) || DefCol <- get_result(Cursors)]),
+    {LPig, LPig2} = unzip([get_param(defcols, DefCol) || DefCol <- currval(Cursors)]),
     Pig = if LPig =/= [] -> get_record(pig, [], {?TTI_CANA, LPig}, Task); true -> <<>> end,
     Pig2 = if LPig2 =/= [] -> get_record(pig, [], {?TTI_OCCA, LPig2}, Task); true -> <<>> end,
     Data = get_record(Type, [], Request, Task),
@@ -270,7 +271,7 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
             Type2 = if LCursor =:= Cursor -> Type; true -> cursor end,
             {ok, State2} = send_req(fetch, State, {Cursor, RowFormat}),
             #oraclient{auto=Auto, defcols=DefCol} = State2,
-            {_, DefCol2} = get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
+            {_, DefCol2} = currval(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
             handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=DefCol2, type=Type2});
         {RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
             case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
@@ -281,13 +282,13 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
                     handle_resp({Cursor, RowFormat, Rows}, State2);
                 {ok, Result} ->
                     #oraclient{auto=Auto, defcols=DefCol} = State,
-                    case get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors) of
+                    case currval(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors) of
                         {reset, _} -> send_req(reset, State);
                         _ -> more
                     end,
                     {ok, Result, State};
                 {error, Result} ->
-                    case get_result(Cursors) of
+                    case currval(Cursors) of
                         [] -> more;
                         _ -> send_req(reset, State)
                     end,
@@ -322,23 +323,24 @@ get_result(_Type, _RetCode, _RowNumber, _RowFormat, _Rows) ->
     more.
 
 get_result(undefined) -> [];
-get_result(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply -> Reply end;
 get_result(#format{column_name=Column}) -> Column.
 
-get_result(Auto, {Sum, {0, _Cursor, _RowFormat}}, Result, Cursors) when is_pid(Cursors) ->
-    Acc = get_result(Cursors),
+currval(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply -> Reply end.
+
+currval(Auto, {Sum, {0, _Cursor, _RowFormat}}, Result, Cursors) when is_pid(Cursors) ->
+    Acc = currval(Cursors),
     DefCol = {Sum, Result},
     case length(Acc) > 127 of
         true when Auto =:= 1 -> {reset, DefCol};
         _ -> Cursors ! {set, [DefCol|Acc]}, {more, DefCol}
     end;
-get_result(_Auto, DefCol, _Result, _Cursors) -> {more, DefCol}.
+currval(_Auto, DefCol, _Result, _Cursors) -> {more, DefCol}.
 
-get_param(Task) when is_pid(Task) ->
+nextval(Task) when is_pid(Task) ->
     Task ! {get, self()},
     Tseq = receive 127 -> 0; Reply -> Reply end,
     Task ! {set, Tseq + 1}, Tseq + 1;
-get_param(Tseq) -> Tseq.
+nextval(Tseq) -> Tseq.
 
 get_param([], _M, Acc) -> Acc;
 get_param([H|L], M, Acc) -> get_param(L, M, Acc++[maps:get(list_to_atom(H), M)]);
@@ -350,7 +352,7 @@ get_param(Type, Data, Format) when is_atom(Type) ->
     #format{param=Type,data_type=DataType,data_length=Length,data_scale=Scale,charset=Charset}.
 
 get_param(defcols, {Sum, Cursors}) when is_pid(Cursors) ->
-    Acc = get_result(Cursors),
+    Acc = currval(Cursors),
     {Sum, proplists:get_value(Sum, Acc, {0,0,[]})};
 get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) when LCursor =:= Cursor -> {LCursor, 0};
 get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) -> {LCursor, Cursor};
@@ -371,9 +373,9 @@ get_param(data, {in, Data}) -> Data;
 get_param(data, Data) -> Data.
 
 get_record(Type, [], Request, Task) ->
-    ?ENCODER:encode_record(Type, #oraclient{req=Request, seq=get_param(Task)});
+    ?ENCODER:encode_record(Type, #oraclient{req=Request, seq=nextval(Task)});
 get_record(Type, State, Request, Task) ->
-    ?ENCODER:encode_record(Type, State#oraclient{req=Request, seq=get_param(Task)}).
+    ?ENCODER:encode_record(Type, State#oraclient{req=Request, seq=nextval(Task)}).
 
 sock_renegotiate(Socket, _Opts, _Touts) when is_port(Socket) -> {ok, Socket};
 sock_renegotiate(Socket, Opts, {Tout, _ReadTout}) ->
