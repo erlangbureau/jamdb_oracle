@@ -18,6 +18,8 @@ decode_packet(<<PacketSize:16, _PacketFlags:16, ?TNS_DATA, _Flags:8, 0:16, _Data
         _ ->
             {error, more}
     end;
+decode_packet(<<_PacketSize:16, _PacketFlags:16, ?TNS_MARKER, _Flags:8, 0:16, Rest/bits>>, _Length) ->
+    {ok, ?TNS_MARKER, Rest, <<>>};
 decode_packet(<<_PacketSize:16, _PacketFlags:16, ?TNS_REDIRECT, _Flags:8, 0:16, _Length:16, Rest/bits>>, Length) ->
     case decode_packet(Rest, Length) of
         {ok, ?TNS_DATA, PacketBody, <<>>} ->
