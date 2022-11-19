@@ -279,13 +279,13 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
                 more ->
                     {ok, State2} = send_req(fetch, State, Cursor),
                     handle_resp({Cursor, RowFormat, Rows}, State2);
-                {ok, _} = Result ->
+                {ok, Result} ->
                     #oraclient{auto=Auto, defcols=DefCol} = State,
                     case get_result(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors) of
                         {reset, _} -> send_req(reset, State);
                         _ -> more
                     end,
-                    erlang:append_element(Result, State);
+                    {ok, Result, State};
                 {error, Result} ->
                     case get_result(Cursors) of
                         [] -> more;
@@ -420,10 +420,6 @@ recv(read_timeout, Socket, Length, {_Tout, ReadTout} = Touts, Acc, Data) ->
 
 recv(Socket, Length, {Tout, _ReadTout} = Touts, Acc, Data) ->
     case ?DECODER:decode_packet(Acc, Length) of
-        {ok, ?TNS_MARKER, <<1,0,1>>, _Rest} ->
-            recv(Socket, Length, Touts);
-        {ok, ?TNS_MARKER, <<1,0,2>>, _Rest} ->
-            {ok, ?TNS_MARKER, <<>>};
         {ok, Type, PacketBody, <<>>} ->
             {ok, Type, <<Data/bits, PacketBody/bits>>};
         {ok, _Type, PacketBody, Rest} ->
@@ -432,6 +428,10 @@ recv(Socket, Length, {Tout, _ReadTout} = Touts, Acc, Data) ->
             recv(read_timeout, Socket, Length, Touts, <<>>, <<Data/bits, PacketBody/bits>>);
         {error, more, PacketBody, Rest} ->
             recv(Socket, Length, Touts, Rest, <<Data/bits, PacketBody/bits>>);
+        {ok, ?TNS_MARKER, <<1,0,1>>, _Rest} ->
+            recv(Socket, Length, Touts, <<>>, <<>>);
+        {ok, ?TNS_MARKER, <<1,0,2>>, _Rest} ->
+            {ok, ?TNS_MARKER, <<>>};
         {error, more} ->
             recv(read_timeout, Socket, Length, Touts, Acc, Data);
         {error, socket} ->
