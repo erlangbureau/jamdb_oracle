@@ -174,8 +174,7 @@ handle_token(<<Token, Data/binary>>, State) ->
                     end
             end;
         ?TTI_WRN -> handle_token(?DECODER:decode_token(wrn, Data), State);
-        _ ->
-            {error, remote, undefined}
+        _ -> handle_error(remote, Token, State)
     end.
 
 handle_error(remote, Reason, State) ->
@@ -185,7 +184,7 @@ handle_error(Type, Reason, State) ->
     {error, Type, Reason, State#oraclient{conn_state=disconnected}}.
 
 handle_req(pig, #oraclient{cursors=Cursors,seq=Task} = State, {Type, Request}) ->
-    {LPig, LPig2} = unzip([get_param(defcols, DefCol) || DefCol <- currval(Cursors)]),
+    {LPig, LPig2} = unzip([get_param(defcols, DefCol) || DefCol <- get_result(Cursors)]),
     Pig = if LPig =/= [] -> get_record(pig, [], {?TTI_CANA, LPig}, Task); true -> <<>> end,
     Pig2 = if LPig2 =/= [] -> get_record(pig, [], {?TTI_OCCA, LPig2}, Task); true -> <<>> end,
     Data = get_record(Type, [], Request, Task),
@@ -270,8 +269,8 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
         {0, _RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->
             Type2 = if LCursor =:= Cursor -> Type; true -> cursor end,
             {ok, State2} = send_req(fetch, State, {Cursor, RowFormat}),
-            #oraclient{auto=Auto, defcols=DefCol} = State2,
-            {_, DefCol2} = currval(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors),
+            #oraclient{defcols=DefCol} = State2,
+            {_, DefCol2} = currval(DefCol, {LCursor, Cursor, RowFormat}, Cursors),
             handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=DefCol2, type=Type2});
         {RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
             case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
@@ -281,14 +280,14 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
                     {ok, State2} = send_req(fetch, State, Cursor),
                     handle_resp({Cursor, RowFormat, Rows}, State2);
                 {ok, Result} ->
-                    #oraclient{auto=Auto, defcols=DefCol} = State,
-                    case currval(Auto, DefCol, {LCursor, Cursor, RowFormat}, Cursors) of
+                    #oraclient{defcols=DefCol} = State,
+                    case currval(DefCol, {LCursor, Cursor, RowFormat}, Cursors) of
                         {reset, _} -> send_req(reset, State);
                         _ -> more
                     end,
                     {ok, Result, State};
                 {error, Result} ->
-                    case currval(Cursors) of
+                    case get_result(Cursors) of
                         [] -> more;
                         _ -> send_req(reset, State)
                     end,
@@ -323,18 +322,17 @@ get_result(_Type, _RetCode, _RowNumber, _RowFormat, _Rows) ->
     more.
 
 get_result(undefined) -> [];
+get_result(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply -> Reply end;
 get_result(#format{column_name=Column}) -> Column.
 
-currval(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply -> Reply end.
-
-currval(Auto, {Sum, {0, _Cursor, _RowFormat}}, Result, Cursors) when is_pid(Cursors) ->
-    Acc = currval(Cursors),
+currval({Sum, {0, _Cursor, _RowFormat}}, Result, Cursors) when is_pid(Cursors) ->
+    Acc = get_result(Cursors),
     DefCol = {Sum, Result},
     case length(Acc) > 127 of
-        true when Auto =:= 1 -> {reset, DefCol};
+        true -> {reset, DefCol};
         _ -> Cursors ! {set, [DefCol|Acc]}, {more, DefCol}
     end;
-currval(_Auto, DefCol, _Result, _Cursors) -> {more, DefCol}.
+currval(DefCol, _Result, _Cursors) -> {more, DefCol}.
 
 nextval(Task) when is_pid(Task) ->
     Task ! {get, self()},
@@ -352,7 +350,7 @@ get_param(Type, Data, Format) when is_atom(Type) ->
     #format{param=Type,data_type=DataType,data_length=Length,data_scale=Scale,charset=Charset}.
 
 get_param(defcols, {Sum, Cursors}) when is_pid(Cursors) ->
-    Acc = currval(Cursors),
+    Acc = get_result(Cursors),
     {Sum, proplists:get_value(Sum, Acc, {0,0,[]})};
 get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) when LCursor =:= Cursor -> {LCursor, 0};
 get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) -> {LCursor, Cursor};
