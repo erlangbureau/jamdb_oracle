@@ -73,7 +73,6 @@ defmodule Jamdb.Oracle do
     sock_opts = opts[:socket_options] || []
     case :jamdb_oracle.start_link(sock_opts ++ params ++ env) do
       {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle, timeout: timeout}}
-      {:error, [{:proc_result, _, msg}]} -> {:error, error!(msg)}
       {:error, err} -> {:error, error!(err)}
     end
   end
