@@ -9,7 +9,7 @@ defmodule Jamdb.Oracle do
 
   use DBConnection
 
-  defstruct [:pid, :mode, :cursors, :timeout]  
+  defstruct [:pid, :mode, :cursors]  
 
   @doc """
   Starts and links to a database connection process.
@@ -41,8 +41,8 @@ defmodule Jamdb.Oracle do
     {:ok, any()} | {:error | :disconnect, any()}
   def query(conn, sql, params \\ [])
   def query(pid, sql, params) when is_pid(pid), do: query(%{pid: pid}, sql, params)
-  def query(%{pid: pid, timeout: timeout}, sql, params) do
-    case :jamdb_oracle.sql_query(pid, stmt(sql, params), timeout) do
+  def query(%{pid: pid}, sql, params) do
+    case :jamdb_oracle.sql_query(pid, stmt(sql, params)) do
       {:ok, [{:result_set, columns, _, rows}]} ->
         {:ok, %{num_rows: length(rows), rows: rows, columns: columns}}
       {:ok, [{:fetched_rows, _, _, _} = result]} -> {:cont, result}
@@ -72,7 +72,7 @@ defmodule Jamdb.Oracle do
     params = opts[:parameters] || []
     sock_opts = opts[:socket_options] || []
     case :jamdb_oracle.start_link(sock_opts ++ params ++ env) do
-      {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle, timeout: timeout}}
+      {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle}}
       {:error, err} -> {:error, error!(err)}
     end
   end
