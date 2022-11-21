@@ -45,7 +45,7 @@ init(Opts) ->
 %% Error types: socket, remote, local
 handle_call({sql_query, Query}, _From, State) ->
     try jamdb_oracle_conn:sql_query(State, Query) of
-        {ok, Result, State2} -> 
+        {ok, Result, State2} ->
             {reply, {ok, Result}, State2};
         {error, Type, Reason, State2} ->
             {reply, {error, Type, Reason}, State2}
