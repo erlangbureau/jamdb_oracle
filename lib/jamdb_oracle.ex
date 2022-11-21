@@ -1,5 +1,5 @@
 defmodule Jamdb.Oracle do
-  @vsn "0.5.2"
+  @vsn "0.5.3"
   @moduledoc """
   Adapter module for Oracle. `DBConnection` behaviour implementation.
 
@@ -9,7 +9,9 @@ defmodule Jamdb.Oracle do
 
   use DBConnection
 
-  defstruct [:pid, :mode, :cursors]  
+  @timeout 15_000
+
+  defstruct [:pid, :mode, :cursors, :timeout]
 
   @doc """
   Starts and links to a database connection process.
@@ -40,9 +42,8 @@ defmodule Jamdb.Oracle do
   @spec query(conn :: any(), sql :: any(), params :: any()) ::
     {:ok, any()} | {:error | :disconnect, any()}
   def query(conn, sql, params \\ [])
-  def query(pid, sql, params) when is_pid(pid), do: query(%{pid: pid}, sql, params)
-  def query(%{pid: pid}, sql, params) do
-    case :jamdb_oracle.sql_query(pid, stmt(sql, params)) do
+  def query(%{pid: pid, timeout: timeout}, sql, params) do
+    case :jamdb_oracle.sql_query(pid, stmt(sql, params), timeout) do
       {:ok, [{:result_set, columns, _, rows}]} ->
         {:ok, %{num_rows: length(rows), rows: rows, columns: columns}}
       {:ok, [{:fetched_rows, _, _, _} = result]} -> {:cont, result}
@@ -52,6 +53,9 @@ defmodule Jamdb.Oracle do
       {:ok, result} -> {:ok, result}
       {:error, _, err} -> {:disconnect, err}
     end
+  end
+  def query(pid, sql, params) when is_pid(pid) do
+    query(%{pid: pid, timeout: @timeout}, sql, params)
   end
 
   defp stmt({:fetch, sql, params}, _), do: {:fetch, sql, params}
@@ -63,7 +67,7 @@ defmodule Jamdb.Oracle do
   def connect(opts) do
     host = opts[:hostname] |> Jamdb.Oracle.to_list
     port = opts[:port]
-    timeout = opts[:timeout]
+    timeout = opts[:timeout] || @timeout
     user = opts[:username] |> Jamdb.Oracle.to_list
     password = opts[:password] |> Jamdb.Oracle.to_list
     database = opts[:database] |> Jamdb.Oracle.to_list
@@ -72,8 +76,7 @@ defmodule Jamdb.Oracle do
     params = opts[:parameters] || []
     sock_opts = opts[:socket_options] || []
     case :jamdb_oracle.start_link(sock_opts ++ params ++ env) do
-      {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle}}
-      {:error, [{:proc_result, _, msg}]} -> {:error, error!(msg)}
+      {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle, timeout: timeout}}
       {:error, err} -> {:error, error!(err)}
     end
   end

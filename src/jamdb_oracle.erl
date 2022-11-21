@@ -1,5 +1,5 @@
 -module(jamdb_oracle).
--vsn("0.5.2").
+-vsn("0.5.3").
 -behaviour(gen_server).
 
 %% API
@@ -23,13 +23,13 @@ start(Opts) when is_list(Opts) ->
 
 -spec stop(pid()) -> ok.
 stop(Pid) ->
-    call_infinity(Pid, stop).
+    gen_server:call(Pid, stop).
 
-sql_query(Pid, Query, _Tout) ->
-    sql_query(Pid, Query).
+sql_query(Pid, Query, Tout) ->
+    gen_server:call(Pid, {sql_query, Query}, Tout).
 
 sql_query(Pid, Query) ->
-    call_infinity(Pid, {sql_query, Query}).
+    gen_server:call(Pid, {sql_query, Query}).
 
 %% gen_server callbacks
 init(Opts) ->
@@ -45,7 +45,7 @@ init(Opts) ->
 %% Error types: socket, remote, local
 handle_call({sql_query, Query}, _From, State) ->
     try jamdb_oracle_conn:sql_query(State, Query) of
-        {ok, Result, State2} -> 
+        {ok, Result, State2} ->
             {reply, {ok, Result}, State2};
         {error, Type, Reason, State2} ->
             {reply, {error, Type, Reason}, State2}
@@ -70,7 +70,3 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-%% internal
-call_infinity(Pid, Msg) ->
-    gen_server:call(Pid, Msg, infinity).
