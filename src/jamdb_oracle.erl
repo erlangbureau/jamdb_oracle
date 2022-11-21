@@ -29,7 +29,7 @@ sql_query(Pid, Query, Tout) ->
     gen_server:call(Pid, {sql_query, Query}, Tout).
 
 sql_query(Pid, Query) ->
-    gen_server:call(Pid, {sql_query, Query}, infinity).
+    gen_server:call(Pid, {sql_query, Query}).
 
 %% gen_server callbacks
 init(Opts) ->
