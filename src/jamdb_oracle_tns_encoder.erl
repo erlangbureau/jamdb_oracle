@@ -305,7 +305,7 @@ encode_token(rxd, [], Acc) -> Acc;
 encode_token(rxd, [Data|Rest], Acc) ->
     encode_token(rxd, Rest, <<Acc/binary, (encode_token(Data, <<?TTI_RXD>>))/binary>>);
 encode_token(oac, Data, #format{charset=Charset}) when is_list(Data) ->
-    encode_token(oac, ?TNS_TYPE_VARCHAR, 33554432, 16, Charset, 0);
+    encode_token(oac, ?TNS_TYPE_VARCHAR, setopts(size, Data), 16, Charset, 0);
 encode_token(oac, Data, _) when is_binary(Data) ->
     encode_token(oac, ?TNS_TYPE_LONGRAW, 33554432, 0, 0, 0);
 encode_token(oac, Data, _) when is_number(Data) -> encode_token(oac, ?TNS_TYPE_NUMBER, 22, 0, 0, 0);
