@@ -1,5 +1,5 @@
 defmodule Jamdb.Oracle do
-  @vsn "0.5.2"
+  @vsn "0.5.3"
   @moduledoc """
   Adapter module for Oracle. `DBConnection` behaviour implementation.
 
@@ -9,7 +9,9 @@ defmodule Jamdb.Oracle do
 
   use DBConnection
 
-  defstruct [:pid, :mode, :cursors]  
+  @timeout 15_000
+
+  defstruct [:pid, :mode, :cursors, :timeout]
 
   @doc """
   Starts and links to a database connection process.
@@ -54,6 +56,9 @@ defmodule Jamdb.Oracle do
       {:error, _, err} -> {:disconnect, err}
     end
   end
+  def query(pid, sql, params) when is_pid(pid) do
+    query(%{pid: pid, timeout: @timeout}, sql, params)
+  end
 
   defp stmt({:fetch, sql, params}, _), do: {:fetch, sql, params}
   defp stmt({:fetch, cursor, row_format, last_row}, _), do: {:fetch, cursor, row_format, last_row}
@@ -64,7 +69,7 @@ defmodule Jamdb.Oracle do
   def connect(opts) do
     host = opts[:hostname] |> Jamdb.Oracle.to_list
     port = opts[:port]
-    timeout = opts[:timeout]
+    timeout = opts[:timeout] || @timeout
     user = opts[:username] |> Jamdb.Oracle.to_list
     password = opts[:password] |> Jamdb.Oracle.to_list
     database = opts[:database] |> Jamdb.Oracle.to_list
@@ -73,8 +78,7 @@ defmodule Jamdb.Oracle do
     params = opts[:parameters] || []
     sock_opts = opts[:socket_options] || []
     case :jamdb_oracle.start_link(sock_opts ++ params ++ env) do
-      {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle}}
-      {:error, [{:proc_result, _, msg}]} -> {:error, error!(msg)}
+      {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle, timeout: timeout}}
       {:error, err} -> {:error, error!(err)}
     end
   end
