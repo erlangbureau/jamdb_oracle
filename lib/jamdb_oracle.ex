@@ -56,9 +56,6 @@ defmodule Jamdb.Oracle do
       {:error, _, err} -> {:disconnect, err}
     end
   end
-  def query(pid, sql, params) when is_pid(pid) do
-    query(%{pid: pid, timeout: @timeout}, sql, params)
-  end
 
   defp stmt({:fetch, sql, params}, _), do: {:fetch, sql, params}
   defp stmt({:fetch, cursor, row_format, last_row}, _), do: {:fetch, cursor, row_format, last_row}
