@@ -90,8 +90,8 @@ reconnect(#oraclient{passwd=Passwd} = State) ->
     connect([{password, Pass2}|EnvOpts]).
 
 -spec sql_query(state(), string() | tuple(), timeout()) -> query_result().
-sql_query(State, Query, _Tout) ->
-    sql_query(State, Query).
+sql_query(#oraclient{timeouts={_Tout, ReadTout}} = State, Query, Tout) ->
+    sql_query(State#oraclient{timeouts={Tout, ReadTout}}, Query).
 
 -spec sql_query(state(), string() | tuple()) -> query_result().
 sql_query(State, Query) when is_list(Query) ->
