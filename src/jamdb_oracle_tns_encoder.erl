@@ -421,9 +421,9 @@ encode_chr(Data,Acc) ->
 encode_number(0.0) -> <<128>>;
 encode_number(0) -> <<128>>;
 encode_number(Data) when is_integer(Data) ->
-    list_to_binary(lnxfmt(lnxmin(abs(Data),1,[]), Data));
+    list_to_binary([<<B>> || B <- lnxfmt(lnxmin(abs(Data),1,[]), Data)]);
 encode_number(Data) when is_float(Data) ->
-    list_to_binary(lnxfmt(lnxren(abs(Data),0), Data)).
+    list_to_binary([<<B>> || B <- lnxfmt(lnxren(abs(Data),0), Data)]).
 
 lnxmin(N, I, Acc) when N div 100 =:= 0 ->
     lnxpak(lists:reverse([I-1|[N rem 100|Acc]]));
