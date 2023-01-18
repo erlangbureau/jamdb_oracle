@@ -236,7 +236,8 @@ send_req(fetch, #oraclient{seq=Task} = State, {Cursor, RowFormat}) ->
 send_req(fetch, #oraclient{seq=Task} = State, Cursor) ->
     Data = get_record(fetch, State, Cursor, Task),
     send(State, ?TNS_DATA, Data);
-send_req(exec, State, {Query, Bind, Batch}) when is_map(Bind) ->
+send_req(exec, State, {Query, Bind, Batch}) when is_map(Bind) -> send_req(exec, State, {Query, [Bind], Batch});
+send_req(exec, State, {Query, [Bind], Batch}) when is_map(Bind) ->
     Data = lists:filtermap(fun(L) -> case string:chr(L, $:) of 0 -> false; I -> {true, lists:nthtail(I, L)} end end,
         string:tokens(Query," \t;,)")),
     send_req(exec, State, {Query, get_param(Data, Bind, []), [get_param(Data, B, []) || B <- Batch]});
