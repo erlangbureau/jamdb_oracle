@@ -285,6 +285,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp decode(elem), do: elem
 
   def encode(_, [], _), do: []
+  def encode(_, [%Ecto.Query.Tagged{value: params, type: :map}], _), do: [params]
   def encode(_, params, opts) do
     types = Keyword.get(opts, :in, [])
     case Keyword.get(opts, :batch) do
