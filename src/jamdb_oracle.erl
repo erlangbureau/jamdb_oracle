@@ -1,5 +1,5 @@
 -module(jamdb_oracle).
--vsn("0.5.3").
+-vsn("0.5.4").
 -behaviour(gen_server).
 
 %% API
@@ -11,6 +11,8 @@
 -export([init/1, terminate/2]).
 -export([handle_call/3, handle_cast/2, handle_info/2]).
 -export([code_change/3]).
+
+-define(default_timeout, 5000).
 
 %% API
 -spec start_link(jamdb_oracle_conn:options()) -> {ok, pid()} | {error, term()}.
@@ -26,10 +28,10 @@ stop(Pid) ->
     gen_server:call(Pid, stop).
 
 sql_query(Pid, Query, Tout) ->
-    gen_server:call(Pid, {sql_query, Query}, Tout).
+    gen_server:call(Pid, {sql_query, Query, Tout}, Tout).
 
 sql_query(Pid, Query) ->
-    gen_server:call(Pid, {sql_query, Query}).
+    gen_server:call(Pid, {sql_query, Query, ?default_timeout}).
 
 %% gen_server callbacks
 init(Opts) ->
@@ -43,8 +45,8 @@ init(Opts) ->
     end.
 
 %% Error types: socket, remote, local
-handle_call({sql_query, Query}, _From, State) ->
-    try jamdb_oracle_conn:sql_query(State, Query) of
+handle_call({sql_query, Query, Tout}, _From, State) ->
+    try jamdb_oracle_conn:sql_query(State, Query, Tout) of
         {ok, Result, State2} ->
             {reply, {ok, Result}, State2};
         {error, Type, Reason, State2} ->
@@ -54,7 +56,7 @@ handle_call({sql_query, Query}, _From, State) ->
             {reply, {error, local, Reason}, State}
     end;
 handle_call(stop, _From, State) ->
-    {ok, _InitOpts} = jamdb_oracle_conn:disconnect(State),
+    {ok, _InitOpts} = jamdb_oracle_conn:disconnect(State, 1),
     {stop, normal, ok, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.

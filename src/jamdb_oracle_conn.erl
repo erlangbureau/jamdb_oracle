@@ -90,14 +90,22 @@ reconnect(#oraclient{passwd=Passwd} = State) ->
     connect([{password, Pass2}|EnvOpts]).
 
 -spec sql_query(state(), string() | tuple(), timeout()) -> query_result().
-sql_query(State, Query, _Tout) ->
-    sql_query(State, Query).
+sql_query(#oraclient{timeouts={_Tout, ReadTout}} = State, Query, Tout) ->
+    sql_query(State#oraclient{timeouts={Tout, ReadTout}}, Query).
 
 -spec sql_query(state(), string() | tuple()) -> query_result().
 sql_query(State, Query) when is_list(Query) ->
     sql_query(State, {Query, []});
+sql_query(State, {Query, Bind}) when is_map(Bind) ->
+    sql_query(State, {Query, [Bind]});
+sql_query(State, {Query, [Bind]}) when is_map(Bind) ->
+    Data = lists:filtermap(fun(L) -> if hd(L) =:= $: -> {true, tl(L)}; true -> false end end,
+        string:tokens(Query," \t\r\n;,()=")),
+    sql_query(State, {Query, lists:map(fun(L) -> maps:get(list_to_atom(L), Bind) end, Data), [], []});
 sql_query(State, {Query, Bind}) when length(Query) > 10 ->
-    sql_query(State, {Query, Bind, [], []});
+    Data = lists:filtermap(fun(L) -> if hd(L) =:= $: -> {true, list_to_integer(tl(L))}; true -> false end end,
+        string:tokens(Query," \t\r\n;,()=")),
+    sql_query(State, {Query, lists:map(fun(I) -> lists:nth(I, Bind) end, Data), [], []});
 sql_query(State, {batch, Query, [Bind|Batch]}) ->
     sql_query(State, {Query, Bind, Batch, []});
 sql_query(State, {fetch, Query, Bind}) ->
@@ -236,11 +244,8 @@ send_req(fetch, #oraclient{seq=Task} = State, {Cursor, RowFormat}) ->
 send_req(fetch, #oraclient{seq=Task} = State, Cursor) ->
     Data = get_record(fetch, State, Cursor, Task),
     send(State, ?TNS_DATA, Data);
-send_req(exec, State, {Query, Bind, Batch}) when is_map(Bind) ->
-    Data = lists:filtermap(fun(L) -> case string:chr(L, $:) of 0 -> false; I -> {true, lists:nthtail(I, L)} end end,
-        string:tokens(Query," \t;,)")),
-    send_req(exec, State, {Query, get_param(Data, Bind, []), [get_param(Data, B, []) || B <- Batch]});
 send_req(exec, #oraclient{charset=Charset,fetch=Fetch,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
+    erlang:display({Query, Bind, Batch}),
     KeyWord = lists:nth(1, string:tokens(string:to_upper(Query)," \t\r\n")),
     {Select, Change} = ?ENCODER:encode_helper(type, KeyWord),
     {Type, Fetch2} = get_param(type, {Select, Change, [B || {out, B} <- Bind], Fetch}),
@@ -340,8 +345,6 @@ nextval(Task) when is_pid(Task) ->
     Task ! {set, Tseq + 1}, Tseq + 1;
 nextval(Tseq) -> Tseq.
 
-get_param([], _M, Acc) -> Acc;
-get_param([H|L], M, Acc) -> get_param(L, M, Acc++[maps:get(list_to_atom(H), M)]);
 get_param(format, {out, Data}, Format) -> get_param(out, ?ENCODER:encode_helper(param, Data), Format);
 get_param(format, {in, Data}, Format) -> get_param(in, Data, Format);
 get_param(format, Data, Format) -> get_param(in, Data, Format);

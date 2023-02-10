@@ -1,5 +1,5 @@
 defmodule Jamdb.Oracle do
-  @vsn "0.5.3"
+  @vsn "0.5.4"
   @moduledoc """
   Adapter module for Oracle. `DBConnection` behaviour implementation.
 
@@ -106,8 +106,9 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def handle_prepare(query, _opts, s) do
-    {:ok, query, s}
+  def handle_prepare(query, opts, s) do
+    timeout = opts[:timeout] || @timeout
+    {:ok, query, %{s | timeout: timeout}}
   end
 
   @impl true
@@ -284,6 +285,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp decode(elem), do: elem
 
   def encode(_, [], _), do: []
+  def encode(_, [%Ecto.Query.Tagged{value: params, type: :map}], _), do: [params]
   def encode(_, params, opts) do
     types = Keyword.get(opts, :in, [])
     case Keyword.get(opts, :batch) do

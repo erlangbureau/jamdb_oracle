@@ -13,6 +13,9 @@ Erlang driver and Ecto adapter for Oracle Database
  * Using bind variables:
 
     `{"insert into tabl values (:1)", [<<16#E7,16#99,16#BE>>]}`
+* Using named parameters:
+
+    `{"insert into tabl values (:id, :dat)", [#{dat => {2023, 1, 1}, id => 1}]}`
  * Calling stored procedure:
 
     `{"begin proc(:1, :2, :3); end;"`, `[1.0, 2.0, 3.0]}`
@@ -130,7 +133,10 @@ Ecto types              | Oracle types                     | Literal syntax in p
 
     iex> bin = %Ecto.Query.Tagged{value: <<0xE7,0x99,0xBE>>, type: :binary}
     iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", [bin])
-    
+
+    iex> row = %Ecto.Query.Tagged{value: %{dat: {2023, 1, 1}, id: 1}, type: :map}
+    iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:id, :dat)", [row])
+        
     iex> opts = [batch: true, in: [Ecto.UUID, :number]]
     iex> row = [Ecto.UUID.bingenerate, 1]
     iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1, :2)", [row, row]], opts)
