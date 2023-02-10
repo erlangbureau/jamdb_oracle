@@ -13,7 +13,7 @@ jobs:
   build:
 
     name: mixtest
-    runs-on: ubuntu20
+    runs-on: win16
 
     steps:
     - uses: actions/checkout@v3
