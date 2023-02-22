@@ -207,6 +207,9 @@ defmodule Jamdb.Oracle.Query do
   defp cte_expr({name, cte}, sources, query) do
     [quote_name(name), " AS ", cte_query(cte, sources, query)]
   end
+  defp cte_expr({name, _opts, cte}, sources, query) do
+    [quote_name(name), " AS ", cte_query(cte, sources, query)]
+  end
 
   defp cte_query(%Ecto.Query{} = query, sources, parent_query) do
     query = put_in(query.aliases[@parent_as], {parent_query, sources})
@@ -319,12 +322,12 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp limit(%{limit: nil}, _sources), do: []
-  defp limit(%{limit: %QueryExpr{expr: expr}} = query, sources) do
+  defp limit(%{limit: %{expr: expr}} = query, sources) do
     [" FETCH NEXT ", expr(expr, sources, query), " ROWS ONLY"]
   end
   
   defp offset(%{offset: nil}, _sources), do: []
-  defp offset(%{offset: %QueryExpr{expr: expr}} = query, sources) do
+  defp offset(%{offset: %{expr: expr}} = query, sources) do
     [" OFFSET ", expr(expr, sources, query), " ROWS"]
   end
 
