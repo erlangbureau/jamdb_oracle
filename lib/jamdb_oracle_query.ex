@@ -207,6 +207,9 @@ defmodule Jamdb.Oracle.Query do
   defp cte_expr({name, cte}, sources, query) do
     [quote_name(name), " AS ", cte_query(cte, sources, query)]
   end
+  defp cte_expr({name, _opts, cte}, sources, query) do
+    [quote_name(name), " AS ", cte_query(cte, sources, query)]
+  end
 
   defp cte_query(%Ecto.Query{} = query, sources, parent_query) do
     query = put_in(query.aliases[@parent_as], {parent_query, sources})
@@ -319,12 +322,12 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp limit(%{limit: nil}, _sources), do: []
-  defp limit(%{limit: %QueryExpr{expr: expr}} = query, sources) do
+  defp limit(%{limit: %{expr: expr}} = query, sources) do
     [" FETCH NEXT ", expr(expr, sources, query), " ROWS ONLY"]
   end
   
   defp offset(%{offset: nil}, _sources), do: []
-  defp offset(%{offset: %QueryExpr{expr: expr}} = query, sources) do
+  defp offset(%{offset: %{expr: expr}} = query, sources) do
     [" OFFSET ", expr(expr, sources, query), " ROWS"]
   end
 
@@ -626,13 +629,16 @@ defmodule Jamdb.Oracle.Query do
   end
 
   def execute_ddl({:rename, %Table{} = current_table, %Table{} = new_table}) do
-    [["RENAME ", quote_table(current_table.prefix, current_table.name),
-      " TO ", quote_table(nil, new_table.name)]]
+    [["RENAME ", quote_table(nil, current_table.name), " TO ", quote_table(nil, new_table.name)]]
   end
 
   def execute_ddl({:rename, %Table{} = table, current_column, new_column}) do
     [["ALTER TABLE ", quote_table(table.prefix, table.name), " RENAME COLUMN ",
       quote_name(current_column), " TO ", quote_name(new_column)]]
+  end
+
+  def execute_ddl({:rename, %Index{} = current_index, new_name}) do
+    [["ALTER INDEX ", quote_name(current_index.name), " RENAME TO ", quote_name(new_name)]]
   end
 
   def execute_ddl({command, %Constraint{} = constraint}) when command in [:create, :create_if_not_exists] do
