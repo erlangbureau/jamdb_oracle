@@ -158,7 +158,7 @@ defmodule Jamdb.OracleTest do
     query =
       "comments"
       |> from(as: :comment)
-      |> join(:inner, [c], p in subquery(posts))
+      |> join(:inner, [c], p in subquery(posts), on: true)
       |> select([_, p], p)
       |> plan()
 
@@ -750,7 +750,7 @@ defmodule Jamdb.OracleTest do
 
   test "join with fragment" do
     query = Schema
-            |> join(:inner, [p], q in fragment("SELECT * FROM schema2 s2 WHERE s2.id = ? AND s2.field = ?", p.x, ^10))
+            |> join(:inner, [p], q in fragment("SELECT * FROM schema2 s2 WHERE s2.id = ? AND s2.field = ?", p.x, ^10), on: true)
             |> select([p], {p.id, ^0})
             |> where([p], p.id > 0 and p.id < ^100)
             |> plan()
@@ -773,7 +773,7 @@ defmodule Jamdb.OracleTest do
 
   test "join with query interpolation" do
     inner = Ecto.Queryable.to_query(Schema2)
-    query = from(p in Schema, left_join: c in ^inner, select: {p.id, c.id}) |> plan()
+    query = from(p in Schema, left_join: c in ^inner, on: true, select: {p.id, c.id}) |> plan()
 
     assert all(query) ==
              ~s{SELECT s0.id, s1.id FROM schema s0 LEFT OUTER JOIN schema2 s1 ON 1 = 1}
