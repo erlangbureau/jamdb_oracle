@@ -245,7 +245,6 @@ send_req(fetch, #oraclient{seq=Task} = State, Cursor) ->
     Data = get_record(fetch, State, Cursor, Task),
     send(State, ?TNS_DATA, Data);
 send_req(exec, #oraclient{charset=Charset,fetch=Fetch,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
-    erlang:display({Query, Bind, Batch}),
     KeyWord = lists:nth(1, string:tokens(string:to_upper(Query)," \t\r\n")),
     {Select, Change} = ?ENCODER:encode_helper(type, KeyWord),
     {Type, Fetch2} = get_param(type, {Select, Change, [B || {out, B} <- Bind], Fetch}),
