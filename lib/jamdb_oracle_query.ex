@@ -369,8 +369,8 @@ defmodule Jamdb.Oracle.Query do
     [?(, expr(expr, sources, query), ?)]
   end
 
-  defp expr({:^, [], [ix]}, _sources, _query) do
-    [?: | Integer.to_string(ix + 1)]
+  defp expr({:^, [], [idx]}, _sources, _query) do
+    ":#{idx + 1}"
   end
 
   defp expr({{:., _, [{:parent_as, _, [as]}, field]}, _, []}, _sources, query)
@@ -393,17 +393,17 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp expr({:in, _, [left, right]}, sources, query) when is_list(right) do
-    args =
-      intersperse_map(right, ?,, fn
-        elem when is_list(elem) -> [?(, intersperse_map(elem, ?,, &expr(&1, sources, query)), ?)]
-        elem -> expr(elem, sources, query)
-      end)
+    args = Enum.map_join(right, ",", &expr(&1, sources, query))
     [expr(left, sources, query), " IN (", args, ?)]
   end
 
-  defp expr({:in, _, [left, {:^, _, [_, length]}]}, sources, query) do
-    right = for ix <- 1..length, do: {:^, [], [ix]}
-    expr({:in, [], [left, right]}, sources, query)
+  defp expr({:in, _, [_, {:^, _, [_, 0]}]}, _sources, _query) do
+    "0"
+  end
+
+  defp expr({:in, _, [left, {:^, _, [idx, length]}]}, sources, query) do
+    args = Enum.map_join(1..length, ",", &":#{idx + &1}")
+    [expr(left, sources, query), " IN (", args, ?)]
   end
 
   defp expr({:in, _, [left, %Ecto.SubQuery{} = subquery]}, sources, query) do
@@ -495,8 +495,8 @@ defmodule Jamdb.Oracle.Query do
     end
   end
 
-  defp expr(%Ecto.Query.Tagged{value: {:^, [], [ix]}, type: :binary}, _sources, _query) do
-    [?: | Integer.to_string(ix + 1)]
+  defp expr(%Ecto.Query.Tagged{value: {:^, [], [idx]}, type: :binary}, _sources, _query) do
+    ":#{idx + 1}"
   end
   defp expr(%Ecto.Query.Tagged{value: binary, type: :binary}, _sources, _query) do
     ["'", Base.encode16(binary, case: :upper), "'"]
