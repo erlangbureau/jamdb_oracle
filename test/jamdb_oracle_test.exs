@@ -524,6 +524,11 @@ defmodule Jamdb.OracleTest do
   end
 
   test "in expression" do
+    query = "comments" |> where([c], c.post_id in [1, 2, 3]) |> select([c], c.x) |> plan()
+    assert all(query) ==
+           ~s{SELECT c0.x FROM comments c0 } <>
+           ~s{WHERE (c0.post_id IN (1,2,3))}
+
     query = "comments" |> where([c], c.post_id in ^[1, 2, 3]) |> select([c], c.x) |> plan()
     assert all(query) ==
            ~s{SELECT c0.x FROM comments c0 } <>
