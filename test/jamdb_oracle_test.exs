@@ -523,6 +523,18 @@ defmodule Jamdb.OracleTest do
     assert all(query) == ~s{SELECT HEXTORAW(:1) FROM schema s0}
   end
 
+  test "in expression" do
+    query = "comments" |> where([c], c.post_id in ^[1, 2, 3]) |> select([c], c.x) |> plan()
+    assert all(query) ==
+           ~s{SELECT c0.x FROM comments c0 } <>
+           ~s{WHERE (c0.post_id IN (:1,:2,:3))}
+
+    query = "comments" |> where([c], c.post_id in [^1, ^2, ^3]) |> select([c], c.x) |> plan()
+    assert all(query) ==
+           ~s{SELECT c0.x FROM comments c0 } <>
+           ~s{WHERE (c0.post_id IN (:1,:2,:3))}
+  end
+
   test "in subquery" do
     posts = subquery("posts" |> where(title: ^"hello") |> select([p], p.id))
     query = "comments" |> where([c], c.post_id in subquery(posts)) |> select([c], c.x) |> plan()
