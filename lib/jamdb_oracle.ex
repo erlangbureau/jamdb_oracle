@@ -251,6 +251,16 @@ defmodule Jamdb.Oracle do
     Application.get_env(:jamdb_oracle, :json_library, Jason)
   end
 
+  @doc """
+  Strip single/multiline comments
+  """
+  @spec strip(sql :: String.t) :: String.t
+  def strip(sql) do
+    sql = Regex.replace(~r"--.*", sql, "")
+    sql = Regex.replace(~r"(?s)/\*.*?\*/", sql, "")
+    sql
+  end
+
   @doc false
   def to_list(string) when is_binary(string) do
     :binary.bin_to_list(string)
