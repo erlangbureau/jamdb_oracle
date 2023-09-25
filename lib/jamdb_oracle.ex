@@ -1,5 +1,5 @@
 defmodule Jamdb.Oracle do
-  @vsn "0.5.5"
+  @vsn "0.5.6"
   @moduledoc """
   Adapter module for Oracle. `DBConnection` behaviour implementation.
 
@@ -249,6 +249,16 @@ defmodule Jamdb.Oracle do
   @spec json_library() :: module()
   def json_library() do
     Application.get_env(:jamdb_oracle, :json_library, Jason)
+  end
+
+  @doc """
+  Strip single/multiline comments
+  """
+  @spec strip(sql :: String.t) :: String.t
+  def strip(sql) do
+    sql = Regex.replace(~r"--.*", sql, "")
+    sql = Regex.replace(~r"(?s)/\*.*?\*/", sql, "")
+    sql
   end
 
   @doc false

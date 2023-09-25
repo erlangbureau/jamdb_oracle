@@ -1,4 +1,4 @@
-use Mix.Config
+import Config
 
 config :jamdb, Jamdb.Repo,
   hostname: "jamdb-oracle-dev.erlangbureau.dp.ua",
