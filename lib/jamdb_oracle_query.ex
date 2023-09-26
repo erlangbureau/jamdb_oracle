@@ -597,7 +597,7 @@ defmodule Jamdb.Oracle.Query do
       if_do(command == :create_if_not_exists, :end)]]
   end
 
-  def execute_ddl({command, %Table{} = table}) when command in [:drop, :drop_if_exists] do
+  def execute_ddl({command, %Table{} = table, _}) when command in [:drop, :drop_if_exists] do
     [[if_do(command == :drop_if_exists, :begin),
       "DROP TABLE ", quote_table(table.prefix, table.name),
       if_do(command == :drop_if_exists, :end)]]
@@ -622,7 +622,7 @@ defmodule Jamdb.Oracle.Query do
       if_do(command == :create_if_not_exists, :end)]]
   end
 
-  def execute_ddl({command, %Index{} = index}) when command in [:drop, :drop_if_exists] do
+  def execute_ddl({command, %Index{} = index, _}) when command in [:drop, :drop_if_exists] do
     [[if_do(command == :drop_if_exists, :begin),
       "DROP INDEX ", quote_table(index.prefix, index.name),
       if_do(command == :drop_if_exists, :end)]]
@@ -648,7 +648,7 @@ defmodule Jamdb.Oracle.Query do
       if_do(command == :create_if_not_exists, :end)]]
   end
 
-  def execute_ddl({command, %Constraint{} = constraint}) when command in [:drop, :drop_if_exists] do
+  def execute_ddl({command, %Constraint{} = constraint, _}) when command in [:drop, :drop_if_exists] do
     [[if_do(command == :drop_if_exists, :begin),
       "ALTER TABLE ", quote_table(constraint.prefix, constraint.table),
       " DROP CONSTRAINT ", quote_name(constraint.name),
