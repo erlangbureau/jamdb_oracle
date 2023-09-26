@@ -165,10 +165,10 @@ Using quoted identifiers:
 
 Imagine you have this migration:
 
-    defmodule YourApp.Migration do
+    defmodule YourApp.Repo.Migrations.Users do
       use Ecto.Migration
 
-      def up do
+      def change do
         create table(:users, comment: "users table") do
           add :name, :string, comment: "name column"
           add :namae, :string, national: true
@@ -179,6 +179,6 @@ Imagine you have this migration:
 
     end
 
-You can execute it manually with:
+To migrate you'd do it normally:
 
-    Ecto.Migrator.up(YourApp.Repo, 20160801131415, YourApp.Migration)
+    $ mix ecto.migrate
