@@ -1016,12 +1016,12 @@ defmodule Jamdb.OracleTest do
   end
 
   test "drop table" do
-    drop = {:drop, table(:posts)}
+    drop = {:drop, table(:posts), :test}
     assert execute_ddl(drop) == ["DROP TABLE posts"]
   end
 
   test "drop table with prefixes" do
-    drop = {:drop, table(:posts, prefix: :foo)}
+    drop = {:drop, table(:posts, prefix: :foo), :test}
     assert execute_ddl(drop) == ["DROP TABLE foo.posts"]
   end
 
@@ -1097,7 +1097,7 @@ defmodule Jamdb.OracleTest do
   end
 
   test "drop constraint" do
-    drop = {:drop, constraint(:products, "price_must_be_positive")}
+    drop = {:drop, constraint(:products, "price_must_be_positive"), :test}
 
     assert execute_ddl(drop) == [
       """
@@ -1108,7 +1108,7 @@ defmodule Jamdb.OracleTest do
   end
 
   test "drop_if_exists constraint" do
-    drop = {:drop_if_exists, constraint(:products, "price_must_be_positive")}
+    drop = {:drop_if_exists, constraint(:products, "price_must_be_positive"), :test}
 
     assert execute_ddl(drop) == [
       """
@@ -1182,12 +1182,12 @@ defmodule Jamdb.OracleTest do
   end
 
   test "drop index" do
-    drop = {:drop, index(:posts, [:id], name: "posts_0_index")}
+    drop = {:drop, index(:posts, [:id], name: "posts_0_index"), :test}
     assert execute_ddl(drop) == ["DROP INDEX posts_0_index"]
   end
 
   test "drop index with prefix" do
-    drop = {:drop, index(:posts, [:id], name: "posts_0_index", prefix: :foo)}
+    drop = {:drop, index(:posts, [:id], name: "posts_0_index", prefix: :foo), :test}
     assert execute_ddl(drop) == ["DROP INDEX foo.posts_0_index"]
   end
 
