@@ -8,6 +8,8 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   use Ecto.Adapters.SQL, driver: Jamdb.Oracle, migration_lock: nil
 
+  @behaviour Ecto.Adapter.Storage
+  
   @impl true
   def ensure_all_started(config, type) do
     Ecto.Adapters.SQL.ensure_all_started(:jamdb_oracle, config, type)
@@ -51,6 +53,69 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     false
   end
 
+  @impl true
+  def storage_up(opts) do
+    case storage_status(opts) do
+      {:ok, :up} ->
+        {:error, :already_up}
+
+      {:ok, :down} ->
+        {:error, :not_implemented}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  @impl true
+  def storage_down(_opts) do
+    {:error, :not_implemented}
+  end
+
+  @impl true
+  def storage_status(opts) do
+    database =
+      Keyword.fetch!(opts, :database) || raise ":database is nil in repository configuration"
+
+    case run_storage_query(
+           String.to_charlist(
+             ~s"SELECT DATABASE_STATUS FROM V$INSTANCE WHERE INSTANCE_NAME = :1 AND DATABASE_STATUS = 'ACTIVE'"
+           ),
+           [String.to_charlist(String.upcase(database))],
+           opts
+         ) do
+      {:ok, %{num_rows: 0}} -> {:ok, :down}
+      {:ok, %{num_rows: _num_rows}} -> {:ok, :up}
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  defp run_storage_query(query, args, opts) do
+    # Note: not efficient (should use Pool), but ok just for storage_up/down
+
+    alias Jamdb.Oracle, as: Native
+
+    {:ok, _} = Application.ensure_all_started(:ecto_sql)
+    {:ok, _} = Application.ensure_all_started(:jamdb_oracle)
+
+    Keyword.fetch!(opts, :database) || raise ":database is nil in repository configuration"
+    Keyword.fetch!(opts, :hostname) || raise ":hostname is nil in repository configuration"
+    Keyword.fetch!(opts, :port) || raise ":port is nil in repository configuration"
+
+    opts =
+      opts
+      |> Keyword.drop([:name, :log, :pool, :pool_size])
+      |> Keyword.put(:max_restarts, 0)
+    
+    {:ok, conn} = Native.connect(opts)
+
+    try do
+      Native.query(conn, query, args)
+    after
+      Native.disconnect(nil, conn)
+    end
+  end
+  
 end
 
 defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
