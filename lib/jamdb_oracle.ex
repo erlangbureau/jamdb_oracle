@@ -115,7 +115,7 @@ defmodule Jamdb.Oracle do
   def handle_begin(opts, %{mode: mode} = s) do
     case Keyword.get(opts, :mode, :transaction) do
       :transaction when mode == :idle ->
-        statement = "SAVEPOINT tran"
+        statement = "SET TRANSACTION READ WRITE"
         handle_transaction(statement, opts, %{s | mode: :transaction})
       :savepoint when mode == :transaction ->
         statement = "SAVEPOINT " <> Keyword.get(opts, :name, "svpt")
@@ -142,7 +142,7 @@ defmodule Jamdb.Oracle do
   def handle_rollback(opts, %{mode: mode} = s) do
     case Keyword.get(opts, :mode, :transaction) do
       :transaction when mode in [:transaction, :error] ->
-        statement = "ROLLBACK TO tran"
+        statement = "ROLLBACK"
         handle_transaction(statement, opts, %{s | mode: :idle})
       :savepoint when mode in [:transaction, :error] ->
         statement = "ROLLBACK TO " <> Keyword.get(opts, :name, "svpt")
