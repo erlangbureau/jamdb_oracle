@@ -131,15 +131,21 @@ Ecto types              | Oracle types                     | Literal syntax in p
     iex> Ecto.Adapters.SQL.query(YourApp.Repo, "select 1+:1,sysdate,rowid from dual where 1=:1 ", [1])
     {:ok, %{num_rows: 1, rows: [[2, ~N[2016-08-01 13:14:15], "AAAACOAABAAAAWJAAA"]]}}
 
-    iex> bin = %Ecto.Query.Tagged{value: <<0xE7,0x99,0xBE>>, type: :binary}
-    iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", [bin])
+    iex> row = [%Ecto.Query.Tagged{value: <<0xE7,0x99,0xBE>>, type: :binary}]
+    iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1)", row)
 
-    iex> row = %Ecto.Query.Tagged{value: %{dat: {2023, 1, 1}, id: 1}, type: :map}
-    iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:id, :dat)", [row])
+    iex> row = [%Ecto.Query.Tagged{value: %{dat: {2023, 1, 1}, id: 1}, type: :map}]
+    iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:id, :dat)", row)
         
     iex> opts = [batch: true, in: [Ecto.UUID, :number]]
     iex> row = [Ecto.UUID.bingenerate, 1]
-    iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1, :2)", [row, row]], opts)
+    iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl values (:1, :2)",
+    ...> [row, row], opts)
+        
+    iex> opts = [returning: false, out: [:integer]]
+    iex> row = [Date.utc_today]
+    iex> Ecto.Adapters.SQL.query(YourApp.Repo, "insert into tabl (dat) values (:1) return id into :2",
+    ...> row, opts)
 
 Using quoted identifiers:
 
