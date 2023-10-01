@@ -96,16 +96,8 @@ sql_query(#oraclient{timeouts={_Tout, ReadTout}} = State, Query, Tout) ->
 -spec sql_query(state(), string() | tuple()) -> query_result().
 sql_query(State, Query) when is_list(Query) ->
     sql_query(State, {Query, []});
-sql_query(State, {Query, Bind}) when is_map(Bind) ->
-    sql_query(State, {Query, [Bind]});
-sql_query(State, {Query, [Bind]}) when is_map(Bind) ->
-    Data = lists:filtermap(fun(L) -> if hd(L) =:= $: -> {true, tl(L)}; true -> false end end,
-        string:tokens(Query," \t\r\n;,()=")),
-    sql_query(State, {Query, lists:map(fun(L) -> maps:get(list_to_atom(L), Bind) end, Data), [], []});
 sql_query(State, {Query, Bind}) when length(Query) > 10 ->
-    Data = lists:filtermap(fun(L) -> if hd(L) =:= $: -> {true, list_to_integer(tl(L))}; true -> false end end,
-        string:tokens(Query," \t\r\n;,()=")),
-    sql_query(State, {Query, lists:map(fun(I) -> lists:nth(I, Bind) end, Data), [], []});
+    sql_query(State, {Query, Bind, [], []});
 sql_query(State, {batch, Query, [Bind|Batch]}) ->
     sql_query(State, {Query, Bind, Batch, []});
 sql_query(State, {fetch, Query, Bind}) ->
@@ -191,6 +183,20 @@ handle_error(Type, Reason, State) ->
     _ = disconnect(State, 0),
     {error, Type, Reason, State#oraclient{conn_state=disconnected}}.
 
+handle_bind(Query, Bind) ->
+    Ks = string:tokens(Query," \t\r\n;,()="),
+    {X, Y} = ?ENCODER:encode_helper(type, string:to_upper(hd(Ks))),
+    handle_bind(X, Y, lists:filtermap(fun(L) -> if hd(L) =:= $: -> {true, tl(L)}; true -> false end end, Ks), Bind).
+
+handle_bind(Select, Change, Data, Bind) when is_list(Bind) ->
+    try lists:map(fun(L) -> list_to_integer(L) end, Data) of
+        Bs -> {Select, Change, lists:map(fun(I) -> lists:nth(I, Bind) end, Bs)}
+    catch
+        error:_ -> {Select, Change, Bind}
+    end;
+handle_bind(Select, Change, Data, Bind) when is_map(Bind) ->
+    {Select, Change, lists:map(fun(L) -> maps:get(list_to_atom(L), Bind) end, Data)}.
+
 handle_req(pig, #oraclient{cursors=Cursors,seq=Task} = State, {Type, Request}) ->
     {LPig, LPig2} = unzip([get_param(defcols, DefCol) || DefCol <- get_result(Cursors)]),
     Pig = if LPig =/= [] -> get_record(pig, [], {?TTI_CANA, LPig}, Task); true -> <<>> end,
@@ -245,17 +251,16 @@ send_req(fetch, #oraclient{seq=Task} = State, Cursor) ->
     Data = get_record(fetch, State, Cursor, Task),
     send(State, ?TNS_DATA, Data);
 send_req(exec, #oraclient{charset=Charset,fetch=Fetch,cursors=Cursors,seq=Task} = State, {Query, Bind, Batch}) ->
-    KeyWord = lists:nth(1, string:tokens(string:to_upper(Query)," \t\r\n")),
-    {Select, Change} = ?ENCODER:encode_helper(type, KeyWord),
-    {Type, Fetch2} = get_param(type, {Select, Change, [B || {out, B} <- Bind], Fetch}),
+    {Select, Change, Bind2} = handle_bind(Query, Bind),
+    {Type, Fetch2} = get_param(type, {Select, Change, [B || {out, B} <- Bind2], Fetch}),
     Sum = erlang:crc32(?ENCODER:encode_str(Query)),
     DefCol = get_param(defcols, {Sum, Cursors}),
     {LCursor, Cursor} = get_param(defcols, DefCol),
     Pig = if Cursor =/= 0 -> get_record(pig, [], {?TTI_CANA, [Cursor]}, Task); true -> <<>> end,
     Pig2 = if Cursor =/= 0 -> get_record(pig, [], {?TTI_OCCA, [Cursor]}, Task); true -> <<>> end,
     Data = get_record(exec, State#oraclient{type=Type,fetch=Fetch2}, {LCursor, if LCursor =:= 0 -> Query; true -> [] end,
-        [get_param(data, B) || B <- Bind], Batch, []}, Task),
-    send(State#oraclient{type=Type,defcols=DefCol,params=[get_param(format, B, #format{charset=Charset}) || B <- Bind]},
+        [get_param(data, B) || B <- Bind2], Batch, []}, Task),
+    send(State#oraclient{type=Type,defcols=DefCol,params=[get_param(format, B, #format{charset=Charset}) || B <- Bind2]},
         ?TNS_DATA, <<Pig/binary, Pig2/binary, Data/binary>>).
 
 handle_resp(Acc, #oraclient{socket=Socket, sdu=Length, timeouts=Touts} = State) ->
