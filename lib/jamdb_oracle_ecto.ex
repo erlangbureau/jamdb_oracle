@@ -50,7 +50,9 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
 
   @impl true
   def supports_ddl_transaction? do
-    false
+    # Note: Oracle doesn't support that, actually, but when using autocommit=0, and this as false,
+    # then the last migration version is not commited to schema_migrations table.
+    true
   end
 
   @impl true
