@@ -90,10 +90,8 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     end
   end
 
-  defp run_storage_query(query, args, opts) do
+  defp with_storage_conn(opts, f) do
     # Note: not efficient (should use Pool), but ok just for storage_up/down
-
-    alias Jamdb.Oracle, as: Native
 
     {:ok, _} = Application.ensure_all_started(:ecto_sql)
     {:ok, _} = Application.ensure_all_started(:jamdb_oracle)
@@ -107,15 +105,21 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
       |> Keyword.drop([:name, :log, :pool, :pool_size])
       |> Keyword.put(:max_restarts, 0)
     
-    {:ok, conn} = Native.connect(opts)
+    {:ok, conn} = Jamdb.Oracle.connect(opts)
 
     try do
-      Native.query(conn, query, args)
+      f.(conn)
     after
-      Native.disconnect(nil, conn)
+      Jamdb.Oracle.disconnect(nil, conn)
     end
   end
-  
+
+  defp run_storage_query(query, args, opts) do
+    with_storage_conn(opts, fn conn ->
+      Jamdb.Oracle.query(conn, query, args)
+    end)
+  end
+
 end
 
 defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
