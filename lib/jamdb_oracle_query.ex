@@ -75,7 +75,7 @@ defmodule Jamdb.Oracle.Query do
         [?\s, ?(, intersperse_map(header, ?,, &quote_name/1), ?), ?\s | from]
       end
 
-    ["INSERT INTO ", quote_table(prefix, table), values | returning(header, returning)]
+    ["INSERT INTO ", quote_table(prefix, table), values | returning(returning)]
   end
 
   defp insert_all(query = %Ecto.Query{}, _counter) do
@@ -545,15 +545,6 @@ defmodule Jamdb.Oracle.Query do
     returning = fields |> Enum.filter(& is_tuple(&1) == false)
     [" RETURN ", intersperse_map(returning, ", ", &quote_name/1),
      " INTO ", intersperse_map(returning, ", ", &[?: | quote_name(&1)])]
-  end    
-  
-  defp returning(_, []),
-    do: []
-  defp returning(header, fields) do
-    returning = fields |> Enum.filter(& is_tuple(&1) == false)
-    offset = Enum.count(header)
-    [" RETURN ", intersperse_map(returning, ", ", &quote_name/1),
-     " INTO ", intersperse_map(Enum.to_list(1..Enum.count(returning)), ", ", fn i -> [?: | "#{offset + i}"] end)]
   end   
 
   defp create_names(%{sources: sources}, as_prefix) do
