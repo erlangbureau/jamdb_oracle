@@ -312,8 +312,8 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp encode([elem | next1], [_type | next2]), do: [ elem | encode(next1, next2)]
 
   defp encode(nil), do: :null
-  defp encode(true), do: "1"
-  defp encode(false), do: "0"
+  defp encode(true), do: [49]
+  defp encode(false), do: [48]
   defp encode(%Decimal{} = decimal), do: Decimal.to_float(decimal)
   defp encode(%DateTime{microsecond: {0, 0}} = datetime),
     do: NaiveDateTime.to_erl(DateTime.to_naive(datetime))
