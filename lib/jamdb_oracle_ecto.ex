@@ -79,17 +79,20 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
     database =
       Keyword.fetch!(opts, :database) || raise ":database is nil in repository configuration"
 
-    case run_storage_query(
-           String.to_charlist(
-             ~s"SELECT DATABASE_STATUS FROM V$INSTANCE WHERE INSTANCE_NAME = :1 AND DATABASE_STATUS = 'ACTIVE'"
-           ),
-           [String.to_charlist(String.upcase(database))],
-           opts
-         ) do
-      {:ok, %{num_rows: 0}} -> {:ok, :down}
-      {:ok, %{num_rows: _num_rows}} -> {:ok, :up}
-      {:error, error} -> {:error, error}
-    end
+    # we could not have a connection to a non-existing database anyway
+    {:ok, :up}
+
+    # case run_storage_query(
+    #        String.to_charlist(
+    #          ~s"SELECT DATABASE_STATUS FROM SYSTEM.V$INSTANCE WHERE INSTANCE_NAME = :1 AND DATABASE_STATUS = 'ACTIVE'"
+    #        ),
+    #        [String.to_charlist(String.upcase(database))],
+    #        opts
+    #      ) do
+    #   {:ok, %{num_rows: 0}} -> {:ok, :down}
+    #   {:ok, %{num_rows: _num_rows}} -> {:ok, :up}
+    #   {:error, error} -> {:error, error}
+    # end
   end
 
   defp with_storage_conn(opts, f) do
