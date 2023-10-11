@@ -145,8 +145,50 @@ defmodule Jamdb.Oracle.Query do
   @doc false
   def ddl_logs(_result), do: []
 
+  defp match_or_nil(regex, s, f) do
+    case Regex.run(regex, s) do
+      [_, m] -> f.(m)
+      nil -> nil
+    end
+  end
+
+  defp unique_constraint?(err) do
+    match_or_nil(~r/'ORA-00001: unique constraint \((.*)\) violated\\n'/, err.message, fn name ->
+      [unique: name]
+    end)
+  end
+
+  defp integrity_child_constraint?(err) do
+    match_or_nil(
+      ~r/'ORA-02292: integrity constraint \((.*)\) violated - child record found\\n'/,
+      err.message,
+      fn name -> [foreign_key: name] end
+    )
+  end
+
+  defp integrity_parent_constraint?(err) do
+    match_or_nil(
+      ~r/'ORA-02291: integrity constraint \((.*)\) violated - parent key not found\\n'/,
+      err.message,
+      fn name -> [foreign_key: name] end
+    )
+  end
+
+  defp check_constraint?(err) do
+    match_or_nil(~r/'ORA-02290: check constraint \((.*)\) violated\\n'/, err.message, fn name ->
+      [check: name]
+    end)
+  end
+
   @doc false
-  def to_constraints(_err, _opts \\ []), do: []
+  def to_constraints(err, opts) do
+    # Note: afaik there are no 'exclusion constraints' in Oracle.
+    unique_constraint?(err) ||
+      integrity_child_constraint?(err) ||
+      integrity_parent_constraint?(err) ||
+      check_constraint?(err) ||
+      []
+  end
 
   ## Query generation
 

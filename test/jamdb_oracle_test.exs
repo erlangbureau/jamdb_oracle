@@ -1216,4 +1216,15 @@ defmodule Jamdb.OracleTest do
   defp remove_newlines(string) when is_binary(string) do
     string |> String.trim() |> String.replace("\n", " ")
   end
+
+  defp to_constraints(message) do
+    Jamdb.Oracle.Query.to_constraints(%DBConnection.ConnectionError{message: message}, [])
+  end
+
+  test "to_constraints" do
+    assert to_constraints("'ORA-00001: unique constraint (PREFIX.SUFFIX) violated\\n'") == [unique: "PREFIX.SUFFIX"]
+    assert to_constraints("'ORA-02292: integrity constraint (PREFIX.SUFFIX) violated - child record found\\n'") == [foreign_key: "PREFIX.SUFFIX"]
+    assert to_constraints("'ORA-02291: integrity constraint (PREFIX.SUFFIX) violated - parent key not found\\n'") == [foreign_key: "PREFIX.SUFFIX"]
+    assert to_constraints("'ORA-02290: check constraint (PREFIX.SUFFIX) violated\\n'") == [check: "PREFIX.SUFFIX"]
+  end
 end
