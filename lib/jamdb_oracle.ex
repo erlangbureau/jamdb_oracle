@@ -289,6 +289,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp decode(:null), do: nil
   defp decode({elem}) when is_number(elem), do: elem
   defp decode({date, time}) when is_tuple(date), do: to_naive({date, time})
+  defp decode({date, time, '+00:00'}) when is_tuple(date), do: to_utc({date, time})
   defp decode({date, time, tz}) when is_tuple(date) and is_list(tz), do: to_date({date, time, tz})
   defp decode({date, time, _}) when is_tuple(date), do: to_utc({date, time})
   defp decode(elem) when is_list(elem), do: to_binary(elem)
@@ -315,11 +316,13 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp encode(true), do: [49]
   defp encode(false), do: [48]
   defp encode(%Decimal{} = decimal), do: Decimal.to_float(decimal)
-  defp encode(%DateTime{microsecond: {0, 0}} = datetime),
-    do: NaiveDateTime.to_erl(DateTime.to_naive(datetime))
-  defp encode(%DateTime{microsecond: {ms, _}} = datetime) do
+  defp encode(%DateTime{microsecond: {0, 0}, zone_abbr: "UTC"} = datetime) do
     {date, {hour, min, sec}} = NaiveDateTime.to_erl(DateTime.to_naive(datetime))
-    {date, {hour, min, sec, ms}}
+    {date, {hour, min, sec, 0}, 28}
+  end
+  defp encode(%DateTime{microsecond: {ms, _}, zone_abbr: "UTC"} = datetime) do
+    {date, {hour, min, sec}} = NaiveDateTime.to_erl(DateTime.to_naive(datetime))
+    {date, {hour, min, sec, ms}, 28}
   end
   defp encode(%NaiveDateTime{microsecond: {0, 0}} = naive),
     do: NaiveDateTime.to_erl(naive)
