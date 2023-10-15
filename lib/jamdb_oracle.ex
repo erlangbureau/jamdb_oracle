@@ -289,8 +289,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp decode(:null), do: nil
   defp decode({elem}) when is_number(elem), do: elem
   defp decode({date, time}) when is_tuple(date), do: to_naive({date, time})
-  defp decode({date, time, tz}) when is_tuple(date) and is_list(tz), do: to_date({date, time, tz})
-  defp decode({date, time, _}) when is_tuple(date), do: to_utc({date, time})
+  defp decode({date, time, tz}) when is_tuple(date), do: to_date({date, time, tz})
   defp decode(elem) when is_list(elem), do: to_binary(elem)
   defp decode(elem), do: elem
 
@@ -315,11 +314,13 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp encode(true), do: [49]
   defp encode(false), do: [48]
   defp encode(%Decimal{} = decimal), do: Decimal.to_float(decimal)
-  defp encode(%DateTime{microsecond: {0, 0}} = datetime),
-    do: NaiveDateTime.to_erl(DateTime.to_naive(datetime))
-  defp encode(%DateTime{microsecond: {ms, _}} = datetime) do
+  defp encode(%DateTime{microsecond: {0, 0}, zone_abbr: "UTC"} = datetime) do
     {date, {hour, min, sec}} = NaiveDateTime.to_erl(DateTime.to_naive(datetime))
-    {date, {hour, min, sec, ms}}
+    {date, {hour, min, sec, 0}, 28}
+  end
+  defp encode(%DateTime{microsecond: {ms, _}, zone_abbr: "UTC"} = datetime) do
+    {date, {hour, min, sec}} = NaiveDateTime.to_erl(DateTime.to_naive(datetime))
+    {date, {hour, min, sec, ms}, 28}
   end
   defp encode(%NaiveDateTime{microsecond: {0, 0}} = naive),
     do: NaiveDateTime.to_erl(naive)
@@ -358,13 +359,25 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp to_naive({date, {hour, min, sec}}),
     do: NaiveDateTime.from_erl!({date, {hour, min, trunc(sec)}}, parse_sec(sec))
 
-  defp to_utc({date, time}),
-    do: DateTime.from_naive!(to_naive({date, time}), "Etc/UTC")
-
   defp to_date({{year, month, day}, {hour, min, sec}, tz}),
     do: %DateTime{year: year, month: month, day: day, hour: hour, minute: min,
-	second: trunc(sec), microsecond: parse_sec(sec), time_zone: to_binary(tz),
-	zone_abbr: "UTC", utc_offset: 0, std_offset: 0}
+    second: trunc(sec), microsecond: parse_sec(sec), time_zone: "Etc/UTC",
+    zone_abbr: "UTC", utc_offset: parse_offset(IO.iodata_to_binary(tz)), std_offset: 0}
+
+  defp parse_offset("Etc/UTC"), do: 0
+  defp parse_offset(<<?+, hour::2-bytes, ?:, min::2-bytes, _rest::binary>>),
+    do: parse_offset(1, hour, min)
+  defp parse_offset(<<?-, hour::2-bytes, ?:, min::2-bytes, _rest::binary>>),
+    do: parse_offset(-1, hour, min)
+
+  defp parse_offset(sign, hour, min) do
+    with {hour, ""} when hour < 24 <- Integer.parse(hour),
+         {min, ""} when min < 60 <- Integer.parse(min) do
+      (hour * 60 + min) * 60 * sign
+    else
+      _ -> :error
+    end
+  end
 
   defp parse_sec(sec),
     do: {trunc((sec - trunc(sec)) * 1000000) , 6}

@@ -123,12 +123,12 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   @impl true
   defdelegate delete(prefix, table, filters, returning), to: Jamdb.Oracle.Query
   @impl true
-  defdelegate table_exists_query(table), to: Jamdb.Oracle.Query
+  defdelegate table_exists_query(table), to: Jamdb.Oracle.SQL
   @impl true
-  defdelegate execute_ddl(command), to: Jamdb.Oracle.Query
+  defdelegate execute_ddl(command), to: Jamdb.Oracle.SQL
   @impl true
-  defdelegate ddl_logs(result), to: Jamdb.Oracle.Query
+  defdelegate ddl_logs(result), to: Jamdb.Oracle.SQL
   @impl true
-  defdelegate to_constraints(err, opts), to: Jamdb.Oracle.Query
+  defdelegate to_constraints(err, opts), to: Jamdb.Oracle.SQL
 
 end
