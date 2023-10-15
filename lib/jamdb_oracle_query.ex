@@ -137,17 +137,6 @@ defmodule Jamdb.Oracle.Query do
     ["DELETE FROM ", quote_table(prefix, table), " WHERE ", filters | returning(returning)]
   end
 
-  @doc false
-  def table_exists_query(table) do
-    {"SELECT count(*) FROM user_tables WHERE table_name = :1 ", [table]}
-  end
-
-  @doc false
-  def ddl_logs(_result), do: []
-
-  @doc false
-  def to_constraints(_err, _opts \\ []), do: []
-
   ## Query generation
 
   binary_ops =
@@ -506,7 +495,7 @@ defmodule Jamdb.Oracle.Query do
     ["HEXTORAW(", expr(literal, sources, query), ?)]
   end
   defp expr(%Ecto.Query.Tagged{value: literal, type: type}, sources, query) do
-    ["CAST(", expr(literal, sources, query), " AS ", column_type(type, []), ?)]
+    ["CAST(", expr(literal, sources, query), " AS ", Jamdb.Oracle.SQL.to_db_type(type), ?)]
   end
 
   defp expr(nil, _sources, _query),   do: "NULL"
