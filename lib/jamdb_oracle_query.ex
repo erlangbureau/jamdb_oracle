@@ -57,7 +57,7 @@ defmodule Jamdb.Oracle.Query do
     sources = create_names(query, [])
 
     cte = cte(query, sources)
-    using_join(query, :update_all, cte)
+    using_join(query, :delete_all, cte)
 
     {rows, where} =
       if select do
