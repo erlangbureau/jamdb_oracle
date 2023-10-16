@@ -1218,7 +1218,7 @@ defmodule Jamdb.OracleTest do
   end
 
   defp to_constraints(message) do
-    Jamdb.Oracle.Query.to_constraints(%DBConnection.ConnectionError{message: message}, [])
+    Jamdb.Oracle.SQL.to_constraints(%DBConnection.ConnectionError{message: message}, [])
   end
 
   test "to_constraints" do
