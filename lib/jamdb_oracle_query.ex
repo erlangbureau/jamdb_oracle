@@ -37,6 +37,9 @@ defmodule Jamdb.Oracle.Query do
   def update_all(%{from: %{source: source}, select: select} = query) do
     sources = create_names(query, [])
 
+    cte = cte(query, sources)
+    using_join(query, :update_all, cte)
+
     {rows, where} =
       if select do
         {[insert_all(query, 0)], []}
@@ -52,6 +55,9 @@ defmodule Jamdb.Oracle.Query do
   @doc false
   def delete_all(%{from: from, select: select} = query) do
     sources = create_names(query, [])
+
+    cte = cte(query, sources)
+    using_join(query, :update_all, cte)
 
     {rows, where} =
       if select do
@@ -228,6 +234,12 @@ defmodule Jamdb.Oracle.Query do
   defp update_op(command, _key, _value, _sources, query) do
     error!(query, "unknown update operation #{inspect command}")
   end
+
+  defp using_join(%{joins: []}, _kind, []), do: []
+  defp using_join(%{joins: _} = query, _kind, []) do
+    error!(query, "update_all/delete_all joins are not supported")
+  end
+  defp using_join(%{joins: _}, _kind, _), do: []
 
   defp join(%{joins: []}, _sources), do: []
   defp join(%{joins: joins} = query, sources) do
