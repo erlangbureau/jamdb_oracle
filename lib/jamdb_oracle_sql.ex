@@ -332,7 +332,7 @@ defmodule Jamdb.Oracle.SQL do
   end
 
   @doc false
-  def to_constraints(err, opts) do
+  def to_constraints(err, _opts) do
     # Note: afaik there are no 'exclusion constraints' in Oracle.
     unique_constraint?(err) ||
       integrity_child_constraint?(err) ||
