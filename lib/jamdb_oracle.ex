@@ -222,15 +222,12 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def ping(%{mode: :idle} = s) do
+  def ping(s) do
     case query(s, 'PING') do
       {:ok, _} -> {:ok, s}
       {:error, err} -> {:disconnect, error!(err), s}
       {:disconnect, err} -> {:disconnect, error!(err), s}
     end
-  end
-  def ping(%{mode: :transaction} = s) do
-    {:ok, s}
   end
 
   defp error!(msg) do
