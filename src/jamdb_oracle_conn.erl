@@ -202,18 +202,20 @@ handle_req(pig, #oraclient{cursors=Cursors,seq=Task} = State, {Type, Request}) -
     Pig = if LPig =/= [] -> get_record(pig, [], {?TTI_CANA, LPig}, Task); true -> <<>> end,
     Pig2 = if LPig2 =/= [] -> get_record(pig, [], {?TTI_OCCA, LPig2}, Task); true -> <<>> end,
     Data = get_record(Type, [], Request, Task),
-    {ok, State2} = send(State, ?TNS_DATA, <<Pig/binary, Pig2/binary, Data/binary>>),
-    handle_resp([], State2);
+    handle_req(State, ?TNS_DATA, <<Pig/binary, Pig2/binary, Data/binary>>, []);
 handle_req(marker, State, Acc) ->
-    {ok, State2} = send(State, ?TNS_MARKER, <<1,0,2>>),
-    handle_resp(Acc, State2);
+    handle_req(State, ?TNS_MARKER, <<1,0,2>>, Acc);
 handle_req(fob, State, Acc) ->
-    {ok, State2} = send(State, ?TNS_DATA, <<?TTI_FOB>>),
-    handle_resp(Acc, State2);
+    handle_req(State, ?TNS_DATA, <<?TTI_FOB>>, Acc);
 handle_req(Type, #oraclient{seq=Task} = State, Request) ->
     Data = get_record(Type, [], Request, Task),
-    {ok, State2} = send(State, ?TNS_DATA, Data),
-    handle_resp([], State2).
+    handle_req(State, ?TNS_DATA, Data, []).
+
+handle_req(State, PacketType, Data, Acc) ->
+    case send(State, PacketType, Data) of
+        {ok, State2} -> handle_resp(Acc, State2);
+        Result -> Result
+    end.
 
 unzip(Ts) -> unzip(Ts, [], []).
 
