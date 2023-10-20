@@ -70,12 +70,12 @@ disconnect(State) ->
 -spec disconnect(state(), timeout()) -> {ok, [env()]}.
 disconnect(#oraclient{socket=Socket, env=Env, passwd=Passwd}, 0) ->
     sock_close(Socket),
-    exit(Passwd, ok),
+    freeval(Passwd),
     {ok, Env};
 disconnect(#oraclient{conn_state=connected, socket=Socket, env=Env, passwd=Passwd} = State, _Tout) ->
     _ = send_req(close, State),
     sock_close(Socket),
-    exit(Passwd, ok),
+    freeval(Passwd),
     {ok, Env};
 disconnect(#oraclient{env=Env}, _Tout) ->
     {ok, Env}.
@@ -84,7 +84,7 @@ disconnect(#oraclient{env=Env}, _Tout) ->
 reconnect(#oraclient{passwd=Passwd} = State) ->
     Passwd ! {get, self()},
     {Pass, NewPass} = receive Reply -> Reply end,
-    exit(Passwd, ok),
+    freeval(Passwd),
     {ok, EnvOpts} = disconnect(State, 0),
     Pass2 = if NewPass =/= [] -> NewPass; true -> Pass end,
     connect([{password, Pass2}|EnvOpts]).
@@ -230,14 +230,14 @@ send_req(auth, #oraclient{req=Request,seq=Task} = State) ->
     {Data, KeyConn} = get_record(auth, State, Request, Task),
     send(State#oraclient{auth=KeyConn,req=[]}, ?TNS_DATA, Data);
 send_req(close, #oraclient{server=0,seq=Task} = State) ->
-    exit(Task, ok),
+    freeval(Task),
     send(State, ?TNS_DATA, <<64>>);
 send_req(close, #oraclient{auto=0} = State) ->
     _ = handle_req(tran, State, ?TTI_ROLLBACK),
     send_req(close, State#oraclient{auto=1});
 send_req(close, #oraclient{cursors=Cursors} = State) ->
     _ = handle_req(pig, State, {close, 0}),
-    exit(Cursors, ok),
+    freeval(Cursors),
     send_req(close, State#oraclient{server=0});
 send_req(reset, #oraclient{cursors=Cursors} = State) ->
     handle_req(pig, State, {tran, ?TTI_PING}),
@@ -335,6 +335,9 @@ get_result(_Type, _RetCode, _RowNumber, _RowFormat, _Rows) ->
 get_result(undefined) -> [];
 get_result(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply -> Reply end;
 get_result(#format{column_name=Column}) -> Column.
+
+freeval(undefined) -> true;
+freeval(Pid) when is_pid(Pid) -> exit(Pid, ok).
 
 currval({Sum, {0, _Cursor, _RowFormat}}, Result, Cursors) when is_pid(Cursors) ->
     Acc = get_result(Cursors),
