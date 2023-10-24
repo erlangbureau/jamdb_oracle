@@ -64,28 +64,26 @@ connect(Opts, Tout) ->
     end.
 
 -spec disconnect(state()) -> {ok, [env()]}.
-disconnect(State) ->
-    disconnect(State, 1).
-
--spec disconnect(state(), timeout()) -> {ok, [env()]}.
-disconnect(#oraclient{socket=Socket, env=Env, passwd=Passwd}, 0) ->
+disconnect(#oraclient{socket=Socket, env=Env, passwd=Passwd}) ->
     sock_close(Socket),
     freeval(Passwd),
-    {ok, Env};
+    {ok, Env}.
+
+-spec disconnect(state(), timeout()) -> ok.
 disconnect(#oraclient{conn_state=connected, socket=Socket, env=Env, passwd=Passwd} = State, _Tout) ->
     _ = send_req(close, State),
     sock_close(Socket),
     freeval(Passwd),
-    {ok, Env};
+    ok;
 disconnect(#oraclient{env=Env}, _Tout) ->
-    {ok, Env}.
+    ok.
 
 -spec reconnect(state()) -> empty_result().
 reconnect(#oraclient{passwd=Passwd} = State) ->
     Passwd ! {get, self()},
     {Pass, NewPass} = receive Reply -> Reply end,
     freeval(Passwd),
-    {ok, EnvOpts} = disconnect(State, 0),
+    {ok, EnvOpts} = disconnect(State),
     Pass2 = if NewPass =/= [] -> NewPass; true -> Pass end,
     connect([{password, Pass2}|EnvOpts]).
 
@@ -180,7 +178,7 @@ handle_token(<<Token, Data/binary>>, State) ->
 handle_error(remote, Reason, State) ->
     {error, remote, Reason, State};
 handle_error(Type, Reason, State) ->
-    _ = disconnect(State, 0),
+    disconnect(State, 1),
     {error, Type, Reason, State#oraclient{conn_state=disconnected}}.
 
 handle_bind(Query, Bind) ->
