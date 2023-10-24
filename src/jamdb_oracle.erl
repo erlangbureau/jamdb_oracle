@@ -12,8 +12,6 @@
 -export([handle_call/3, handle_cast/2, handle_info/2]).
 -export([code_change/3]).
 
--include("jamdb_oracle.hrl").
-
 -define(default_timeout, 5000).
 
 %% API
@@ -54,14 +52,10 @@ handle_call({sql_query, Query, Tout}, _From, State) ->
         {error, Type, Reason, State2} ->
             {reply, {error, Type, Reason}, State2}
     catch
-        error:Reason ->
-            {reply, {error, local, Reason}, State}
+        error:_Reason ->
+            {stop, normal, ok, State}
     end;
-handle_call(stop, _From, #oraclient{conn_state=disconnected} = State) ->
-    jamdb_oracle_conn:disconnect(State, 0),
-    {noreply, State};
 handle_call(stop, _From, State) ->
-    jamdb_oracle_conn:disconnect(State, 1),
     {stop, normal, ok, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -74,7 +68,8 @@ handle_info(timeout, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    jamdb_oracle_conn:disconnect(State, 1),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
