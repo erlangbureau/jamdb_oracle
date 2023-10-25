@@ -35,6 +35,7 @@ sql_query(Pid, Query) ->
 
 %% gen_server callbacks
 init(Opts) ->
+    erlang:process_flag(trap_exit, true),
     case jamdb_oracle_conn:connect(Opts) of
         {ok, State} ->
             {ok, State};
