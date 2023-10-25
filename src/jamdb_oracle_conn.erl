@@ -177,6 +177,9 @@ handle_token(<<Token, Data/binary>>, State) ->
 
 handle_error(remote, Reason, State) ->
     {error, remote, Reason, State};
+handle_error(socket, Reason, State) ->
+    disconnect(State),
+    {error, socket, Reason, State#oraclient{conn_state=disconnected}};
 handle_error(Type, Reason, State) ->
     disconnect(State, 1),
     {error, Type, Reason, State#oraclient{conn_state=disconnected}}.

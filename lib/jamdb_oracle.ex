@@ -11,7 +11,7 @@ defmodule Jamdb.Oracle do
 
   @timeout 15_000
 
-  defstruct [:pid, :mode, :cursors, :timeout]
+  defstruct [:conn, :mode, :cursors, :timeout]
 
   @doc """
   Starts and links to a database connection process.
@@ -39,23 +39,21 @@ defmodule Jamdb.Oracle do
     * `:num_rows` - the number of rows affected
     * `:rows` - the result set as a list  
   """
-  @spec query(conn :: any(), sql :: any(), params :: any()) ::
-    {:ok, any()} | {:error | :disconnect, any()}
+  @spec query(conn :: %Jamdb.Oracle{}, sql :: any(), params :: any()) ::
+    {:ok | :cont, any(), %Jamdb.Oracle{}} | {:error | :disconnect, any(), %Jamdb.Oracle{}}
   def query(conn, sql, params \\ [])
-  def query(%{pid: pid, timeout: timeout}, sql, params) do
-    case :jamdb_oracle.sql_query(pid, stmt(sql, params), timeout) do
-      {:ok, [{:result_set, columns, _, rows}]} ->
-        {:ok, %{num_rows: length(rows), rows: rows, columns: columns}}
-      {:ok, [{:fetched_rows, _, _, _} = result]} -> {:cont, result}
-      {:ok, [{:proc_result, 0, rows}]} -> {:ok, %{num_rows: length(rows), rows: rows}}
-      {:ok, [{:proc_result, _, msg}]} -> {:error, msg}
-      {:ok, [{:affected_rows, num_rows}]} -> {:ok, %{num_rows: num_rows, rows: nil}}
-      {:ok, result} -> {:ok, result}
-      {:error, _, err} -> {:disconnect, err}
+  def query(%{conn: conn, timeout: timeout} = s, sql, params) do
+    # TODO: erlang genserver catched exceptions; do we need to do it here too? can it throw?
+    case :jamdb_oracle_conn.sql_query(conn, stmt(sql, params), timeout) do
+      {:ok, [{:result_set, columns, _, rows}], conn} ->
+        {:ok, %{num_rows: length(rows), rows: rows, columns: columns}, %{s | conn: conn}}
+      {:ok, [{:fetched_rows, _, _, _} = result], conn} -> {:cont, result, %{s | conn: conn}}
+      {:ok, [{:proc_result, 0, rows}], conn} -> {:ok, %{num_rows: length(rows), rows: rows}, %{s | conn: conn}}
+      {:ok, [{:proc_result, _, msg}], conn} -> {:error, msg, %{s | conn: conn}}
+      {:ok, [{:affected_rows, num_rows}], conn} -> {:ok, %{num_rows: num_rows, rows: nil}, %{s | conn: conn}}
+      {:ok, result, conn} -> {:ok, result, %{s | conn: conn}}
+      {:error, _type, reason, conn} -> {:disconnect, reason, %{s | conn: conn}}
     end
-  end
-  def query(pid, sql, params) when is_pid(pid) do
-    query(%{pid: pid, timeout: @timeout}, sql, params)
   end
 
   defp stmt({:fetch, sql, params}, _), do: {:fetch, sql, params}
@@ -75,15 +73,22 @@ defmodule Jamdb.Oracle do
 	  ++ if( hd(database) == ?:, do: [sid: tl(database)], else: [service_name: database] )
     params = opts[:parameters] || []
     sock_opts = opts[:socket_options] || []
-    case :jamdb_oracle.start_link(sock_opts ++ params ++ env) do
-      {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle, timeout: timeout}}
-      {:error, err} -> {:error, error!(err)}
+    case :jamdb_oracle_conn.connect(sock_opts ++ params ++ env) do
+      {:ok, conn} -> {:ok, %Jamdb.Oracle{conn: conn, mode: :idle, timeout: timeout}}
+      {:ok, result, conn} ->
+        # TODO: what is this case? Is result a proper error message?
+        # TODO: correct to disconnect, 1 here?
+        :jamdb_oracle_conn.disconnect(conn, 1)
+        {:error, error!(result)}
+      {:error, _type, reason, _conn} ->
+        # :jamdb_oracle_conn.handle_error should have disconnected conn already
+        {:error, error!(reason)}
     end
   end
 
   @impl true
-  def disconnect(_err, %{pid: pid}) do
-    :jamdb_oracle.stop(pid)
+  def disconnect(_err, %{conn: conn}) do
+    :jamdb_oracle_conn.disconnect(conn, 1)
     :ok
   end
 
@@ -91,18 +96,18 @@ defmodule Jamdb.Oracle do
   def handle_execute(%{batch: true} = query, params, _opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
     case query(s, {:batch, statement |> Jamdb.Oracle.to_list, params}, []) do
-      {:ok, result} -> {:ok, query, result, s}
-      {:error, err} -> {:error, error!(err), s}
-      {:disconnect, err} -> {:disconnect, error!(err), s}
+      {:ok, result, s} -> {:ok, query, result, s}
+      {:error, err, s} -> {:error, error!(err), s}
+      {:disconnect, err, s} -> {:disconnect, error!(err), s}
     end
   end
   def handle_execute(query, params, opts, s) do
     %Jamdb.Oracle.Query{statement: statement} = query
     returning = Enum.map(Keyword.get(opts, :out, []), fn elem -> {:out, elem} end)
     case query(s, statement |> Jamdb.Oracle.to_list, Enum.concat(params, returning)) do
-      {:ok, result} -> {:ok, query, result, s}
-      {:error, err} -> {:error, error!(err), s}
-      {:disconnect, err} -> {:disconnect, error!(err), s}
+      {:ok, result, s} -> {:ok, query, result, s}
+      {:error, err, s} -> {:error, error!(err), s}
+      {:disconnect, err, s} -> {:disconnect, error!(err), s}
     end
   end
 
@@ -155,9 +160,9 @@ defmodule Jamdb.Oracle do
 
   defp handle_transaction(statement, _opts, s) do
     case query(s, statement |> Jamdb.Oracle.to_list) do
-      {:ok, result} -> {:ok, result, s}
-      {:error, err} -> {:error, error!(err), s}
-      {:disconnect, err} -> {:disconnect, error!(err), s}
+      {:ok, result, s} -> {:ok, result, s}
+      {:error, err, s} -> {:error, error!(err), s}
+      {:disconnect, err, s} -> {:disconnect, error!(err), s}
     end
   end
 
@@ -170,27 +175,27 @@ defmodule Jamdb.Oracle do
   def handle_fetch(query, %{params: params}, _opts, %{cursors: nil} = s) do
     %Jamdb.Oracle.Query{statement: statement} = query
     case query(s, {:fetch, statement |> Jamdb.Oracle.to_list, params}) do
-      {:cont, {_, cursor, row_format, rows}} ->
+      {:cont, {_, cursor, row_format, rows}, s} ->
         cursors = %{cursor: cursor, row_format: row_format, last_row: List.last(rows)}
         {:cont,  %{num_rows: length(rows), rows: rows}, %{s | cursors: cursors}}
-      {:ok, result} -> 
+      {:ok, result, s} -> 
         {:halt, result, s}
-      {:error, err} -> {:error, error!(err), s}
-      {:disconnect, err} -> {:disconnect, error!(err), s}
+      {:error, err, s} -> {:error, error!(err), s}
+      {:disconnect, err, s} -> {:disconnect, error!(err), s}
     end
   end
   def handle_fetch(_query, _cursor, _opts, %{cursors: cursors} = s) do
     %{cursor: cursor, row_format: row_format, last_row: last_row} = cursors
     case query(s, {:fetch, cursor, row_format, last_row}) do
-      {:cont, {_, _, _, rows}} ->
+      {:cont, {_, _, _, rows}, s} ->
         rows = tl(rows)
         {:cont,  %{num_rows: length(rows), rows: rows}, 
         %{s | cursors: %{cursors | last_row: List.last(rows)}}}
-      {:ok, %{rows: rows} = result} -> 
+      {:ok, %{rows: rows} = result, s} -> 
         rows = tl(rows)
         {:halt, %{result | num_rows: length(rows), rows: rows}, s}
-      {:error, err} -> {:error, error!(err), s}
-      {:disconnect, err} -> {:disconnect, error!(err), s}
+      {:error, err, s} -> {:error, error!(err), s}
+      {:disconnect, err, s} -> {:disconnect, error!(err), s}
     end
   end
 
@@ -217,17 +222,17 @@ defmodule Jamdb.Oracle do
   @impl true
   def checkout(s) do
     case query(s, 'SESSION') do
-      {:ok, _} -> {:ok, s}
-      {:error, err} ->  {:disconnect, error!(err), s}
+      {:ok, _, s} -> {:ok, s}
+      {:error, err, s} ->  {:disconnect, error!(err), s}
     end
   end
 
   @impl true
   def ping(s) do
     case query(s, 'PING') do
-      {:ok, _} -> {:ok, s}
-      {:error, err} -> {:disconnect, error!(err), s}
-      {:disconnect, err} -> {:disconnect, error!(err), s}
+      {:ok, _, s} -> {:ok, s}
+      {:error, err, s} -> {:disconnect, error!(err), s}
+      {:disconnect, err, s} -> {:disconnect, error!(err), s}
     end
   end
 
