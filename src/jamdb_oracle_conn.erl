@@ -64,28 +64,23 @@ connect(Opts, Tout) ->
     end.
 
 -spec disconnect(state()) -> {ok, [env()]}.
-disconnect(State) ->
-    disconnect(State, 1).
-
--spec disconnect(state(), timeout()) -> {ok, [env()]}.
-disconnect(#oraclient{socket=Socket, env=Env, passwd=Passwd}, 0) ->
+disconnect(#oraclient{socket=Socket, env=Env, passwd=Passwd}) ->
     sock_close(Socket),
     freeval(Passwd),
-    {ok, Env};
-disconnect(#oraclient{conn_state=connected, socket=Socket, env=Env, passwd=Passwd} = State, _Tout) ->
-    _ = send_req(close, State),
-    sock_close(Socket),
-    freeval(Passwd),
-    {ok, Env};
-disconnect(#oraclient{env=Env}, _Tout) ->
     {ok, Env}.
+
+-spec disconnect(state(), timeout()) -> {ok, []}.
+disconnect(#oraclient{socket=Socket, passwd=Passwd} = State, _Tout) ->
+    send_req(close, State),
+    sock_close(Socket),
+    freeval(Passwd),
+    {ok, []}.
 
 -spec reconnect(state()) -> empty_result().
 reconnect(#oraclient{passwd=Passwd} = State) ->
     Passwd ! {get, self()},
     {Pass, NewPass} = receive Reply -> Reply end,
-    freeval(Passwd),
-    {ok, EnvOpts} = disconnect(State, 0),
+    {ok, EnvOpts} = disconnect(State),
     Pass2 = if NewPass =/= [] -> NewPass; true -> Pass end,
     connect([{password, Pass2}|EnvOpts]).
 
@@ -120,7 +115,7 @@ sql_query(#oraclient{conn_state=connected, timeouts={_Tout, ReadTout}} = State, 
         "PING" -> handle_req(tran, State, ?TTI_PING);
         "STOP" -> handle_req(stop, State, hd(Bind));
         "START" -> handle_req(spfp, State, []), handle_req(start, State, hd(Bind));
-        "CLOSE" -> disconnect(State, 1), {ok, [], State#oraclient{conn_state=disconnected}};
+        "CLOSE" -> send_req(close, State), handle_error(local, [], State);
         "CURRESET" -> send_req(reset, State), {ok, [], State};
         "TIMEOUT" -> {ok, [], State#oraclient{timeouts={hd(Bind), ReadTout}}};
         "FETCH" -> {ok, [], State#oraclient{fetch=hd(Bind)}};
@@ -179,9 +174,12 @@ handle_token(<<Token, Data/binary>>, State) ->
 
 handle_error(remote, Reason, State) ->
     {error, remote, Reason, State};
-handle_error(Type, Reason, State) ->
-    _ = disconnect(State, 0),
-    {error, Type, Reason, State#oraclient{conn_state=disconnected}}.
+handle_error(socket, Reason, State) ->
+    disconnect(State),
+    {error, socket, Reason, State#oraclient{conn_state=disconnected}};
+handle_error(local, Reason, State) ->
+    disconnect(State),
+    {ok, Reason, State#oraclient{conn_state=disconnected}}.
 
 handle_bind(Query, Bind) ->
     Ks = string:tokens(Query," \t\r\n;,()="),

@@ -52,18 +52,25 @@ handle_call({sql_query, Query, Tout}, _From, State) ->
         {error, Type, Reason, State2} ->
             {reply, {error, Type, Reason}, State2}
     catch
-        error:Reason ->
-            {reply, {error, local, Reason}, State}
+        error:_Reason ->
+            {stop, normal, State}
     end;
 handle_call(stop, _From, State) ->
-    {ok, _InitOpts} = jamdb_oracle_conn:disconnect(State, 1),
-    {stop, normal, ok, State};
+    try jamdb_oracle_conn:disconnect(State, 1) of
+        {ok, _Result} ->
+            {stop, normal, ok, State}
+    catch
+        error:_Reason ->
+            {stop, normal, State}
+    end;
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+handle_info(timeout, State) ->
+    {stop, normal, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 

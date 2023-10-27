@@ -83,7 +83,8 @@ defmodule Jamdb.Oracle do
 
   @impl true
   def disconnect(_err, %{pid: pid}) do
-    :jamdb_oracle.stop(pid) 
+    :jamdb_oracle.stop(pid)
+    :ok
   end
 
   @impl true
