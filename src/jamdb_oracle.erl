@@ -53,7 +53,7 @@ handle_call({sql_query, Query, Tout}, _From, State) ->
             {reply, {error, Type, Reason}, State2}
     catch
         error:_Reason ->
-            {stop, normal, ok, State}
+            {stop, normal, State}
     end;
 handle_call(stop, _From, State) ->
     try jamdb_oracle_conn:disconnect(State, 1) of
