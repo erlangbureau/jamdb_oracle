@@ -35,7 +35,6 @@ sql_query(Pid, Query) ->
 
 %% gen_server callbacks
 init(Opts) ->
-    erlang:process_flag(trap_exit, true),
     case jamdb_oracle_conn:connect(Opts) of
         {ok, State} ->
             {ok, State};
@@ -57,7 +56,13 @@ handle_call({sql_query, Query, Tout}, _From, State) ->
             {stop, normal, ok, State}
     end;
 handle_call(stop, _From, State) ->
-    {stop, normal, ok, State};
+    try jamdb_oracle_conn:disconnect(State, 1) of
+        {ok, _Result} ->
+            {stop, normal, ok, State}
+    catch
+        error:_Reason ->
+            {stop, normal, State}
+    end;
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -69,8 +74,7 @@ handle_info(timeout, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, State) ->
-    jamdb_oracle_conn:disconnect(State, 1),
+terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
