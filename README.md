@@ -61,7 +61,7 @@ configuration:
 
   * `:pool` - The connection pool module, defaults to `DBConnection.ConnectionPool`
   * `:pool_size` - The size of the pool, defaults to `1`
-  * `:idle_interval` - The ping interval to validate an idle connection, defaults to `1000`	
+  * `:idle_interval` - The ping interval to validate an idle connection, defaults to `5000`	
 
 ### Connection parameters
 

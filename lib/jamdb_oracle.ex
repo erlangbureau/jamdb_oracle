@@ -10,8 +10,9 @@ defmodule Jamdb.Oracle do
   use DBConnection
 
   @timeout 15_000
+  @idle_interval 5_000
 
-  defstruct [:pid, :mode, :cursors, :timeout]
+  defstruct [:pid, :mode, :cursors, :timeout, :idle_interval]
 
   @doc """
   Starts and links to a database connection process.
@@ -40,10 +41,10 @@ defmodule Jamdb.Oracle do
     * `:rows` - the result set as a list  
   """
   @spec query(conn :: any(), sql :: any(), params :: any()) ::
-    {:ok, any()} | {:error | :disconnect, any()}
+    {:ok | :cont, any()} | {:error | :disconnect, any()}
   def query(conn, sql, params \\ [])
   def query(%{pid: pid, timeout: timeout}, sql, params) do
-    case :jamdb_oracle.sql_query(pid, stmt(sql, params), timeout) do
+    case sql_query(pid, stmt(sql, params), timeout) do
       {:ok, [{:result_set, columns, _, rows}]} ->
         {:ok, %{num_rows: length(rows), rows: rows, columns: columns}}
       {:ok, [{:fetched_rows, _, _, _} = result]} -> {:cont, result}
@@ -51,11 +52,22 @@ defmodule Jamdb.Oracle do
       {:ok, [{:proc_result, _, msg}]} -> {:error, msg}
       {:ok, [{:affected_rows, num_rows}]} -> {:ok, %{num_rows: num_rows, rows: nil}}
       {:ok, result} -> {:ok, result}
-      {:error, _, err} -> {:disconnect, err}
+      {:error, err} -> {:disconnect, err}
     end
   end
   def query(pid, sql, params) when is_pid(pid) do
     query(%{pid: pid, timeout: @timeout}, sql, params)
+  end
+
+  defp sql_query(pid, query, timeout) do
+    try do
+      case :jamdb_oracle.sql_query(pid, query, timeout) do
+        {:ok, result} -> {:ok, result}
+        {:error, _, err} -> {:error, err}
+      end
+    catch
+      _, err -> {:error, err}
+    end
   end
 
   defp stmt({:fetch, sql, params}, _), do: {:fetch, sql, params}
@@ -68,22 +80,27 @@ defmodule Jamdb.Oracle do
     host = opts[:hostname] |> Jamdb.Oracle.to_list
     port = opts[:port]
     timeout = opts[:timeout] || @timeout
+    idle_interval = opts[:idle_interval] || @idle_interval
     user = opts[:username] |> Jamdb.Oracle.to_list
     password = opts[:password] |> Jamdb.Oracle.to_list
     database = opts[:database] |> Jamdb.Oracle.to_list
-    env = [host: host, port: port, timeout: timeout, user: user, password: password]
+    env = [host: host, port: port, user: user, password: password, timeout: timeout, idle_interval: idle_interval]
 	  ++ if( hd(database) == ?:, do: [sid: tl(database)], else: [service_name: database] )
     params = opts[:parameters] || []
     sock_opts = opts[:socket_options] || []
     case :jamdb_oracle.start_link(sock_opts ++ params ++ env) do
-      {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle, timeout: timeout}}
+      {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle, timeout: timeout, idle_interval: idle_interval}}
       {:error, err} -> {:error, error!(err)}
     end
   end
 
   @impl true
   def disconnect(_err, %{pid: pid}) do
-    :jamdb_oracle.stop(pid)
+    try do
+      :jamdb_oracle.stop(pid)
+    catch
+      _, _ -> :error
+    end
     :ok
   end
 
@@ -215,19 +232,18 @@ defmodule Jamdb.Oracle do
   end
 
   @impl true
-  def checkout(s) do
-    case query(s, 'SESSION') do
+  def checkout(%{pid: pid, timeout: timeout} = s) do
+    case sql_query(pid, 'SESSION', timeout) do
       {:ok, _} -> {:ok, s}
-      {:error, err} ->  {:disconnect, error!(err), s}
+      {:error, err} -> {:disconnect, error!(err), s}
     end
   end
 
   @impl true
-  def ping(s) do
-    case query(s, 'PING') do
+  def ping(%{pid: pid, timeout: timeout, idle_interval: idle_interval} = s) do
+    case sql_query(pid, 'PING', min(timeout, idle_interval)) do
       {:ok, _} -> {:ok, s}
       {:error, err} -> {:disconnect, error!(err), s}
-      {:disconnect, err} -> {:disconnect, error!(err), s}
     end
   end
 
