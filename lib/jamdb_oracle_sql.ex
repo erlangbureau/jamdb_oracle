@@ -9,7 +9,7 @@ defmodule Jamdb.Oracle.SQL do
   alias Ecto.Migration.{Table, Index, Reference, Constraint}
 
   def execute_ddl({command, %Table{} = table, columns}) when command in [:create, :create_if_not_exists] do
-    table_name = quote_table(table.prefix, table.name)
+    table_name = quote_object(table.prefix, table.name)
     [[if_do(command == :create_if_not_exists, :begin),
       "CREATE TABLE ", table_name, ?\s,
       ?(, column_definitions(table, columns), pk_definition(table, columns, ", "), ?),
@@ -19,12 +19,12 @@ defmodule Jamdb.Oracle.SQL do
 
   def execute_ddl({command, %Table{} = table, _}) when command in [:drop, :drop_if_exists] do
     [[if_do(command == :drop_if_exists, :begin),
-      "DROP TABLE ", quote_table(table.prefix, table.name),
+      "DROP TABLE ", quote_object(table.prefix, table.name),
       if_do(command == :drop_if_exists, :end)]]
   end
 
   def execute_ddl({:alter, %Table{} = table, changes}) do
-    table_name = quote_table(table.prefix, table.name)
+    table_name = quote_object(table.prefix, table.name)
     if_do = length(changes) > 1
     query =
       for change <- changes,
@@ -35,8 +35,8 @@ defmodule Jamdb.Oracle.SQL do
 
   def execute_ddl({command, %Index{} = index}) when command in [:create, :create_if_not_exists] do
     [[if_do(command == :create_if_not_exists, :begin),
-      "CREATE", if_do(index.unique, " UNIQUE"), " INDEX ", quote_name(index.name),
-      " ON ", quote_table(index.prefix, index.table), ?\s,
+      "CREATE", if_do(index.unique, " UNIQUE"), " INDEX ", quote_object(index.prefix, index.name),
+      " ON ", quote_object(index.prefix, index.table), ?\s,
       ?(, intersperse_map(index.columns, ", ", &index_expr/1), ?),
       if_do(index.concurrently, " ONLINE"), options_expr(index.options),
       if_do(command == :create_if_not_exists, :end)]]
@@ -44,34 +44,34 @@ defmodule Jamdb.Oracle.SQL do
 
   def execute_ddl({command, %Index{} = index, _}) when command in [:drop, :drop_if_exists] do
     [[if_do(command == :drop_if_exists, :begin),
-      "DROP INDEX ", quote_table(index.prefix, index.name),
+      "DROP INDEX ", quote_object(index.prefix, index.name),
       if_do(command == :drop_if_exists, :end)]]
   end
 
   def execute_ddl({:rename, %Table{} = current_table, %Table{} = new_table}) do
-    [["RENAME ", quote_table(nil, current_table.name), " TO ", quote_table(nil, new_table.name)]]
+    [["RENAME ", quote_object(nil, current_table.name), " TO ", quote_object(nil, new_table.name)]]
   end
 
   def execute_ddl({:rename, %Table{} = table, current_column, new_column}) do
-    [["ALTER TABLE ", quote_table(table.prefix, table.name), " RENAME COLUMN ",
-      quote_name(current_column), " TO ", quote_name(new_column)]]
+    [["ALTER TABLE ", quote_object(table.prefix, table.name), " RENAME COLUMN ",
+      quote_object(current_column), " TO ", quote_object(new_column)]]
   end
 
   def execute_ddl({:rename, %Index{} = current_index, new_name}) do
-    [["ALTER INDEX ", quote_name(current_index.name), " RENAME TO ", quote_name(new_name)]]
+    [["ALTER INDEX ", quote_object(current_index.name), " RENAME TO ", quote_object(new_name)]]
   end
 
   def execute_ddl({command, %Constraint{} = constraint}) when command in [:create, :create_if_not_exists] do
     [[if_do(command == :create_if_not_exists, :begin),
-      "ALTER TABLE ", quote_table(constraint.prefix, constraint.table),
-      " ADD CONSTRAINT ", quote_name(constraint.name), constraint_expr(constraint),
+      "ALTER TABLE ", quote_object(constraint.prefix, constraint.table),
+      " ADD CONSTRAINT ", quote_object(constraint.name), constraint_expr(constraint),
       if_do(command == :create_if_not_exists, :end)]]
   end
 
   def execute_ddl({command, %Constraint{} = constraint, _}) when command in [:drop, :drop_if_exists] do
     [[if_do(command == :drop_if_exists, :begin),
-      "ALTER TABLE ", quote_table(constraint.prefix, constraint.table),
-      " DROP CONSTRAINT ", quote_name(constraint.name),
+      "ALTER TABLE ", quote_object(constraint.prefix, constraint.table),
+      " DROP CONSTRAINT ", quote_object(constraint.name),
       if_do(command == :drop_if_exists, :end)]]
   end
 
@@ -81,7 +81,7 @@ defmodule Jamdb.Oracle.SQL do
     do: error!(nil, "keyword lists in execute are not supported")
 
   defp pk_definition(table, columns, prefix) do
-    constraint_name = quote_name("#{table.name}_pkey")
+    constraint_name = quote_object("#{table.name}_pkey")
     pks =
       for {_, name, _, opts} <- columns,
           opts[:primary_key],
@@ -98,14 +98,14 @@ defmodule Jamdb.Oracle.SQL do
 
     ["CONSTRAINT ", reference_name(ref, table, name), ?\s,
      "FOREIGN KEY (", quote_names(current_columns), ") REFERENCES ",
-     quote_table(ref.prefix || table.prefix, ref.table), ?(, quote_names(reference_columns), ?),
+     quote_object(ref.prefix || table.prefix, ref.table), ?(, quote_names(reference_columns), ?),
      reference_on_delete(ref.on_delete), validate(ref.validate)]
   end
 
   defp reference_name(%Reference{name: nil}, table, column),
-    do: quote_name("#{table.name}_#{column}_fkey")
+    do: quote_object("#{table.name}_#{column}_fkey")
   defp reference_name(%Reference{name: name}, _table, _column),
-    do: quote_name(name)
+    do: quote_object(name)
 
   defp reference_on_delete(:nilify_all), do: " ON DELETE SET NULL"
   defp reference_on_delete(:delete_all), do: " ON DELETE CASCADE"
@@ -116,7 +116,7 @@ defmodule Jamdb.Oracle.SQL do
 
   defp constraint_expr(%Reference{} = ref, table, name) do
     ["CONSTRAINT ", reference_name(ref, table, name), " REFERENCES ",
-     quote_table(ref.prefix || table.prefix, ref.table), ?(, quote_names([ref.column]), ?),
+     quote_object(ref.prefix || table.prefix, ref.table), ?(, quote_names([ref.column]), ?),
      reference_on_delete(ref.on_delete), validate(ref.validate)]
   end
 
@@ -128,7 +128,7 @@ defmodule Jamdb.Oracle.SQL do
   defp index_expr(literal) when is_binary(literal),
     do: literal
   defp index_expr(literal),
-    do: quote_name(literal)
+    do: quote_object(literal)
 
   defp options_expr(nil),
     do: []
@@ -165,7 +165,7 @@ defmodule Jamdb.Oracle.SQL do
   end
 
   defp column_change(_table, {:remove, name}),
-    do: ["DROP COLUMN ", quote_name(name)]
+    do: ["DROP COLUMN ", quote_object(name)]
   defp column_change(_table, {:remove, name, _type, opts}),
     do: ["DROP COLUMN ", column_source(name, opts)]
 
@@ -178,8 +178,8 @@ defmodule Jamdb.Oracle.SQL do
 
   defp column_source(name, opts) do
     case Keyword.fetch(opts, :source) do
-      {:ok, source} -> quote_name(source)
-      :error -> quote_name(name)
+      {:ok, source} -> quote_object(source)
+      :error -> quote_object(name)
     end
   end
 
@@ -349,22 +349,15 @@ defmodule Jamdb.Oracle.SQL do
   ## Helpers
 
   defp quote_names(names) do
-    intersperse_map(names, ?,, &quote_name/1)
+    intersperse_map(names, ?,, &quote_object/1)
   end
 
-  defp quote_name(name) when is_atom(name) do
-    quote_name(Atom.to_string(name))
-  end
-  defp quote_name(name) do
-    [name]
-  end
+  defp quote_object(nil, name),    do: quote_object(name)
+  defp quote_object(prefix, name), do: [quote_object(prefix), ?., quote_object(name)]
 
-  defp quote_table(nil, name),    do: quote_table(name)
-  defp quote_table(prefix, name), do: [quote_table(prefix), ?., quote_table(name)]
-
-  defp quote_table(name) when is_atom(name),
-    do: quote_table(Atom.to_string(name))
-  defp quote_table(name) do
+  defp quote_object(name) when is_atom(name),
+    do: quote_object(Atom.to_string(name))
+  defp quote_object(name) do
     [name]
   end
 
