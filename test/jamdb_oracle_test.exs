@@ -1139,7 +1139,7 @@ defmodule Jamdb.OracleTest do
 
     assert execute_ddl(create) == [
       """
-      CREATE INDEX posts_category_id_permalink_index ON foo.posts (category_id, permalink)
+      CREATE INDEX foo.posts_category_id_permalink_index ON foo.posts (category_id, permalink)
       """
       |> remove_newlines
     ]
@@ -1151,7 +1151,7 @@ defmodule Jamdb.OracleTest do
 
     assert execute_ddl(create) == [
       """
-      BEGIN EXECUTE IMMEDIATE 'CREATE INDEX posts_category_id_permalink_index ON foo.posts (category_id, permalink)';
+      BEGIN EXECUTE IMMEDIATE 'CREATE INDEX foo.posts_category_id_permalink_index ON foo.posts (category_id, permalink)';
       EXCEPTION WHEN OTHERS THEN NULL; END;
       """
       |> remove_newlines
