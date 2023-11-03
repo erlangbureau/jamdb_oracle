@@ -88,7 +88,7 @@ defmodule Jamdb.Oracle do
 	  ++ if( hd(database) == ?:, do: [sid: tl(database)], else: [service_name: database] )
     params = opts[:parameters] || []
     sock_opts = opts[:socket_options] || []
-    case :jamdb_oracle.start(sock_opts ++ params ++ env) do
+    case :jamdb_oracle.start_link(sock_opts ++ params ++ env) do
       {:ok, pid} -> {:ok, %Jamdb.Oracle{pid: pid, mode: :idle, timeout: timeout, idle_interval: idle_interval}}
       {:error, err} -> {:error, error!(err)}
     end
