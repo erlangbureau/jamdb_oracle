@@ -41,7 +41,7 @@ defmodule Jamdb.Oracle do
     * `:rows` - the result set as a list  
   """
   @spec query(conn :: any(), sql :: any(), params :: any()) ::
-    {:ok | :cont, any()} | {:error | :disconnect, any()}
+    {:ok | :cont, any(), new_state :: any()} | {:error | :disconnect, any(), new_state :: any()}
   def query(conn, sql, params \\ [])
   def query(%{conn: conn, timeout: timeout} = s, sql, params) do
     case sql_query(conn, stmt(sql, params), timeout) do
