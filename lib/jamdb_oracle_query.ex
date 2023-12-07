@@ -42,7 +42,7 @@ defmodule Jamdb.Oracle.Query do
 
     {rows, where} =
       if select do
-        {[insert_all(query, 0)], []}
+        {[?(, all(query), ?)], []}
       else
         {from, name} = get_source(query, sources, 0, source)
         {[from, ?\s, name], where(%{query | wheres: query.wheres}, sources)}
@@ -61,7 +61,7 @@ defmodule Jamdb.Oracle.Query do
 
     {rows, where} =
       if select do
-        {[insert_all(query, 0)], []}
+        {[?(, all(query), ?)], []}
       else
         {from, name} = get_source(query, sources, 0, from)
         {[from, ?\s, name], where(%{query | wheres: query.wheres}, sources)}
@@ -73,7 +73,7 @@ defmodule Jamdb.Oracle.Query do
   @doc false
   def insert(prefix, table, header, rows, _on_conflict, returning, placeholders \\ []) do
     counter_offset = length(placeholders) + 1
-	from = insert_all(rows, counter_offset)
+    from = insert_all(rows, counter_offset)
     values =
       if header == [] do
         [?\s | from]
@@ -85,7 +85,7 @@ defmodule Jamdb.Oracle.Query do
   end
 
   defp insert_all(query = %Ecto.Query{}, _counter) do
-    [?(, all(query), ?)]
+    [all(query)]
   end
 
   defp insert_all(rows, counter) do
