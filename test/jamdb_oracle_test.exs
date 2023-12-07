@@ -854,13 +854,13 @@ defmodule Jamdb.OracleTest do
     subquery = from(s in "schema", select: %{ foo: fragment("3"), bar: s.bar }) |> plan(:all)
 
     query = insert(nil, "schema", [:foo, :bar], subquery, {:raise, [], []}, [:foo])
-    assert query == ~s{INSERT INTO schema (foo,bar) (SELECT 3, s0.bar FROM schema s0) RETURN foo INTO :foo}
+    assert query == ~s{INSERT INTO schema (foo,bar) SELECT 3, s0.bar FROM schema s0 RETURN foo INTO :foo}
 
     query = insert(nil, "schema", [], subquery, {:raise, [], []}, [])
-    assert query == ~s{INSERT INTO schema (SELECT 3, s0.bar FROM schema s0)}
+    assert query == ~s{INSERT INTO schema SELECT 3, s0.bar FROM schema s0}
 
     query = insert("prefix", "schema", [], subquery, {:raise, [], []}, [])
-    assert query == ~s{INSERT INTO prefix.schema (SELECT 3, s0.bar FROM schema s0)}
+    assert query == ~s{INSERT INTO prefix.schema SELECT 3, s0.bar FROM schema s0}
   end
 
   test "update" do
