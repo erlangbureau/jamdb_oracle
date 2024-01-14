@@ -140,8 +140,28 @@ block_encrypt(Cipher, Key, Ivec, Data) ->
 block_decrypt(Cipher, Key, Ivec, Data) ->
     crypto:crypto_one_time(Cipher, Key, Ivec, Data, false).
 
-pbkdf2(Type, MacLength, Count, Length, Pass, Salt) ->
-    pubkey_pbe:pbdkdf2(Pass, Salt, Count, Length, fun pbdkdf2_hmac/4, Type, MacLength).
+%pbkdf2(Type, MacLength, Count, Length, Pass, Salt) ->
+%    pubkey_pbe:pbdkdf2(Pass, Salt, Count, Length, fun pbdkdf2_hmac/4, Type, MacLength).
 
-pbdkdf2_hmac(Type, Key, Data, MacLength) ->
-    crypto:macN(hmac, Type, Key, Data, MacLength).
+%pbdkdf2_hmac(Type, Key, Data, MacLength) ->
+%    crypto:macN(hmac, Type, Key, Data, MacLength).
+
+pbkdf2(Type, MacLength, Count, Length, Pass, Salt) ->
+    Mac = fun(Key, Data) -> crypto:macN(hmac, Type, Key, Data, MacLength) end,
+    pbkdf2(Mac, 1, 1, Count, Length, Pass, Salt, <<>>).
+
+pbkdf2(Mac, Reps, Reps, Count, Length, Pass, Salt, Acc) ->
+    DerivedKey = << Acc/binary, (pbkdf2_exor(Mac, Pass, Salt, 1, Count, Reps, <<>>, <<>>))/binary >>,
+    binary:part(DerivedKey, 0, Length);
+pbkdf2(Mac, Num, Reps, Count, Length, Pass, Salt, Acc) ->
+    pbkdf2(Mac, Num + 1, Reps, Count, Length, Pass, Salt,
+    << Acc/binary, (pbkdf2_exor(Mac, Pass, Salt, 1, Count, Num, <<>>, <<>>))/binary >>).
+
+pbkdf2_exor(_Mac, _Pass, _Salt, I, Count, _Num, _Prev, Acc) when I > Count ->
+    Acc;
+pbkdf2_exor(Mac, Pass, Salt, I = 1, Count, Num, <<>>, <<>>) ->
+    Next = Mac(Pass, << Salt/binary, Num:1/integer-unit:32 >>),
+    pbkdf2_exor(Mac, Pass, Salt, I + 1, Count, Num, Next, Next);
+pbkdf2_exor(Mac, Pass, Salt, I, Count, Num, Prev, Acc) ->
+    Next = Mac(Pass, Prev),
+    pbkdf2_exor(Mac, Pass, Salt, I + 1, Count, Num, Next, crypto:exor(Next, Acc)).
