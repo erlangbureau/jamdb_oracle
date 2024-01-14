@@ -553,7 +553,7 @@ lnxfmt([I|L]) when I band 128 =:= 0 ->
 lnxfmt([I|L]) ->
     {1, [((I band 127) - 65)|[ N-1 || N <- L]]}.
 
-lsc(I, 0) when I-trunc(I) =:= 0.0 -> trunc(I);
+lsc(I, 0) when I-trunc(I) =:= +0.0 -> trunc(I);
 lsc(I, 0) -> I;
 lsc(I, _S) -> I / 1.
 
