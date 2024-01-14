@@ -418,7 +418,7 @@ encode_chr(Data,Acc) ->
     Length = byte_size(Data),
     <<Acc/binary, Length, Data:Length/binary, 0>>.
 
-encode_number(0.0) -> <<128>>;
+encode_number(+0.0) -> <<128>>;
 encode_number(0) -> <<128>>;
 encode_number(Data) when is_integer(Data) ->
     list_to_binary([<<B>> || B <- lnxfmt(lnxmin(abs(Data),1,[]), Data)]);
