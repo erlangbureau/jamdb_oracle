@@ -10,6 +10,12 @@ defmodule Jamdb.Oracle.Mixfile do
      deps: deps()]
   end
 
+  def application do
+    [
+      extra_applications: [:crypto, :public_key]
+    ]
+  end
+
   defp deps do
     [
       {:ecto_sql, "~> 3.8"}
