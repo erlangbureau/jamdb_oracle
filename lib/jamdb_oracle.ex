@@ -381,6 +381,7 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
     do: parse_offset(1, hour, min)
   defp parse_offset(<<?-, hour::2-bytes, ?:, min::2-bytes, _rest::binary>>),
     do: parse_offset(-1, hour, min)
+  defp parse_offset(_tz), do: 0
 
   defp parse_offset(sign, hour, min) do
     with {hour, ""} when hour < 24 <- Integer.parse(hour),
