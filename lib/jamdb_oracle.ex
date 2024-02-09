@@ -1,5 +1,5 @@
 defmodule Jamdb.Oracle do
-  @vsn "0.5.8"
+  @vsn "0.5.9"
   @moduledoc """
   Adapter module for Oracle. `DBConnection` behaviour implementation.
 
@@ -326,13 +326,13 @@ defimpl DBConnection.Query, for: Jamdb.Oracle.Query do
   defp encode(true), do: [49]
   defp encode(false), do: [48]
   defp encode(%Decimal{} = decimal), do: Decimal.to_float(decimal)
-  defp encode(%DateTime{microsecond: {0, 0}, zone_abbr: "UTC"} = datetime) do
+  defp encode(%DateTime{microsecond: {0, 0}, utc_offset: utc_offset, zone_abbr: "UTC"} = datetime) do
     {date, {hour, min, sec}} = NaiveDateTime.to_erl(DateTime.to_naive(datetime))
-    {date, {hour, min, sec, 0}, 28}
+    {date, {hour, min, sec, 0}, utc_offset}
   end
-  defp encode(%DateTime{microsecond: {ms, _}, zone_abbr: "UTC"} = datetime) do
+  defp encode(%DateTime{microsecond: {ms, _}, utc_offset: utc_offset, zone_abbr: "UTC"} = datetime) do
     {date, {hour, min, sec}} = NaiveDateTime.to_erl(DateTime.to_naive(datetime))
-    {date, {hour, min, sec, ms}, 28}
+    {date, {hour, min, sec, ms}, utc_offset}
   end
   defp encode(%NaiveDateTime{microsecond: {0, 0}} = naive),
     do: NaiveDateTime.to_erl(naive)
