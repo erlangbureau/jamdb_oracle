@@ -570,13 +570,13 @@ decode_date(<<Century,Year,Mon,Day,Hour,Min,Sec>>) ->
     {{(Century - 100) * 100 + (Year - 100),(Mon),(Day)},
      {(Hour - 1),(Min - 1),(Sec - 1)}};
 decode_date(<<Data:7/binary,Ms:4/integer-unit:8>>) ->
-    {Date,{Hour,Min,Sec}} = decode_date(Data),
-    {Date,{Hour,Min,Sec + Ms / 1.0e9}};
-decode_date(<<Data:7/binary,_Ms:4/integer-unit:8,H,M>>) when H band 128 =:= 0 ->
+    {D, {Hour,Min,Sec}} = decode_date(Data),
+    {D, {Hour,Min,Sec + Ms / 1.0e9}};
+decode_date(<<Data:7/binary,Ms:4/integer-unit:8,H,M>>) when H band 128 =:= 0 ->
     Offset = (H - 20) * 3600 + (M - 60) * 60,
     Secs = calendar:datetime_to_gregorian_seconds(decode_date(Data)),
-    {D, T} = calendar:gregorian_seconds_to_datetime(Secs + Offset),
-    erlang:append_element({D, T}, ltz(H - 20, M - 60));
+    {D, {Hour,Min,Sec}} = calendar:gregorian_seconds_to_datetime(Secs + Offset),
+    erlang:append_element({D, {Hour,Min,Sec + Ms / 1.0e9}}, ltz(H - 20, M - 60));
 decode_date(<<Data:11/binary,H,M>>) ->
     Zoneid = ((H band 127) bsl 6) + ((M band 252) bsr 2),
     erlang:append_element(decode_date(Data),
