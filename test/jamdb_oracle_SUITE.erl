@@ -242,7 +242,7 @@ t_timestamp_tz(Config) ->
     Key = <<"C_TIMESTAMP">>,
     TestCases = [
         {null, null},
-        {{date, "to_timestamp_tz('2016-08-01 02:02:03.456 +01:00 ','YYYY-MM-DD HH24:MI:SS.FF TZH:TZM')"}, {{2016,8,1},{1,2,3.456},"+01:00"}}
+        {{date, "to_timestamp_tz('2016-08-01 01:02:03.456 +01:00 ','YYYY-MM-DD HH24:MI:SS.FF TZH:TZM')"}, {{2016,8,1},{1,2,3.456},"+01:00"}}
     ],
     run_testcases(ConnRef, Table, Key, TestCases).
 

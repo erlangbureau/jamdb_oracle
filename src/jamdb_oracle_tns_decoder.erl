@@ -570,34 +570,43 @@ decode_date(<<Century,Year,Mon,Day,Hour,Min,Sec>>) ->
     {{(Century - 100) * 100 + (Year - 100),(Mon),(Day)},
      {(Hour - 1),(Min - 1),(Sec - 1)}};
 decode_date(<<Data:7/binary,Ms:4/integer-unit:8>>) ->
-    {Date,{Hour,Min,Sec}} = decode_date(Data),
-    {Date,{Hour,Min,Sec + Ms / 1.0e9}};
-decode_date(<<Data:11/binary,H,M>>) ->
-    erlang:append_element(decode_date(Data),
-    case (H band -128) of
-        0 -> ltz(H - 20);
-        _ ->
-            Zoneid = ((H band 127) bsl 6) + ((M band 252) bsr 2),
-            try lists:nth(Zoneid, [0,-14,-13,-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,1,2,3,4,5,6,7,8,9,10,11,12]) of
-                Hour -> ltz(Hour)
-            catch
-                error:_ -> case proplists:get_value(Zoneid, ?ZONEIDMAP) of
-                               undefined -> {Zoneid};
-                               {Region, Zone} -> lists:nth(Region, ?REGION)++"/"++Zone
-                           end
-            end
-    end).
+    {D, {Hour,Min,Sec}} = decode_date(Data),
+    {D, {Hour,Min,Sec + Ms / 1.0e9}};
+decode_date(<<Data:7/binary,Ms:4/integer-unit:8,H,M>>) when H band 128 =:= 0 ->
+    Offset = (H - 20) * 3600 + (M - 60) * 60,
+    {D, {Hour,Min,Sec}} = decode_date(Data, Offset),
+    erlang:append_element({D, {Hour,Min,Sec + Ms / 1.0e9}}, ltz(H - 20, M - 60));
+decode_date(<<Data:7/binary,Ms:4/integer-unit:8,H,M>>) ->
+    case ((H band 127) bsl 6) + ((M band 252) bsr 2) of
+        I when I > 0, I < 28 ->
+            S = lists:nth(I, [0,14,13,12,11,10,9,8,7,6,5,4,3,2,1,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11,-12]),
+            Offset = S * 3600,
+            {D, {Hour,Min,Sec}} = decode_date(Data, Offset),
+            erlang:append_element({D, {Hour,Min,Sec + Ms / 1.0e9}}, ltz(S, 0));
+        Zoneid ->
+            erlang:append_element(decode_date(<<Data:7/binary,Ms:4/integer-unit:8>>),
+            case proplists:get_value(Zoneid, ?ZONEIDMAP) of
+                undefined -> {Zoneid};
+                {Region, Zone} -> lists:nth(Region, ?REGION)++"/"++Zone
+            end)
+    end.
+
+decode_date(Data, Offset) ->
+    Secs = calendar:datetime_to_gregorian_seconds(decode_date(Data)),
+    calendar:gregorian_seconds_to_datetime(Secs + Offset).
 
 decode_interval(<<Year:4/integer-unit:8,Mon>>) ->
     lym(Year - 2147483648, Mon - 60);
 decode_interval(<<Day:4/integer-unit:8,Hour,Min,Sec,Ms:4/integer-unit:8>>) ->
     lds(Day - 2147483648, Hour - 60, Min - 60, Sec - 60, (Ms - 2147483648) / 1.0e9).
 
-ltz(I) when I < 0 -> ltz(abs(I), "-");
-ltz(I) -> ltz(abs(I), "+").
+ltz(I, M) when I < 0 -> ltz(abs(I), abs(M), "-");
+ltz(I, M) -> ltz(abs(I), abs(M), "+").
 
-ltz(I, S) when I < 10 -> S++"0"++integer_to_list(I)++":00";
-ltz(I, S) -> S++integer_to_list(I)++":00".
+ltz(I, 0, S) when I < 10 -> S++"0"++integer_to_list(I)++":00";
+ltz(I, 0, S) -> S++integer_to_list(I)++":00";
+ltz(I, M, S) when I < 10 -> S++"0"++integer_to_list(I)++":"++integer_to_list(M);
+ltz(I, M, S) -> S++integer_to_list(I)++":"++integer_to_list(M).
 
 lym(I, M) when I < 0; M < 0 -> "-"++lym(abs(I), abs(M));
 lym(I, M) -> integer_to_list(abs(I))++"-"++integer_to_list(abs(M)).
@@ -728,5 +737,5 @@ decode_long(Data) ->
     {Value, decode_next(ub2,A,2)}.
 
 decode_helper(param, Data, Format) -> decode_token(oac, ?ENCODER:encode_token(oac, Data, Format));
-decode_helper(tz, Data, _) -> ltz(Data);
+decode_helper(tz, Data, _) -> ltz(Data, 0);
 decode_helper(dump, Data, DataType) -> decode_value(Data, DataType).

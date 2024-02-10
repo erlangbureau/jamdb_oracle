@@ -466,7 +466,11 @@ lnxfmt([I|L], Data) when Data < 0 ->
 encode_date({{Year,Mon,Day}, {Hour,Min,Sec,Ms}, Offset}) when is_integer(Offset) ->
     Secs = calendar:datetime_to_gregorian_seconds({{Year,Mon,Day}, {Hour,Min,Sec}}),
     {D, T} = calendar:gregorian_seconds_to_datetime(Secs - Offset),
-    <<(encode_date({D, erlang:append_element(T,Ms)}))/binary, (Offset div 3600 + 20), 60>>;
+    <<
+    (encode_date({D, erlang:append_element(T,Ms)}))/binary,
+    (Offset div 3600 + 20),
+    (Offset rem 3600 div 60 + 60)
+    >>;
 encode_date({Year,Mon,Day}) ->
     encode_date({{Year,Mon,Day}, {0,0,0}});
 encode_date({{Year,Mon,Day}, {Hour,Min,Sec,Ms}}) ->
