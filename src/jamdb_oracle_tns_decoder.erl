@@ -574,20 +574,26 @@ decode_date(<<Data:7/binary,Ms:4/integer-unit:8>>) ->
     {D, {Hour,Min,Sec + Ms / 1.0e9}};
 decode_date(<<Data:7/binary,Ms:4/integer-unit:8,H,M>>) when H band 128 =:= 0 ->
     Offset = (H - 20) * 3600 + (M - 60) * 60,
-    Secs = calendar:datetime_to_gregorian_seconds(decode_date(Data)),
-    {D, {Hour,Min,Sec}} = calendar:gregorian_seconds_to_datetime(Secs + Offset),
+    {D, {Hour,Min,Sec}} = decode_date(Data, Offset),
     erlang:append_element({D, {Hour,Min,Sec + Ms / 1.0e9}}, ltz(H - 20, M - 60));
-decode_date(<<Data:11/binary,H,M>>) ->
-    Zoneid = ((H band 127) bsl 6) + ((M band 252) bsr 2),
-    erlang:append_element(decode_date(Data),
-    try lists:nth(Zoneid, [0,-14,-13,-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,1,2,3,4,5,6,7,8,9,10,11,12]) of
-        Hour -> ltz(Hour, 0)
-    catch
-        error:_ -> case proplists:get_value(Zoneid, ?ZONEIDMAP) of
-                       undefined -> {Zoneid};
-                       {Region, Zone} -> lists:nth(Region, ?REGION)++"/"++Zone
-                   end
-    end).
+decode_date(<<Data:7/binary,Ms:4/integer-unit:8,H,M>>) ->
+    case ((H band 127) bsl 6) + ((M band 252) bsr 2) of
+        I when I > 0, I < 28 ->
+            S = lists:nth(I, [0,14,13,12,11,10,9,8,7,6,5,4,3,2,1,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11,-12]),
+            Offset = S * 3600,
+            {D, {Hour,Min,Sec}} = decode_date(Data, Offset),
+            erlang:append_element({D, {Hour,Min,Sec + Ms / 1.0e9}}, ltz(S, 0));
+        Zoneid ->
+            erlang:append_element(decode_date(<<Data:7/binary,Ms:4/integer-unit:8>>),
+            case proplists:get_value(Zoneid, ?ZONEIDMAP) of
+                undefined -> {Zoneid};
+                {Region, Zone} -> lists:nth(Region, ?REGION)++"/"++Zone
+            end)
+    end.
+
+decode_date(Data, Offset) ->
+    Secs = calendar:datetime_to_gregorian_seconds(decode_date(Data)),
+    calendar:gregorian_seconds_to_datetime(Secs + Offset).
 
 decode_interval(<<Year:4/integer-unit:8,Mon>>) ->
     lym(Year - 2147483648, Mon - 60);
