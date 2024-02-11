@@ -463,18 +463,6 @@ lnxfmt([I|L], Data) when Data > 0 ->
 lnxfmt([I|L], Data) when Data < 0 ->
     [(I+192+1 bxor 255)|[ 101-N || N <- L]]++[102].
 
-encode_date({{Year,Mon,Day}, {Hour,Min,Sec,Ms}, Offset}) when is_integer(Offset) ->
-    Secs = calendar:datetime_to_gregorian_seconds({{Year,Mon,Day}, {Hour,Min,Sec}}),
-    {D, T} = calendar:gregorian_seconds_to_datetime(Secs - Offset),
-    <<
-    (encode_date({D, erlang:append_element(T,Ms)}))/binary,
-    (Offset div 3600 + 20),
-    (Offset rem 3600 div 60 + 60)
-    >>;
-encode_date({Year,Mon,Day}) ->
-    encode_date({{Year,Mon,Day}, {0,0,0}});
-encode_date({{Year,Mon,Day}, {Hour,Min,Sec,Ms}}) ->
-    <<(encode_date({{Year,Mon,Day}, {Hour,Min,Sec}}))/binary, (Ms * 1000):4/integer-unit:8>>;
 encode_date({{Year,Mon,Day}, {Hour,Min,Sec}}) ->
     <<
     (Year div 100 + 100),
@@ -484,7 +472,29 @@ encode_date({{Year,Mon,Day}, {Hour,Min,Sec}}) ->
     (Hour + 1),
     (Min + 1),
     (Sec + 1)
-    >>.
+    >>;
+encode_date({{Year,Mon,Day}, {Hour,Min,Sec,Ms}}) ->
+    <<(encode_date({{Year,Mon,Day}, {Hour,Min,Sec}}))/binary, (Ms * 1000):4/integer-unit:8>>;
+encode_date({Year,Mon,Day}) when is_integer(Year)  ->
+    encode_date({{Year,Mon,Day}, {0,0,0}});
+encode_date({{Year,Mon,Day}, {Hour,Min,Sec,Ms}, Offset}) when is_integer(Offset) ->
+    Secs = calendar:datetime_to_gregorian_seconds({{Year,Mon,Day}, {Hour,Min,Sec}}),
+    {D, T} = calendar:gregorian_seconds_to_datetime(Secs - Offset),
+    {H, M} = {(Offset div 3600 + 20), (Offset rem 3600 div 60 + 60)},
+    <<(encode_date({D, erlang:append_element(T,Ms)}))/binary,H,M>>;
+encode_date({{Year,Mon,Day}, {Hour,Min,Sec,Ms}, Data}) when is_list(Data) ->
+    Zoneid = get_key(list_to_binary(Data), ?ZONEIDMAP),
+    {D, T} = {{Year,Mon,Day}, {Hour,Min,Sec}},
+    {H, M} = {((Zoneid band 8128) bsr 6) bor 128, ((Zoneid band 63) bsl 2)},
+    <<(encode_date({D, erlang:append_element(T,Ms)}))/binary,H,M>>.
+
+get_key(Data, [{Key, {_,Value}} | M]) ->
+    case binary:match(Data,list_to_binary(Value)) of
+        nomatch -> get_key(Data, M);
+        _ -> Key
+    end;
+get_key(Data, [_|M]) -> get_key(Data, M);
+get_key(_Data, []) -> 28.
 
 encode_helper(type, Data) ->
     {lists:member(Data, ["SELECT", "WITH"]), lists:member(Data, ["INSERT", "UPDATE", "DELETE", "MERGE"])};
