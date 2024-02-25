@@ -128,26 +128,26 @@ loop(Values) ->
 %% internal
 handle_login(#oraclient{socket=Socket, env=Env, sdu=Length, timeouts=Touts} = State) ->
     case recv(Socket, Length, Touts) of
-        {ok, ?TNS_DATA, BinaryData} ->
-            case handle_token(BinaryData, State) of
+        {ok, ?TNS_DATA, Data} ->
+            case handle_token(Data, State) of
                 {ok, State2} -> handle_login(State2);
                 State2 -> {ok, State2}                  %connected
             end;
-        {ok, ?TNS_REDIRECT, BinaryData} ->
-            {ok, Opts} = ?DECODER:decode_token(net, {BinaryData, Env}),
-            reconnect(State#oraclient{env=Opts});
-        {ok, ?TNS_RESEND, _BinaryData} ->
+        {ok, ?TNS_RESEND, _Data} ->
             {ok, Socket2} = sock_renegotiate(Socket, Env, Touts),
             {ok, State2} = send_req(login, State#oraclient{socket=Socket2}),
             handle_login(State2);
-        {ok, ?TNS_ACCEPT, <<_Ver:16,_Opts:16,Sdu:16,_Rest/bits>> = _BinaryData} ->
+        {ok, ?TNS_ACCEPT, <<_Ver:16,_Opts:16,Sdu:16,_Rest/bits>>} ->
             Task = spawn(fun() -> loop(0) end),
             {ok, State2} = send_req(pro, State#oraclient{seq=Task,sdu=Sdu}),
             handle_login(State2);
-        {ok, ?TNS_MARKER, _BinaryData} ->
+        {ok, ?TNS_MARKER, _Data} ->
             handle_req(marker, State, []);
-        {ok, ?TNS_REFUSE, _BinaryData} ->
-            handle_error(local, Env, State);
+        {ok, ?TNS_REDIRECT, <<_Length:16,_Bin:80,Rest/bits>>} ->
+            {ok, Opts} = ?DECODER:decode_token(net, {Rest, Env}),
+            reconnect(State#oraclient{env=Opts});
+        {ok, ?TNS_REFUSE, <<_Bin:16,_Length:16,Rest/bits>>} ->
+            handle_error(local, binary_to_list(Rest), State);
         {error, Type, Reason} ->
             handle_error(Type, Reason, State)
     end.
@@ -432,15 +432,13 @@ recv(Socket, Length, {Tout, _ReadTout} = Touts, Acc, Data) ->
     case ?DECODER:decode_packet(Acc, Length) of
         {ok, ?TNS_MARKER, <<1,0,1>>, _Rest} ->
             recv(read_timeout, Socket, Length, Touts, <<>>, <<>>);
-        {ok, ?TNS_MARKER, <<1,0,2>>, _Rest} ->
-            {ok, ?TNS_MARKER, <<>>};
         {ok, Type, PacketBody, <<>>} ->
             {ok, Type, <<Data/bits, PacketBody/bits>>};
         {ok, _Type, PacketBody, Rest} ->
             recv(Socket, Length, Touts, Rest, <<Data/bits, PacketBody/bits>>);
-        {error, more, PacketBody, <<>>} ->
+        {more, _Type, PacketBody, <<>>} ->
             recv(read_timeout, Socket, Length, Touts, <<>>, <<Data/bits, PacketBody/bits>>);
-        {error, more, PacketBody, Rest} ->
+        {more, _Type, PacketBody, Rest} ->
             recv(Socket, Length, Touts, Rest, <<Data/bits, PacketBody/bits>>);
         {error, more} ->
             recv(read_timeout, Socket, Length, Touts, Acc, Data);
