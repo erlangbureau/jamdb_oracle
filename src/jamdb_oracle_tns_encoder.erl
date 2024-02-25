@@ -15,7 +15,7 @@ encode_packet(?TNS_DATA, Data, Length) ->
     BodySize = Length - 10,
     case Data of
         <<PacketBody:BodySize/binary, Rest/bits>> when PacketSize > Length ->
-            {<<Length:16, 0:16, ?TNS_DATA:8, 0:8, 0:16, 0:8, 32:8, PacketBody/binary>>, Rest};
+            {<<Length:16, 0:16, ?TNS_DATA:8, 0:8, 0:16, 32:16, PacketBody/binary>>, Rest};
         _ ->  {<<PacketSize:16, 0:16, ?TNS_DATA:8, 0:8, 0:16, 0:16, Data/binary>>, <<>>}
     end;
 encode_packet(Type, Data, _Length) ->
