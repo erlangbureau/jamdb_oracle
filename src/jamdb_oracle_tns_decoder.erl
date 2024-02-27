@@ -29,7 +29,7 @@ decode_packet(<<PacketSize:16, _PacketFlags:16, Type, _Flags:8, 0:16, Rest/bits>
             {error, more}
     end;
 decode_packet(_,_) ->
-    {error, socket}.
+    {error, more}.
 
 decode_token(<<Token, Data/binary>>, Acc) ->
     case Token of
