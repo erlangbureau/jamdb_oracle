@@ -45,7 +45,7 @@ connect(Opts, Tout) ->
     ReadTout    = proplists:get_value(read_timeout, Opts, ?DEF_READ_TIMEOUT),
     Cset        = proplists:get_value(charset, Opts, utf8),
     Charset     = proplists:get_value(Cset, ?CHARSET, ?UTF8_CHARSET),
-    SockOpts = [binary, {active, false}, {packet, raw}, %{recbuf, 65535},
+    SockOpts = [binary, {active, false}, {packet, raw},
             {nodelay, true}, {keepalive, true}]++SocketOpts,
     Desc        = proplists:get_value(description, Opts, []),
     Pass        = proplists:get_value(password, Opts),
@@ -55,6 +55,8 @@ connect(Opts, Tout) ->
     case gen_tcp:connect(Host, Port, SockOpts, Tout) of
         {ok, Socket} ->
             {ok, Socket2} = sock_connect(Socket, SslOpts, Tout),
+            {ok, [{recbuf, RecBuf}]} = inet:getopts(Socket2, [recbuf]),
+            inet:setopts(Socket2, [{buffer, RecBuf}]),
             State = #oraclient{socket=Socket2, env=EnvOpts, passwd=Passwd, auth=Desc,
             auto=Auto, fetch=Fetch, sdu=Sdu, charset=Charset, timeouts={Tout, ReadTout}},
             {ok, State2} = send_req(login, State),
