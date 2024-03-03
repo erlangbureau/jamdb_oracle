@@ -104,8 +104,8 @@ sql_query(#oraclient{conn_state=connected} = State, {fetch, Cursor, RowFormat, L
     handle_resp({Cursor, RowFormat, [LastRow]}, State2);
 sql_query(#oraclient{conn_state=connected} = State, {Query, Bind, Batch, Fetch}) ->
     {ok, State2} = send_req(exec, State, {Query, Bind, Batch}),
-    #oraclient{server=Ver, defcols=DefCol, params=RowFormat, type=Type} = State2,
-    handle_resp(get_param(defcols, {DefCol, Ver, RowFormat, Type}),
+    #oraclient{defcols=DefCol, params=RowFormat, type=Type} = State2,
+    handle_resp(get_param(defcols, {DefCol, RowFormat, Type}),
     State2#oraclient{type=get_param(type, {Type, Fetch})});
 sql_query(#oraclient{conn_state=connected, timeouts={_Tout, ReadTout}} = State, {Query, Bind}) ->
     case lists:nth(1, string:tokens(string:to_upper(Query)," \t;")) of
@@ -276,7 +276,7 @@ handle_resp(Acc, #oraclient{socket=Socket, sdu=Length, timeouts=Touts} = State) 
     end.
 
 handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
-    case ?DECODER:decode_token(Data, Acc) of
+    case ?DECODER:decode_two_task(Data, Acc) of
         {0, _RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->
             Type2 = if LCursor =:= Cursor -> Type; true -> cursor end,
             {ok, State2} = send_req(fetch, State, {Cursor, RowFormat}),
@@ -366,11 +366,9 @@ get_param(defcols, {Sum, Cursors}) when is_pid(Cursors) ->
     {Sum, proplists:get_value(Sum, Acc, {0,0,[]})};
 get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) when LCursor =:= Cursor -> {LCursor, 0};
 get_param(defcols, {_Sum, {LCursor, Cursor, _RowFormat}}) -> {LCursor, Cursor};
-get_param(defcols, {{_Sum, {LCursor, Cursor, _RowFormat}}, Ver, RowFormat, Type}) when LCursor =:= 0; LCursor =/= Cursor ->
-    {Ver, RowFormat, Type};
-get_param(defcols, {{_Sum, {_LCursor, _Cursor, RowFormat}}, Ver, _RowFormat, Type}) when Type =/= select ->
-    {Ver, RowFormat, Type};
-get_param(defcols, {{_Sum, {LCursor, _Cursor, RowFormat}}, _Ver, _RowFormat, Type}) ->
+get_param(defcols, {{_Sum, {LCursor, Cursor, _RowFormat}}, RowFormat, Type}) when LCursor =:= 0; LCursor =/= Cursor ->
+    {0, RowFormat, Type};
+get_param(defcols, {{_Sum, {LCursor, _Cursor, RowFormat}}, _RowFormat, Type}) ->
     {LCursor, RowFormat, Type};
 get_param(type, {true, false, [], Fetch}) -> {select, Fetch};
 get_param(type, {false, true, [], _Fetch}) -> {change, 0};

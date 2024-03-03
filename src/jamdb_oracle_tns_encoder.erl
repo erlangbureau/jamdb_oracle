@@ -167,8 +167,7 @@ encode_record(dty, #oraclient{charset=Charset}) ->
 encode_record(pro, _EnvOpts) ->
     <<
     ?TTI_PRO,
-    6,5,4,3,2,1,0,
-    98,101,97,109,0
+    6,0,98,101,97,109,0
     >>;
 encode_record(spfp, #oraclient{seq=Tseq}) ->
     <<
@@ -202,7 +201,7 @@ encode_record(fetch, #oraclient{fetch=Fetch,req=Cursor,seq=Tseq}) ->
     (encode_sb4(Cursor))/binary,    %cursor
     (encode_sb4(Fetch))/binary      %rows to fetch
     >>;
-encode_record(exec, #oraclient{type=Type,auto=Auto,charset=Charset,fetch=Fetch,server=Ver,req={Cursor,Query,Bind,Batch,Def},seq=Tseq}) ->
+encode_record(exec, #oraclient{type=Type,auto=Auto,charset=Charset,fetch=Fetch,req={Cursor,Query,Bind,Batch,Def},seq=Tseq}) ->
     QueryData = encode_str(Query),
     QueryLen = if Cursor =/= 0 -> 0; true -> byte_size(QueryData) end,
     BindLen = length(Bind),
@@ -242,10 +241,7 @@ encode_record(exec, #oraclient{type=Type,auto=Auto,charset=Charset,fetch=Fetch,s
     (encode_sb4(DefLen))/binary,            %defcols count
     0,                                      %registration
     0,1,
-    (case Ver of
-        10 -> <<>>;
-        _ -> <<0,0,0,0,0>>
-    end)/binary,
+    0,0,0,0,0,
     (if QueryLen =/= 0 -> QueryData; true -> <<>> end)/binary,
     (encode_array(All8))/binary,
     (case {BindLen, DefLen, QueryLen} of
