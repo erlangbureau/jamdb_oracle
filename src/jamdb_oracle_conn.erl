@@ -331,7 +331,7 @@ get_result(_Type, _RetCode, _RowNumber, _RowFormat, _Rows) ->
     more.
 
 get_result(undefined) -> [];
-get_result(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply -> Reply end;
+get_result(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply when is_list(Reply) -> Reply end;
 get_result(#format{column_name=Column}) -> Column.
 
 freeval(undefined) -> true;
@@ -348,7 +348,7 @@ currval(DefCol, _Result, _Cursors) -> {more, DefCol}.
 
 nextval(Task) when is_pid(Task) ->
     Task ! {get, self()},
-    Tseq = receive 127 -> 0; Reply -> Reply end,
+    Tseq = receive 127 -> 0; Reply when is_integer(Reply) -> Reply end,
     Task ! {set, Tseq + 1}, Tseq + 1;
 nextval(Tseq) -> Tseq.
 
