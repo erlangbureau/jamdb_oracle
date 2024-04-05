@@ -127,6 +127,9 @@ sql_query(#oraclient{conn_state=connected, timeouts={_Tout, ReadTout}} = State, 
 loop(Values) ->
     receive {get, From} -> From ! Values, loop(Values); {set, Values2} -> loop(Values2) end.
 
+flush() ->
+    receive _ -> c:flush() after 0 -> ok end.
+
 %% internal
 handle_login(#oraclient{socket=Socket, env=Env, sdu=Length, timeouts=Touts} = State) ->
     case recv(Socket, Length, Touts) of
@@ -333,7 +336,7 @@ get_result(_Type, _RetCode, _RowNumber, _RowFormat, _Rows) ->
     more.
 
 get_result(undefined) -> [];
-get_result(Cursors) when is_pid(Cursors) -> Cursors ! {get, self()}, receive Reply -> Reply end;
+get_result(Cursors) when is_pid(Cursors) -> flush(), Cursors ! {get, self()}, receive Reply -> Reply end;
 get_result(#format{column_name=Column}) -> Column.
 
 freeval(undefined) -> true;
@@ -349,7 +352,7 @@ currval({Sum, {0, _Cursor, _RowFormat}}, Result, Cursors) when is_pid(Cursors) -
 currval(DefCol, _Result, _Cursors) -> {more, DefCol}.
 
 nextval(Task) when is_pid(Task) ->
-    Task ! {get, self()},
+    flush(), Task ! {get, self()},
     Tseq = receive 127 -> 0; Reply -> Reply end,
     Task ! {set, Tseq + 1}, Tseq + 1;
 nextval(Tseq) -> Tseq.
