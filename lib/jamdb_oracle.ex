@@ -233,7 +233,7 @@ defmodule Jamdb.Oracle do
 
   @impl true
   def checkout(%{pid: pid, timeout: timeout} = s) do
-    case sql_query(pid, 'SESSION', timeout) do
+    case sql_query(pid, ~c'SESSION', timeout) do
       {:ok, _} -> {:ok, s}
       {:error, err} -> {:disconnect, error!(err), s}
     end
@@ -241,7 +241,7 @@ defmodule Jamdb.Oracle do
 
   @impl true
   def ping(%{pid: pid, timeout: timeout, idle_interval: idle_interval} = s) do
-    case sql_query(pid, 'PING', min(timeout, idle_interval)) do
+    case sql_query(pid, ~c'PING', min(timeout, idle_interval)) do
       {:ok, _} -> {:ok, s}
       {:error, err} -> {:disconnect, error!(err), s}
     end
