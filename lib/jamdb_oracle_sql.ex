@@ -304,14 +304,14 @@ defmodule Jamdb.Oracle.SQL do
   end
 
   defp unique_constraint?(err) do
-    match_or_nil(~r/'ORA-00001: unique constraint \((.*)\) violated\\n'/, err.message, fn name ->
+    match_or_nil(~r/ORA-00001: unique constraint \((.*)\) violated/, err.message, fn name ->
       [unique: name]
     end)
   end
 
   defp integrity_child_constraint?(err) do
     match_or_nil(
-      ~r/'ORA-02292: integrity constraint \((.*)\) violated - child record found\\n'/,
+      ~r/ORA-02292: integrity constraint \((.*)\) violated - child record found/,
       err.message,
       fn name -> [foreign_key: name] end
     )
@@ -319,14 +319,14 @@ defmodule Jamdb.Oracle.SQL do
 
   defp integrity_parent_constraint?(err) do
     match_or_nil(
-      ~r/'ORA-02291: integrity constraint \((.*)\) violated - parent key not found\\n'/,
+      ~r/ORA-02291: integrity constraint \((.*)\) violated - parent key not found/,
       err.message,
       fn name -> [foreign_key: name] end
     )
   end
 
   defp check_constraint?(err) do
-    match_or_nil(~r/'ORA-02290: check constraint \((.*)\) violated\\n'/, err.message, fn name ->
+    match_or_nil(~r/ORA-02290: check constraint \((.*)\) violated/, err.message, fn name ->
       [check: name]
     end)
   end
