@@ -145,8 +145,8 @@ handle_login(#oraclient{socket=Socket, env=Env, sdu=Length, timeouts=Touts} = St
             handle_login(State2);
         {ok, ?TNS_MARKER, _Data} ->
             handle_req(marker, State, []);
-        {ok, ?TNS_REDIRECT, <<_Length:16,_Bin:80,Rest/bits>>} ->
-            {ok, Opts} = ?DECODER:decode_token(net, {Rest, Env}),
+        {ok, ?TNS_REDIRECT, Data} ->
+            {ok, Opts} = ?DECODER:decode_token(net, {Data, Env}),
             reconnect(State#oraclient{env=Opts});
         {ok, ?TNS_REFUSE, <<_Bin:16,_Length:16,Rest/bits>>} ->
             handle_error(local, binary_to_list(Rest), State);
