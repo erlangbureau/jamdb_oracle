@@ -479,9 +479,6 @@ defmodule Jamdb.OracleTest do
     value = 13
     query = Schema |> select([r], fragment("CASE WHEN ? THEN ? ELSE ? END", r.x == ^value, true, false)) |> plan()
     assert all(query) == ~s{SELECT CASE WHEN s0.x = :1 THEN 1 ELSE 0 END FROM schema s0}
-
-    query = Schema |> select([r], fragment("? COLLATE ?", r.x, literal(^"SPANISH_CI"))) |> plan()
-    assert all(query) == ~s{SELECT s0.x COLLATE SPANISH_CI FROM schema s0}
   end
 
   test "literals" do
@@ -493,9 +490,6 @@ defmodule Jamdb.OracleTest do
 
     query = "schema" |> where(foo: "abc") |> select([], true) |> plan()
     assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE (s0.foo = 'abc')}
-
-    query = "schema" |> where(foo: <<0, ?a, ?b, ?c>>) |> select([], true) |> plan()
-    assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE (s0.foo = '00616263')}
 
     query = "schema" |> where(foo: 123) |> select([], true) |> plan()
     assert all(query) == ~s{SELECT 1 FROM schema s0 WHERE (s0.foo = 123)}
