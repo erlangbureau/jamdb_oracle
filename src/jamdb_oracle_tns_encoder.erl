@@ -110,7 +110,7 @@ encode_record(auth, #oraclient{env=EnvOpts,passwd=Passwd,req=Request,seq=Tseq}) 
     (if KeyInd =/= 0 -> encode_keyval("AUTH_PBKDF2_SPEEDY_KEY", SpeedyKey); true -> <<>> end)/binary,
     (encode_keyval(<<"AUTH_SESSKEY">>, AuthSess, 1))/binary,
     (encode_keyval("SESSION_CLIENT_DRIVER_NAME", "beam"))/binary,
-    (encode_keyval("SESSION_CLIENT_VERSION", "4"))/binary
+    (encode_keyval("SESSION_CLIENT_VERSION", "186647296"))/binary
     >>,
     KeyConn};
 encode_record(dty, #oraclient{charset=Charset}) ->
