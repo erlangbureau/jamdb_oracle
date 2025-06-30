@@ -3,7 +3,7 @@ defmodule Jamdb.Oracle.Mixfile do
 
   def project do
     [app: :jamdb_oracle,
-     version: "0.5.11",
+     version: "0.5.12",
      elixir: "~> 1.11",
      description: description(),
      package: package(),
