@@ -72,6 +72,7 @@ configuration:
   * `:role` - Mode that is used in an internal logon
   * `:prelim` - Mode that is permitted when the database is down
   * `:newpassword` - User new password (Change password for the connecting user)
+  * `:proxy_user` - User name for proxy authentication
   * `:description` - Connect descriptor
   * `:charset` - Client character set, defaults to UTF-8
 
