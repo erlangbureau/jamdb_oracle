@@ -23,6 +23,7 @@
     {role, non_neg_integer()} |
     {prelim, non_neg_integer()} |
     {newpassword, string()} |
+    {proxy_user, string()} |
     {description, string()} |
     {app_name, string()}.
 
