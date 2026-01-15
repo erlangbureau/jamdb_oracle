@@ -7,6 +7,12 @@
 
 -include("jamdb_oracle.hrl").
 
+%% Debug logging helper
+debug_log(false, _Format, _Args) ->
+    ok;
+debug_log(true, Format, Args) ->
+    io:format("[jamdb_oracle_adv_nego] " ++ Format ++ "~n", Args).
+
 %% Service type constants
 -define(SERVICE_AUTH, 1).
 -define(SERVICE_ENCRYPTION, 2).
@@ -40,97 +46,128 @@
 ]).
 
 %% Negotiate advanced services with Oracle server
-negotiate(#oraclient{socket = Socket, sdu = Length, version = Version, timeouts = Touts} = State) ->
+negotiate(#oraclient{socket = Socket, sdu = Length, version = Version, timeouts = Touts, debug = Debug} = State) ->
+    debug_log(Debug, "Starting advanced services negotiation", []),
     %% Build and send negotiation request
     NegoPkt = build_nego_request(),
     {Packet, _Rest} = jamdb_oracle_tns_encoder:encode_packet(6, NegoPkt, Length, Version),
 
+    debug_log(Debug, "Sending negotiation request (~p bytes)", [byte_size(Packet)]),
     case gen_tcp:send(Socket, Packet) of
         ok ->
+            debug_log(Debug, "Negotiation request sent, waiting for response", []),
             %% Read server response
             {Tout, _ReadTout} = Touts,
             case gen_tcp:recv(Socket, 0, Tout) of
                 {ok, Data} when byte_size(Data) >= 8 ->
                     <<_PacketSize:16, _Flags:16, PacketType:8, _PacketFlags:8, Rest/binary>> = Data,
+                    debug_log(Debug, "Received response packet type ~p (~p bytes)", [PacketType, byte_size(Data)]),
                     case PacketType of
                         6 ->  %% DATA packet
                             <<_DataFlags:32, Response/binary>> = Rest,
                             case parse_nego_response(Response, State) of
                                 {ok, State2, NeedsDH} ->
+                                    debug_log(Debug, "Negotiation response parsed successfully", []),
                                     case NeedsDH of
                                         {true, DHParams} ->
+                                            debug_log(Debug, "Server requests DH key exchange", []),
                                             %% Server wants DH key exchange
                                             perform_dh_exchange(Socket, Length, Touts, DHParams, State2);
                                         false ->
+                                            debug_log(Debug, "No DH key exchange required", []),
                                             %% No DH needed, continue
                                             {ok, State2}
                                     end;
                                 {error, Reason} ->
+                                    debug_log(Debug, "Failed to parse negotiation response: ~p", [Reason]),
                                     {error, Reason}
                             end;
                         _ when PacketType >= 1 andalso PacketType =< 19 ->
+                            debug_log(Debug, "Unexpected packet type: ~p", [PacketType]),
                             {error, {unexpected_packet_type, PacketType}};
                         _ ->
+                            debug_log(Debug, "Invalid packet", []),
                             {error, invalid_packet}
                     end;
                 {ok, _Data} ->
+                    debug_log(Debug, "Short packet received", []),
                     {error, short_packet};
                 {error, Reason} ->
+                    debug_log(Debug, "Error receiving negotiation response: ~p", [Reason]),
                     {error, Reason}
             end;
         {error, Reason} ->
+            debug_log(Debug, "Failed to send negotiation request: ~p", [Reason]),
             {error, Reason}
     end.
 
 %% Perform Diffie-Hellman key exchange
-perform_dh_exchange(Socket, Length, _Touts, DHParams, #oraclient{version = Version} = State) ->
-    {IntegrityAlgoId, Gen, Prime, ServerPubKey, IV} = DHParams,
+perform_dh_exchange(Socket, Length, _Touts, DHParams, #oraclient{version = Version, debug = Debug} = State) ->
+    debug_log(Debug, "Performing DH key exchange", []),
 
-    %% Calculate expected byte length from prime (matches go-ora byteLen calculation)
-    ByteLen = byte_size(Prime),
-
-    %% Generate client private key with correct length
-    PrivateKey = crypto:strong_rand_bytes(ByteLen),
-    PrivateKeyInt = binary:decode_unsigned(PrivateKey),
-    GenInt = binary:decode_unsigned(Gen),
-    PrimeInt = binary:decode_unsigned(Prime),
-
-    %% ClientPubKey = Gen^PrivateKey mod Prime
-    ClientPubKeyRaw = crypto:mod_pow(GenInt, PrivateKeyInt, PrimeInt),
-
-    %% Pad with leading zeros to match expected byte length (like go-ora FillBytes)
-    ClientPubKey = case byte_size(ClientPubKeyRaw) of
-        Len when Len < ByteLen ->
-            PaddingSize = ByteLen - Len,
-            <<0:(PaddingSize*8), ClientPubKeyRaw/binary>>;
-        _ ->
-            ClientPubKeyRaw
-    end,
-
-    %% Build DH response packet
-    DHResponse = build_dh_response(ClientPubKey),
-    {Packet, _} = jamdb_oracle_tns_encoder:encode_packet(6, DHResponse, Length, Version),
-
-    case gen_tcp:send(Socket, Packet) of
+    case validate_dh_params(DHParams) of
+        {error, Reason} ->
+            debug_log(Debug, "Invalid DH parameters: ~p", [Reason]),
+            {error, {invalid_dh_params, Reason}};
         ok ->
-            %% Calculate shared secret: SharedKey = ServerPubKey^PrivateKey mod Prime
-            ServerPubKeyInt = binary:decode_unsigned(ServerPubKey),
-            SharedKeyRaw = crypto:mod_pow(ServerPubKeyInt, PrivateKeyInt, PrimeInt),
+            {IntegrityAlgoId, Gen, Prime, ServerPubKey, IV} = DHParams,
+            debug_log(Debug, "DH params - IntegrityAlgo: ~p, Prime size: ~p, IV size: ~p",
+                     [IntegrityAlgoId, byte_size(Prime), byte_size(IV)]),
+
+            %% Calculate expected byte length from prime (matches go-ora byteLen calculation)
+            ByteLen = byte_size(Prime),
+
+            %% Generate client private key with correct length
+            PrivateKey = crypto:strong_rand_bytes(ByteLen),
+            PrivateKeyInt = binary:decode_unsigned(PrivateKey),
+            GenInt = binary:decode_unsigned(Gen),
+            PrimeInt = binary:decode_unsigned(Prime),
+
+            debug_log(Debug, "Generating client public key", []),
+            %% ClientPubKey = Gen^PrivateKey mod Prime
+            ClientPubKeyRaw = crypto:mod_pow(GenInt, PrivateKeyInt, PrimeInt),
 
             %% Pad with leading zeros to match expected byte length (like go-ora FillBytes)
-            SharedKey = case byte_size(SharedKeyRaw) of
-                RawLen when RawLen < ByteLen ->
-                    Padding = ByteLen - RawLen,
-                    <<0:(Padding*8), SharedKeyRaw/binary>>;
+            ClientPubKey = case byte_size(ClientPubKeyRaw) of
+                Len when Len < ByteLen ->
+                    PaddingSize = ByteLen - Len,
+                    <<0:(PaddingSize*8), ClientPubKeyRaw/binary>>;
                 _ ->
-                    SharedKeyRaw
+                    ClientPubKeyRaw
             end,
 
-            %% Store full session key (init_encryption will slice it as needed per algorithm)
-            StateWithKey = State#oraclient{auth = {SharedKey, IV}, integrity_algo = IntegrityAlgoId},
-            {ok, StateWithKey};
-        {error, Reason} ->
-            {error, Reason}
+            debug_log(Debug, "Client public key size: ~p bytes", [byte_size(ClientPubKey)]),
+
+            %% Build DH response packet
+            DHResponse = build_dh_response(ClientPubKey),
+            {Packet, _} = jamdb_oracle_tns_encoder:encode_packet(6, DHResponse, Length, Version),
+
+            debug_log(Debug, "Sending DH response (~p bytes)", [byte_size(Packet)]),
+            case gen_tcp:send(Socket, Packet) of
+                ok ->
+                    debug_log(Debug, "DH response sent, calculating shared secret", []),
+                    %% Calculate shared secret: SharedKey = ServerPubKey^PrivateKey mod Prime
+                    ServerPubKeyInt = binary:decode_unsigned(ServerPubKey),
+                    SharedKeyRaw = crypto:mod_pow(ServerPubKeyInt, PrivateKeyInt, PrimeInt),
+
+                    %% Pad with leading zeros to match expected byte length (like go-ora FillBytes)
+                    SharedKey = case byte_size(SharedKeyRaw) of
+                        RawLen when RawLen < ByteLen ->
+                            Padding = ByteLen - RawLen,
+                            <<0:(Padding*8), SharedKeyRaw/binary>>;
+                        _ ->
+                            SharedKeyRaw
+                        end,
+
+                    debug_log(Debug, "Shared secret calculated (~p bytes)", [byte_size(SharedKey)]),
+
+                    %% Store full session key (init_encryption will slice it as needed per algorithm)
+                    StateWithKey = State#oraclient{auth = {SharedKey, IV}, integrity_algo = IntegrityAlgoId},
+                    {ok, StateWithKey};
+                {error, Reason} ->
+                    debug_log(Debug, "Failed to send DH response: ~p", [Reason]),
+                    {error, Reason}
+            end
     end.
 
 %% Build DH response packet
@@ -399,31 +436,23 @@ parse_service_data(_ServiceType, SubPackets, Data) ->
 
 %% Parse DH parameters from data integrity service response
 parse_dh_params(Data) ->
-    try
+     try
         %% Skip version sub-packet
         <<_PktLen1:16/big, _PktType1:16/big, _Version:32/big, Rest1/binary>> = Data,
 
-        %% Read algorithm ID sub-packet (this is the data integrity algorithm)
+        %% Read algorithm ID sub-packet (this is data integrity algorithm)
         <<_PktLen2:16/big, _PktType2:16/big, IntegrityAlgoId:8, Rest2/binary>> = Rest1,
 
         %% Read DH gen length sub-packet (in bits)
         <<_PktLen3:16/big, _PktType3:16/big, DHGenLen:16/big, Rest3/binary>> = Rest2,
 
         %% Read DH prime length sub-packet (in bits)
-        <<_PktLen4:16/big, _PktType4:16/big, DHPrimeLen:16/big, Rest4/binary>> = Rest3,
-
-        %% Validate DH lengths (go-ora validation)
-        case DHGenLen =< 0 orelse DHPrimeLen =< 0 of
-            true ->
-                throw(invalid_dh_params);
-            false ->
-                ok
-        end,
+        <<_PktLen4:16/big, _PktType4:16/big, _DHPrimeLen:16/big, Rest4/binary>> = Rest3,
 
         %% Calculate expected byte length: (bitLen + 7) / 8
         ByteLen = (DHGenLen + 7) div 8,
 
-        %% Read generator bytes sub-packet (BYTES type 1 has no length prefix, packet length IS the data size)
+        %% Read generator bytes sub-packet (BYTES type 1 has no length prefix, packet length IS -> data size)
         <<GenPktLen:16/big, _GenPktType:16/big, Rest5/binary>> = Rest4,
         <<Gen:GenPktLen/binary, Rest6/binary>> = Rest5,
 
@@ -436,22 +465,47 @@ parse_dh_params(Data) ->
         <<ServerPubKey:ServerPubKeyPktLen/binary, Rest10/binary>> = Rest9,
 
         %% Validate key sizes match expected byte length (go-ora validation)
-        case byte_size(ServerPubKey) =:= ByteLen andalso byte_size(Prime) =:= ByteLen of
-            false ->
-                throw(dh_out_of_sync);
-            true ->
-                ok
+        ValidationOk = case byte_size(ServerPubKey) =:= ByteLen andalso byte_size(Prime) =:= ByteLen of
+            true -> true;
+            false -> false
         end,
 
-        %% Read IV sub-packet
-        <<IVPktLen:16/big, _IVPktType:16/big, Rest11/binary>> = Rest10,
-        <<IV:IVPktLen/binary, RestData/binary>> = Rest11,
+        case ValidationOk of
+            true ->
+                %% Read IV sub-packet
+                <<IVPktLen:16/big, _IVPktType:16/big, Rest11/binary>> = Rest10,
+                <<IV:IVPktLen/binary, RestData/binary>> = Rest11,
 
-        {ok, {IntegrityAlgoId, Gen, Prime, ServerPubKey, IV}, RestData}
+                {ok, {IntegrityAlgoId, Gen, Prime, ServerPubKey, IV}, RestData};
+            false ->
+                {error, key_size_mismatch}
+        end
     catch
         _Error:_Reason:_Stacktrace ->
             {error, parse_dh_params_error}
     end.
+
+%% Validate DH parameters before using them
+validate_dh_params({_IntegrityAlgoId, Gen, Prime, ServerPubKey, IV}) ->
+    %% Validate sizes
+    PrimeSize = byte_size(Prime),
+    GenSize = byte_size(Gen),
+    ServerPubKeySize = byte_size(ServerPubKey),
+    IVSize = byte_size(IV),
+
+    %% Check basic size requirements
+    case {PrimeSize > 0, GenSize > 0, ServerPubKeySize > 0, IVSize > 0} of
+        {true, true, true, true} ->
+            %% Check if all key sizes match (except IV which can be different)
+            case ServerPubKeySize =:= PrimeSize of
+                true -> ok;
+                false -> {error, {key_size_mismatch, ServerPubKeySize, PrimeSize}}
+            end;
+        _ ->
+            {error, {invalid_size, PrimeSize, GenSize, ServerPubKeySize, IVSize}}
+    end;
+validate_dh_params(_) ->
+    {error, invalid_format}.
 
 %% Skip N sub-packets
 skip_subpackets(0, Data) ->

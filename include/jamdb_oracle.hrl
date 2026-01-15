@@ -25,7 +25,12 @@
     {newpassword, string()} |
     {proxy_user, string()} |
     {description, string()} |
-    {app_name, string()}.
+    {app_name, string()} |
+    {debug, boolean()} |
+    {encryption_client, accepted | rejected | requested | required} |
+    {encryption_types, list()} |
+    {crypto_checksum, accepted | rejected | requested | required} |
+    {crypto_checksum_types, list()}.
 
 -record(oraclient, {
     socket = undefined,
@@ -49,7 +54,10 @@
     crypto = undefined,  %% Encryption state for Oracle Native Network Encryption
     crypto_algo = undefined,  %% Negotiated encryption algorithm ID (to be activated after auth)
     integrity_algo = undefined,  %% Negotiated data integrity algorithm ID (MD5, SHA1, etc)
-    hash_state = undefined  %% Oracle network hash state (initialized after DH)
+    hash_state = undefined,  %% Oracle network hash state (initialized after DH)
+    use_ssl = false,  %% SSL/TLS mode (separate from native encryption)
+    ssl_opts = [],  %% SSL options for ssl:connect
+    debug = false  %% Debug logging flag
 }).
 
 -record(logon, {
