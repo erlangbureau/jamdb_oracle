@@ -30,7 +30,8 @@
     {encryption_client, accepted | rejected | requested | required} |
     {encryption_types, list()} |
     {crypto_checksum, accepted | rejected | requested | required} |
-    {crypto_checksum_types, list()}.
+    {crypto_checksum_types, list()} |
+    {redirect_limit, non_neg_integer()}.
 
 -record(oraclient, {
     socket = undefined,

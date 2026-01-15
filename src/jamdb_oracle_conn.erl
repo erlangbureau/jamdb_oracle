@@ -285,8 +285,10 @@ handle_login(#oraclient{socket=Socket, env=Env, sdu=Length, timeouts=Touts, use_
             debug_log(Debug, "Received TNS_MARKER", []),
             handle_req(marker, State, []);
         {ok, ?TNS_REDIRECT, Data} ->
-            {ok, Opts} = ?DECODER:decode_token(net, {Data, Env}),
-            reconnect(State#oraclient{env=Opts});
+            debug_log(Debug, "Received TNS_REDIRECT", []),
+            Addresses = parse_redirect_addresses(binary_to_list(Data)),
+            debug_log(Debug, "Trying ~p addresses", [length(Addresses)]),
+            try_redirect(Addresses, State);
         {ok, ?TNS_REFUSE, <<_Bin:16,_Length:16,Rest/bits>>} ->
             RefuseMsg = binary_to_list(Rest),
             handle_error(local, RefuseMsg, State);
@@ -309,11 +311,10 @@ handle_token(<<Token, Data/binary>>, State) ->
                     Cursors = spawn(fun() -> loop([]) end),
                     case jamdb_oracle_crypt:validate(#logon{auth=Resp, key=KeyConn}) of
                         ok ->
-                            %% Authentication successful - now activate encryption if it was negotiated
                             ConnectedState = State#oraclient{conn_state=connected,auth=KeyConn,server=Ver,cursors=Cursors},
                             case jamdb_oracle_adv_nego:activate_encryption(CryptoAlgo, ConnectedState) of
                                 {ok, FinalState} ->
-                                    FinalState#oraclient{auth=SessId};  %% Store session ID after encryption is activated
+                                    FinalState#oraclient{auth=SessId};
                                 {error, Reason} ->
                                     handle_error(remote, Reason, ConnectedState)
                             end;
@@ -698,7 +699,7 @@ send(#oraclient{socket=Socket,sdu=Length,version=Version,crypto=Crypto,hash_stat
             handle_error(socket, Reason, State2)
     end.
 
-recv(Socket, Length, {Tout, _ReadTout} = Touts, #oraclient{debug = Debug}) ->
+recv(Socket, Length, {Tout, _ReadTout} = Touts, #oraclient{}) ->
     case sock_recv(Socket, 0, Tout) of
         {ok, NetworkData} ->
             recv(Socket, Length, Touts, NetworkData, <<>>);
@@ -731,4 +732,20 @@ recv(Socket, Length, Touts, Acc, Data) ->
             recv(Socket, Length, Touts, Rest, <<Data/bits, PacketBody/bits>>);
         {error, more} ->
             recv(read_timeout, Socket, Length, Touts, Acc, Data)
+    end.
+
+try_redirect([], _State) -> {error, redirect_failed};
+try_redirect([{Host, Port} | Rest], #oraclient{debug=Debug, use_ssl=UseSSL, ssl_opts=SslOpts} = State) ->
+    debug_log(Debug, "Trying ~s:~p", [Host, Port]),
+    Opts = lists:keydelete(host, 1, State#oraclient.env) ++ [{host, Host}, {port, Port}],
+    case do_connect(Host, Port, [], SslOpts, UseSSL, 2000, Debug) of
+        {ok, Sock} -> gen_tcp:close(Sock), reconnect(State#oraclient{env = Opts});
+        {error, _} -> try_redirect(Rest, State)
+    end.
+
+parse_redirect_addresses(Data) ->
+    case re:run(Data, "\\(ADDRESS=\\(PROTOCOL=(TCP|TCPS)\\)\\(HOST=([^)]+)\\)\\(PORT=(\\d+)\\)\\)", [global, {capture, all_but_first, list}, caseless]) of
+        {match, Matches} ->
+            lists:map(fun([_Proto, Host, PortStr]) -> {Host, list_to_integer(PortStr)} end, Matches);
+        nomatch -> []
     end.
