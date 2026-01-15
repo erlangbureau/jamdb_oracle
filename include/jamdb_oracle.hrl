@@ -57,7 +57,8 @@
     hash_state = undefined,  %% Oracle network hash state (initialized after DH)
     use_ssl = false,  %% SSL/TLS mode (separate from native encryption)
     ssl_opts = [],  %% SSL options for ssl:connect
-    debug = false  %% Debug logging flag
+    debug = false,  %% Debug logging flag
+    redirect_index = 0  %% For trying multiple redirect addresses
 }).
 
 -record(logon, {
