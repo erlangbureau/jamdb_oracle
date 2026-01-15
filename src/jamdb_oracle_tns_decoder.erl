@@ -51,6 +51,16 @@ decode_two_task(<<Token, Data/binary>>, Acc) ->
         ?TTI_OER -> decode_token(oer, Data, Acc);
         ?TTI_STA -> {ok, Acc};     %tran
         ?TTI_FOB -> {error, fob};  %return
+        _ when Token >= 19 ->
+            %% Unknown/marker token - if we have accumulated results, return them
+            %% Otherwise return error. Token >= 19 covers TNS_MAX and above.
+            case Acc of
+                {RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} when Rows =/= [] ->
+                    %% We have results, return them despite the marker
+                    {RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows};
+                _ ->
+                    {error, <<Token, (hd(binary:split(Data, <<0>>)))/binary>>}
+            end;
         _ -> 
             {error, <<Token, (hd(binary:split(Data, <<0>>)))/binary>>}
     end.

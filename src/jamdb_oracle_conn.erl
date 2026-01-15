@@ -524,8 +524,11 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors} = State) ->
          {ok, Result} -> %tran
             clear_socket(State2#oraclient.socket, State2#oraclient.debug),
             {ok, Result, State2};
-        {error, fob} -> %return
+         {error, fob} -> %return
             handle_req(fob, State2, Acc);
+        {error, <<MarkerType, _/binary>>} when MarkerType >= ?TNS_MAX ->
+            debug_log(State#oraclient.debug, "Received advisory marker packet type ~p, checking for query result in Acc", [MarkerType]),
+            check_result_in_acc(Type, Acc, State2);
         {error, Reason} ->
             handle_error(remote, Reason, State2)
     end.
@@ -773,4 +776,31 @@ clear_socket(Socket, Debug) ->
         {error, Reason} ->
             debug_log(Debug, "Socket clear failed: ~p", [Reason]),
             ok
+    end.
+
+check_result_in_acc(Type, Acc, State) ->
+    debug_log(State#oraclient.debug, "Checking accumulator for existing result: ~p", [Acc]),
+    case Acc of
+        {RetCode, RowNumber, Cursor, {_LCursor, RowFormat}, Rows} ->
+            case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
+                {ok, Result} ->
+                    debug_log(State#oraclient.debug, "Found query result in accumulator, returning despite marker", []),
+                    {ok, Result, State};
+                more when Type =:= fetch ->
+                    debug_log(State#oraclient.debug, "More data needed for fetch, requesting", []),
+                    {ok, [{fetched_rows, Cursor, RowFormat, Rows}], State};
+                more ->
+                    debug_log(State#oraclient.debug, "More data needed, sending fetch request", []),
+                    {ok, State2} = send_req(fetch, State, Cursor),
+                    handle_resp({Cursor, RowFormat, Rows}, State2);
+                {error, Result} ->
+                    debug_log(State#oraclient.debug, "Result in accumulator indicates error: ~p", [Result]),
+                    {ok, Result, State}
+            end;
+        _ when Acc =:= undefined orelse Acc =:= [] ->
+            debug_log(State#oraclient.debug, "No result in accumulator, treating marker as disconnect", []),
+            handle_error(remote, Acc, State);
+        _ ->
+            debug_log(State#oraclient.debug, "Accumulator in unexpected format: ~p, treating as disconnect", [Acc]),
+            handle_error(remote, Acc, State)
     end.
