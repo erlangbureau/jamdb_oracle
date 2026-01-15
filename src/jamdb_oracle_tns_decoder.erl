@@ -40,7 +40,6 @@ decode_packet(_,_) ->
     {error, more}.
 
 decode_two_task(<<Token, Data/binary>>, Acc) ->
-    io:format("  [decode_two_task] Token=~p (0x~2.16.0B), Acc=~p~n", [Token, Token, Acc]),
     case Token of
         ?TTI_DCB -> decode_token(dcb, Data, Acc);
         ?TTI_IOV -> decode_token(iov, Data, Acc);
@@ -53,19 +52,13 @@ decode_two_task(<<Token, Data/binary>>, Acc) ->
         ?TTI_STA -> {ok, Acc};     %tran
         ?TTI_FOB -> {error, fob};  %return
         23 ->
-            %% Token 23 (0x17) appears to be an extended warning/info token in Oracle 12c+
-            %% Try to skip it and continue parsing - it seems to contain error info text
-            io:format("  [decode_two_task] Token 23 detected, Data first 30 bytes: ~p~n", 
-                      [binary:part(Data, 0, min(30, byte_size(Data)))]),
-            %% Try to find where the next valid token might be
-            %% For now, try skipping this and look for RPA (8) or OER (4) token
+            %% Token 23 (0x17) - Oracle 12c+ extended warning/info token
+            %% Contains additional error/warning text after query results
             decode_token(oer_ext, Data, Acc);
         _ when Token >= 19 ->
             %% Unknown/marker token - if we have accumulated results, return them
-            %% Otherwise return error. Token >= 19 covers TNS_MAX and above.
             case Acc of
                 {RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} when Rows =/= [] ->
-                    %% We have results, return them despite the marker
                     {RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows};
                 _ ->
                     {error, <<Token, (hd(binary:split(Data, <<0>>)))/binary>>}
@@ -279,33 +272,25 @@ decode_token(oer, Data, {Cursor, RowFormat, Rows}) ->
     end,
     {RetCode, RowNumber, Cursor, RetFormat, Rows};
 %% Extended OER token (23/0x17) - Oracle 12c+ extended warning/error info
-%% This token appears after successful query parsing but contains additional info
+%% This token appears after successful query results and contains additional info.
+%% We scan for the next valid TTI token to continue parsing, or return accumulated results.
 decode_token(oer_ext, Data, Acc) ->
-    io:format("  [oer_ext] Parsing extended OER, Data first 40: ~p~n", 
-              [binary:part(Data, 0, min(40, byte_size(Data)))]),
-    %% The structure seems to be: some length-prefixed fields followed by error text
-    %% Let's try to skip to find the next token (RPA=8 or continue with accumulated result)
-    %% First, let's see if we can find token 8 (RPA) in the data
     case find_next_token(Data) of
         {found, Token, Rest} ->
-            io:format("  [oer_ext] Found next token ~p, continuing~n", [Token]),
             decode_two_task(<<Token, Rest/binary>>, Acc);
         not_found ->
-            io:format("  [oer_ext] No valid token found, returning current Acc~n", []),
-            %% If we have valid accumulated data, return it
             case Acc of
                 {0, RowFormat, []} when RowFormat =/= [] ->
-                    %% We have column format but no rows yet - this might be a "no data" response
+                    %% Column format present but no rows - "no data found" response
                     {1403, 0, 0, {0, RowFormat}, []};
                 {Cursor, RowFormat, Rows} when is_list(Rows) ->
                     {0, 0, Cursor, {0, RowFormat}, Rows};
                 _ ->
-                    %% Return as warning/info, not error
                     {ok, Acc}
             end
     end.
 
-%% Try to find a valid TTI token in the remaining data
+%% Scan for next valid TTI token in remaining data
 find_next_token(<<>>) -> not_found;
 find_next_token(<<Token, Rest/binary>>) when Token =:= 4; Token =:= 6; Token =:= 7; 
                                               Token =:= 8; Token =:= 9; Token =:= 16 ->
