@@ -83,7 +83,8 @@ connect(Opts, Tout) ->
             {ok, State2} = send_req(login, State),
             handle_login(State2#oraclient{conn_state=auth_negotiate});
         {error, Reason} ->
-            handle_error(socket, Reason, #oraclient{})
+            debug_log(Debug, "Connection failed: ~p", [Reason]),
+            handle_error(socket, Reason, #oraclient{debug=Debug})
     end.
 
 -spec disconnect(state()) -> {ok, [env()]}.
@@ -157,7 +158,9 @@ loop(Values) ->
 debug_log(false, _Format, _Args) ->
     ok;
 debug_log(true, Format, Args) ->
-    io:format("[jamdb_oracle] " ++ Format ++ "~n", Args).
+    io:format("[jamdb_oracle] " ++ Format ++ "~n", Args),
+    %% Force output to appear immediately
+    io:format([]).
 
 %% Socket connection abstraction - handles both TCP and SSL
 do_connect(Host, Port, SocketOpts, SslOpts, true = _UseSSL, Tout, Debug) ->
@@ -200,7 +203,7 @@ set_socket_opts(Socket, false = _IsSSL, Opts) ->
 %% internal
 handle_login(#oraclient{socket=Socket, env=Env, sdu=Length, timeouts=Touts, use_ssl=UseSSL, debug=Debug} = State) ->
     debug_log(Debug, "handle_login: waiting for server response", []),
-    case recv(Socket, Length, Touts) of
+    case recv(Socket, Length, Touts, State) of
         {ok, ?TNS_DATA, Data} ->
             debug_log(Debug, "Received TNS_DATA packet (~p bytes)", [byte_size(Data)]),
             %% Decrypt and verify data if security is enabled
@@ -217,18 +220,22 @@ handle_login(#oraclient{socket=Socket, env=Env, sdu=Length, timeouts=Touts, use_
                     {ok, State2}                  %connected
             end;
         {ok, ?TNS_RESEND, _Data} ->
+            debug_log(Debug, "Received TNS_RESEND", []),
             case sock_renegotiate(Socket, Env, Touts) of
                 {ok, Socket2} ->
                     try send_req(login, State#oraclient{socket=Socket2}) of
                         {ok, State2} ->
                             handle_login(State2);
                         _SendError ->
+                            debug_log(Debug, "Send failed during renegotiation", []),
                             handle_error(socket, send_failed, State)
                     catch
                         _Class:Reason:_Stack ->
+                            debug_log(Debug, "Exception during renegotiation: ~p", [Reason]),
                             handle_error(socket, Reason, State)
                     end;
                 {error, Reason} ->
+                    debug_log(Debug, "Renegotiation failed: ~p", [Reason]),
                     handle_error(socket, Reason, State)
             end;
         {ok, ?TNS_ACCEPT, <<Ver:16,_Opts:16,Sdu:16,_Tdu:16,_Histone:16,_BufLen:16,_DataOff:16,Acfl0:8,Acfl1:8,_Rest/bits>>} ->
@@ -269,6 +276,7 @@ handle_login(#oraclient{socket=Socket, env=Env, sdu=Length, timeouts=Touts, use_
                     handle_login(State2)
             end;
         {ok, ?TNS_MARKER, _Data} ->
+            debug_log(Debug, "Received TNS_MARKER", []),
             handle_req(marker, State, []);
         {ok, ?TNS_REDIRECT, Data} ->
             {ok, Opts} = ?DECODER:decode_token(net, {Data, Env}),
@@ -311,12 +319,17 @@ handle_token(<<Token, Data/binary>>, State) ->
         _ -> handle_error(remote, Token, State)
     end.
 
-handle_error(remote, Reason, State) ->
-    {error, remote, Reason, State};
-handle_error(socket, Reason, State) ->
-    disconnect(State),
-    {error, socket, Reason, State#oraclient{conn_state=disconnected}};
-handle_error(local, Reason, State) ->
+handle_error(remote, Reason, #oraclient{debug = Debug}) ->
+    debug_log(Debug, "handle_error: remote error - ~p", [Reason]),
+    {error, remote, Reason, #oraclient{conn_state=disconnected}};
+handle_error(socket, Reason, #oraclient{debug = Debug}) ->
+    debug_log(Debug, "handle_error: socket error - ~p", [Reason]),
+    %% Use display for guaranteed output even in crash scenarios
+    _ = erlang:display({jamdb_oracle_socket_error, Reason}),
+    disconnect(#oraclient{conn_state=disconnected}),
+    {error, socket, Reason, #oraclient{conn_state=disconnected}};
+handle_error(local, Reason, #oraclient{debug = Debug} = State) ->
+    debug_log(Debug, "handle_error: local error - ~p", [Reason]),
     disconnect(State),
     {ok, Reason, State#oraclient{conn_state=disconnected}}.
 
@@ -457,8 +470,8 @@ decrypt_and_verify_data(Data, #oraclient{crypto=Crypto, hash_state=HashState} = 
             end
     end.
 
-handle_resp(Acc, #oraclient{socket=Socket, sdu=Length, timeouts=Touts} = State) ->
-    case recv(Socket, Length, Touts) of
+handle_resp(Acc, State) ->
+    case recv(State#oraclient.socket, State#oraclient.sdu, State#oraclient.timeouts, State) of
         {ok, ?TNS_DATA, Data} ->
             handle_resp(Data, Acc, State);
         {ok, ?TNS_MARKER, _Data} ->
@@ -654,11 +667,13 @@ send(#oraclient{socket=Socket,sdu=Length,version=Version,crypto=Crypto,hash_stat
             handle_error(socket, Reason, State2)
     end.
 
-recv(Socket, Length, {Tout, _ReadTout} = Touts) ->
+recv(Socket, Length, {Tout, _ReadTout} = Touts, #oraclient{debug = Debug}) ->
     case sock_recv(Socket, 0, Tout) of
         {ok, NetworkData} ->
             recv(Socket, Length, Touts, NetworkData, <<>>);
         {error, Reason} ->
+            debug_log(Debug, "recv error: ~p", [Reason]),
+            _ = erlang:display({jamdb_oracle_recv_error, Reason}),
             {error, socket, Reason}
     end.
 
