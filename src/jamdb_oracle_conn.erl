@@ -690,11 +690,11 @@ send(#oraclient{socket=Socket,sdu=Length,version=Version,crypto=Crypto,hash_stat
     {Packet, Rest} = ?ENCODER:encode_packet(PacketType, DataToSend, Length, Version),
     case sock_send(Socket, Packet) of
         ok ->
-            debug_log(Debug, "Sent TNS packet type ~p (~p bytes)~n", [PacketType, byte_size(Packet)]),
-            debug_log(Debug, "  Data: ~p~n", [Packet]),
+            debug_log(State2#oraclient.debug, "Sent TNS packet type ~p (~p bytes)~n", [PacketType, byte_size(Packet)]),
+            debug_log(State2#oraclient.debug, "  Data: ~p~n", [Packet]),
             send(State2, PacketType, Rest);
         {error, Reason} ->
-            debug_log(Debug, "Send failed: ~p", [Reason]),
+            debug_log(State2#oraclient.debug, "Send failed: ~p~n", [Reason]),
             handle_error(socket, Reason, State2)
     end.
 
