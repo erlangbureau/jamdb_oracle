@@ -488,44 +488,44 @@ handle_resp(Acc, State) ->
             handle_error(Type, Reason, State)
     end.
 
-handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors, debug=Debug} = State) ->
+handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors, debug=_Debug} = State) ->
     %% Decrypt and verify data if security is enabled
     {PlainData, State2} = decrypt_and_verify_data(Data, State),
 
-    %% Debug: Log the decrypted payload structure
+    %% Debug: Log the decrypted payload structure (always print for now)
     PlainSize = byte_size(PlainData),
-    debug_log(Debug, "=== DECRYPTED PAYLOAD DEBUG ===", []),
-    debug_log(Debug, "  PlainData size: ~p bytes", [PlainSize]),
-    debug_log(Debug, "  First 50 bytes: ~p", [binary:part(PlainData, 0, min(50, PlainSize))]),
-    debug_log(Debug, "  First byte (token): ~p (0x~2.16.0B)", [binary:first(PlainData), binary:first(PlainData)]),
-    debug_log(Debug, "  Accumulator: ~p", [Acc]),
+    io:format("~n=== DECRYPTED PAYLOAD DEBUG ===~n", []),
+    io:format("  PlainData size: ~p bytes~n", [PlainSize]),
+    io:format("  First 50 bytes: ~p~n", [binary:part(PlainData, 0, min(50, PlainSize))]),
+    io:format("  First byte (token): ~p (0x~2.16.0B)~n", [binary:first(PlainData), binary:first(PlainData)]),
+    io:format("  Accumulator: ~p~n", [Acc]),
     %% Also log as hex for easier analysis
     HexFirst20 = lists:flatten([io_lib:format("~2.16.0B ", [B]) || <<B>> <= binary:part(PlainData, 0, min(20, PlainSize))]),
-    debug_log(Debug, "  First 20 bytes (hex): ~s", [HexFirst20]),
+    io:format("  First 20 bytes (hex): ~s~n", [HexFirst20]),
 
     DecodeResult = ?DECODER:decode_two_task(PlainData, Acc),
-    debug_log(Debug, "  decode_two_task result: ~p", [DecodeResult]),
+    io:format("  decode_two_task result: ~p~n", [DecodeResult]),
 
     case DecodeResult of
         {0, _RowNumber, Cursor, {LCursor, RowFormat}, []} when Type =/= change, RowFormat =/= [] ->
-            debug_log(Debug, "  -> Branch: fetch more (empty rows, has format)", []),
+            io:format("  -> Branch: fetch more (empty rows, has format)~n", []),
             Type2 = if LCursor =:= Cursor -> Type; true -> cursor end,
             {ok, State3} = send_req(fetch, State2, {Cursor, RowFormat}),
             #oraclient{defcols=DefCol} = State3,
             {_, DefCol2} = currval(DefCol, {LCursor, Cursor, RowFormat}, Cursors),
             handle_resp({Cursor, RowFormat, []}, State2#oraclient{defcols=DefCol2, type=Type2});
         {RetCode, RowNumber, Cursor, {LCursor, RowFormat}, Rows} ->
-            debug_log(Debug, "  -> Branch: got result tuple (RetCode=~p, RowNum=~p)", [RetCode, RowNumber]),
+            io:format("  -> Branch: got result tuple (RetCode=~p, RowNum=~p)~n", [RetCode, RowNumber]),
             case get_result(Type, RetCode, RowNumber, RowFormat, Rows) of
                 more when Type =:= fetch ->
-                    debug_log(Debug, "    -> get_result: more (fetch)", []),
+                    io:format("    -> get_result: more (fetch)~n", []),
                     {ok, [{fetched_rows, Cursor, RowFormat, Rows}], State2};
                 more ->
-                    debug_log(Debug, "    -> get_result: more (non-fetch)", []),
+                    io:format("    -> get_result: more (non-fetch)~n", []),
                     {ok, State3} = send_req(fetch, State2, Cursor),
                     handle_resp({Cursor, RowFormat, Rows}, State3);
                  {ok, Result} ->
-                    debug_log(Debug, "    -> get_result: ok, Result=~p", [Result]),
+                    io:format("    -> get_result: ok, Result=~p~n", [Result]),
                     #oraclient{defcols=DefCol} = State2,
                     case currval(DefCol, {LCursor, Cursor, RowFormat}, Cursors) of
                         {reset, _} -> send_req(reset, State2);
@@ -534,7 +534,7 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors, debug=Debug} = Sta
                     clear_socket(State2#oraclient.socket, State2#oraclient.debug),
                     {ok, Result, State2};
                 {error, Result} ->
-                    debug_log(Debug, "    -> get_result: error, Result=~p", [Result]),
+                    io:format("    -> get_result: error, Result=~p~n", [Result]),
                     case get_result(Cursors) of
                         [] -> more;
                         _ -> send_req(reset, State2)
@@ -542,18 +542,17 @@ handle_resp(Data, Acc, #oraclient{type=Type, cursors=Cursors, debug=Debug} = Sta
                     {ok, Result, State2}
             end;
          {ok, Result} -> %tran
-            debug_log(Debug, "  -> Branch: {ok, Result} (tran)", []),
+            io:format("  -> Branch: {ok, Result} (tran)~n", []),
             clear_socket(State2#oraclient.socket, State2#oraclient.debug),
             {ok, Result, State2};
          {error, fob} -> %return
-            debug_log(Debug, "  -> Branch: {error, fob} (return)", []),
+            io:format("  -> Branch: {error, fob} (return)~n", []),
             handle_req(fob, State2, Acc);
         {error, <<MarkerType, _/binary>>} when MarkerType >= ?TNS_MAX ->
-            debug_log(Debug, "  -> Branch: marker type ~p >= TNS_MAX", [MarkerType]),
-            debug_log(State#oraclient.debug, "Received advisory marker packet type ~p, checking for query result in Acc", [MarkerType]),
+            io:format("  -> Branch: marker type ~p >= TNS_MAX~n", [MarkerType]),
             check_result_in_acc(Type, Acc, State2);
         {error, Reason} ->
-            debug_log(Debug, "  -> Branch: {error, Reason} - Reason=~p", [Reason]),
+            io:format("  -> Branch: {error, Reason} - Reason=~p~n", [Reason]),
             handle_error(remote, Reason, State2)
     end.
 
