@@ -627,15 +627,11 @@ sock_send(Socket, Packet) ->
     ssl:send(Socket, Packet).
 
 sock_recv(Socket, Length, Tout) when is_port(Socket) ->
-    debug_log(true, "[TCP RECV] Waiting for ~p bytes (timeout=~p)", [Length, Tout]),
     Result = gen_tcp:recv(Socket, Length, Tout),
     case Result of
         {ok, Data} ->
-            debug_log(true, "[TCP RECV] Got ~p bytes~n", [byte_size(Data)]),
-            debug_log(true, "  Data: ~p~n", [Data]),
             {ok, Data};
         {error, Reason} ->
-            debug_log(true, "[TCP RECV] Error: ~p~n", [Reason]),
             {error, Reason}
     end;
 sock_recv(Socket, Length, Tout) ->
