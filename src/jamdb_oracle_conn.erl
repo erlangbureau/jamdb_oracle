@@ -164,33 +164,27 @@ debug_log(true, Format, Args) ->
 
 %% Socket connection abstraction - handles both TCP and SSL
 do_connect(Host, Port, SocketOpts, SslOpts, true = _UseSSL, Tout, Debug) ->
-    io:format("[CONNECT] Attempting SSL/TLS connection to ~p:~p~n", [Host, Port]),
     debug_log(Debug, "Using SSL/TLS connection", []),
     %% Merge socket options with SSL options
     SockOpts = [binary, {active, false}, {packet, raw},
                  {nodelay, true}, {keepalive, true}] ++ SocketOpts,
     case ssl:connect(Host, Port, SockOpts ++ SslOpts, Tout) of
         {ok, Socket} ->
-            io:format("[CONNECT] SSL/TLS connection established~n", []),
             debug_log(Debug, "SSL/TLS connection established", []),
             {ok, Socket, true};
         {error, Reason} ->
-            io:format("[CONNECT] SSL/TLS connection failed: ~p~n", [Reason]),
             debug_log(Debug, "SSL/TLS connection failed: ~p", [Reason]),
             {error, Reason}
     end;
 do_connect(Host, Port, SocketOpts, _SslOpts, false = _UseSSL, Tout, Debug) ->
-    io:format("[CONNECT] Attempting plain TCP connection to ~p:~p~n", [Host, Port]),
     debug_log(Debug, "Using plain TCP connection", []),
     SockOpts = [binary, {active, false}, {packet, raw},
                  {nodelay, true}, {keepalive, true}] ++ SocketOpts,
     case gen_tcp:connect(Host, Port, SockOpts, Tout) of
         {ok, Socket} ->
-            io:format("[CONNECT] TCP connection established~n", []),
             debug_log(Debug, "TCP connection established", []),
             {ok, Socket, false};
         {error, Reason} ->
-            io:format("[CONNECT] TCP connection failed: ~p~n", [Reason]),
             debug_log(Debug, "TCP connection failed: ~p", [Reason]),
             {error, Reason}
     end.
@@ -628,12 +622,8 @@ sock_close(Socket) when is_port(Socket) -> gen_tcp:close(Socket);
 sock_close(Socket) -> ssl:close(Socket).
 
 sock_send(Socket, Packet) when is_port(Socket) ->
-    io:format("[SOCKET TCP SEND] ~p bytes~n", [byte_size(Packet)]),
-    io:format("  Data: ~p~n", [Packet]),
     gen_tcp:send(Socket, Packet);
 sock_send(Socket, Packet) ->
-    io:format("[SOCKET SSL SEND] ~p bytes~n", [byte_size(Packet)]),
-    io:format("  Data: ~p~n", [Packet]),
     ssl:send(Socket, Packet).
 
 sock_recv(Socket, Length, Tout) when is_port(Socket) ->
