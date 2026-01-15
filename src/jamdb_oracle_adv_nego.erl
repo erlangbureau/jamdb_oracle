@@ -465,17 +465,11 @@ parse_dh_params(Data) ->
         <<ServerPubKey:ServerPubKeyPktLen/binary, Rest10/binary>> = Rest9,
 
         %% Validate key sizes match expected byte length (go-ora validation)
-        ValidationOk = case byte_size(ServerPubKey) =:= ByteLen andalso byte_size(Prime) =:= ByteLen of
-            true -> true;
-            false -> false
-        end,
-
-        case ValidationOk of
+        case byte_size(ServerPubKey) =:= ByteLen andalso byte_size(Prime) =:= ByteLen of
             true ->
                 %% Read IV sub-packet
                 <<IVPktLen:16/big, _IVPktType:16/big, Rest11/binary>> = Rest10,
                 <<IV:IVPktLen/binary, RestData/binary>> = Rest11,
-
                 {ok, {IntegrityAlgoId, Gen, Prime, ServerPubKey, IV}, RestData};
             false ->
                 {error, key_size_mismatch}
