@@ -739,7 +739,7 @@ try_redirect([{Host, Port} | Rest], #oraclient{debug=Debug, use_ssl=UseSSL, ssl_
     debug_log(Debug, "Trying ~s:~p", [Host, Port]),
     Opts = lists:keydelete(host, 1, State#oraclient.env) ++ [{host, Host}, {port, Port}],
     case do_connect(Host, Port, [], SslOpts, UseSSL, 2000, Debug) of
-        {ok, Sock} -> gen_tcp:close(Sock), reconnect(State#oraclient{env = Opts});
+        {ok, Sock, _SSL} -> gen_tcp:close(Sock), reconnect(State#oraclient{env = Opts});
         {error, _} -> try_redirect(Rest, State)
     end.
 
