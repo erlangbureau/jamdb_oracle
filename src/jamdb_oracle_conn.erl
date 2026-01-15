@@ -164,27 +164,33 @@ debug_log(true, Format, Args) ->
 
 %% Socket connection abstraction - handles both TCP and SSL
 do_connect(Host, Port, SocketOpts, SslOpts, true = _UseSSL, Tout, Debug) ->
+    io:format("[CONNECT] Attempting SSL/TLS connection to ~p:~p~n", [Host, Port]),
     debug_log(Debug, "Using SSL/TLS connection", []),
     %% Merge socket options with SSL options
     SockOpts = [binary, {active, false}, {packet, raw},
                  {nodelay, true}, {keepalive, true}] ++ SocketOpts,
     case ssl:connect(Host, Port, SockOpts ++ SslOpts, Tout) of
         {ok, Socket} ->
+            io:format("[CONNECT] SSL/TLS connection established~n", []),
             debug_log(Debug, "SSL/TLS connection established", []),
             {ok, Socket, true};
         {error, Reason} ->
+            io:format("[CONNECT] SSL/TLS connection failed: ~p~n", [Reason]),
             debug_log(Debug, "SSL/TLS connection failed: ~p", [Reason]),
             {error, Reason}
     end;
 do_connect(Host, Port, SocketOpts, _SslOpts, false = _UseSSL, Tout, Debug) ->
+    io:format("[CONNECT] Attempting plain TCP connection to ~p:~p~n", [Host, Port]),
     debug_log(Debug, "Using plain TCP connection", []),
     SockOpts = [binary, {active, false}, {packet, raw},
                  {nodelay, true}, {keepalive, true}] ++ SocketOpts,
     case gen_tcp:connect(Host, Port, SockOpts, Tout) of
         {ok, Socket} ->
+            io:format("[CONNECT] TCP connection established~n", []),
             debug_log(Debug, "TCP connection established", []),
             {ok, Socket, false};
         {error, Reason} ->
+            io:format("[CONNECT] TCP connection failed: ~p~n", [Reason]),
             debug_log(Debug, "TCP connection failed: ~p", [Reason]),
             {error, Reason}
     end.
@@ -324,8 +330,6 @@ handle_error(remote, Reason, #oraclient{debug = Debug}) ->
     {error, remote, Reason, #oraclient{conn_state=disconnected}};
 handle_error(socket, Reason, #oraclient{debug = Debug}) ->
     debug_log(Debug, "handle_error: socket error - ~p", [Reason]),
-    %% Use display for guaranteed output even in crash scenarios
-    _ = erlang:display({jamdb_oracle_socket_error, Reason}),
     disconnect(#oraclient{conn_state=disconnected}),
     {error, socket, Reason, #oraclient{conn_state=disconnected}};
 handle_error(local, Reason, #oraclient{debug = Debug} = State) ->
@@ -616,14 +620,38 @@ sock_close(Socket) when is_port(Socket) -> gen_tcp:close(Socket);
 sock_close(Socket) -> ssl:close(Socket).
 
 sock_send(Socket, Packet) when is_port(Socket) ->
+    io:format("[SOCKET TCP SEND] ~p bytes~n", [byte_size(Packet)]),
+    io:format("  Data: ~p~n", [Packet]),
     gen_tcp:send(Socket, Packet);
 sock_send(Socket, Packet) ->
+    io:format("[SOCKET SSL SEND] ~p bytes~n", [byte_size(Packet)]),
+    io:format("  Data: ~p~n", [Packet]),
     ssl:send(Socket, Packet).
 
 sock_recv(Socket, Length, Tout) when is_port(Socket) ->
-    gen_tcp:recv(Socket, Length, Tout);
+    debug_log(true, "[TCP RECV] Waiting for ~p bytes (timeout=~p)", [Length, Tout]),
+    Result = gen_tcp:recv(Socket, Length, Tout),
+    case Result of
+        {ok, Data} ->
+            debug_log(true, "[TCP RECV] Got ~p bytes~n", [byte_size(Data)]),
+            debug_log(true, "  Data: ~p~n", [Data]),
+            {ok, Data};
+        {error, Reason} ->
+            debug_log(true, "[TCP RECV] Error: ~p~n", [Reason]),
+            {error, Reason}
+    end;
 sock_recv(Socket, Length, Tout) ->
-    ssl:recv(Socket, Length, Tout).
+    debug_log(true, "[SSL RECV] Waiting for ~p bytes (timeout=~p)", [Length, Tout]),
+    Result = ssl:recv(Socket, Length, Tout),
+    case Result of
+        {ok, Data} ->
+            debug_log(true, "[SSL RECV] Got ~p bytes~n", [byte_size(Data)]),
+            debug_log(true, "  Data: ~p~n", [Data]),
+            {ok, Data};
+        {error, Reason} ->
+            debug_log(true, "[SSL RECV] Error: ~p~n", [Reason]),
+            {error, Reason}
+    end.
 
 send(State, _PacketType, <<>>) ->
     {ok, State};
@@ -662,8 +690,11 @@ send(#oraclient{socket=Socket,sdu=Length,version=Version,crypto=Crypto,hash_stat
     {Packet, Rest} = ?ENCODER:encode_packet(PacketType, DataToSend, Length, Version),
     case sock_send(Socket, Packet) of
         ok ->
+            debug_log(Debug, "Sent TNS packet type ~p (~p bytes)~n", [PacketType, byte_size(Packet)]),
+            debug_log(Debug, "  Data: ~p~n", [Packet]),
             send(State2, PacketType, Rest);
         {error, Reason} ->
+            debug_log(Debug, "Send failed: ~p", [Reason]),
             handle_error(socket, Reason, State2)
     end.
 
@@ -672,8 +703,6 @@ recv(Socket, Length, {Tout, _ReadTout} = Touts, #oraclient{debug = Debug}) ->
         {ok, NetworkData} ->
             recv(Socket, Length, Touts, NetworkData, <<>>);
         {error, Reason} ->
-            debug_log(Debug, "recv error: ~p", [Reason]),
-            _ = erlang:display({jamdb_oracle_recv_error, Reason}),
             {error, socket, Reason}
     end.
 
