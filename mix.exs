@@ -3,7 +3,7 @@ defmodule Jamdb.Oracle.Mixfile do
 
   def project do
     [app: :jamdb_oracle,
-     version: "0.5.12",
+     version: "0.5.13",
      elixir: "~> 1.11",
      description: description(),
      package: package(),
@@ -18,7 +18,8 @@ defmodule Jamdb.Oracle.Mixfile do
 
   defp deps do
     [
-      {:ecto_sql, "~> 3.12"}
+      {:ecto_sql, "~> 3.13"},
+      {:ash_sql, "~> 0.3"}
     ]
   end
 
