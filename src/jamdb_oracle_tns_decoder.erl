@@ -91,8 +91,9 @@ decode_token(dcb, Data) ->
     L = decode_next(dalc,K),
     {L, RowFormat};
 decode_token(net, {Data, EnvOpts}) ->
+	Desc = string:to_upper(binary_to_list(hd(binary:split(Data, <<0>>)))),
     Values = lists:map(fun(L) -> list_to_tuple(string:tokens(L, "=")) end,
-             string:tokens(binary_to_list(hd(binary:split(Data, <<0>>))), "()")),
+             string:tokens(Desc, "()")),
     Host = proplists:get_value("HOST", Values),
     Port = proplists:get_value("PORT", Values),
     {ok, [{host, Host}, {port, list_to_integer(Port)}]++EnvOpts};
