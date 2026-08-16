@@ -76,6 +76,30 @@ configuration:
   * `:description` - Connect descriptor
   * `:charset` - Client character set, defaults to UTF-8
 
+### TLS connections
+
+When using TLS, start the OTP SSL application in the calling Mix application:
+
+```elixir
+def application do
+  [
+    extra_applications: [:logger, :ssl]
+  ]
+end
+```
+
+TLS options can be passed in `:parameters` under the `:ssl` key:
+
+```elixir
+parameters: [
+  ssl: [
+    verify: :verify_peer,
+    server_name_indication: 'adb.example.oraclecloud.com', # charlist
+    cacerts: :public_key.cacerts_get()
+  ]
+]
+```
+
 ### Output parameters
 
 * Calling stored procedure or function: `[{:out, :number}, {:out, :varchar}]`
