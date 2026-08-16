@@ -71,7 +71,8 @@ defmodule Jamdb.Oracle.Query do
   end
 
   @doc false
-  def insert(prefix, table, header, rows, _on_conflict, returning, placeholders \\ []) do
+  def insert(prefix, table, header, rows, _on_conflict, returning,
+      placeholders \\ [], _opts \\ []) do
     counter_offset = length(placeholders) + 1
     from = insert_all(rows, counter_offset)
     values =

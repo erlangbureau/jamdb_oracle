@@ -117,7 +117,8 @@ defmodule Ecto.Adapters.Jamdb.Oracle.Connection do
   @impl true
   defdelegate delete_all(query), to: Jamdb.Oracle.Query
   @impl true
-  defdelegate insert(prefix, table, header, rows, on_conflict, returning, placeholders), to: Jamdb.Oracle.Query
+  defdelegate insert(prefix, table, header, rows, on_conflict, returning, placeholders,
+    opts \\ []), to: Jamdb.Oracle.Query
   @impl true
   defdelegate update(prefix, table, fields, filters, returning), to: Jamdb.Oracle.Query
   @impl true
