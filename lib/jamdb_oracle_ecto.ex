@@ -9,6 +9,76 @@ defmodule Ecto.Adapters.Jamdb.Oracle do
   use Ecto.Adapters.SQL, driver: Jamdb.Oracle, migration_lock: nil
 
   @impl true
+  def insert(adapter_meta, schema_meta, params, on_conflict, returning, opts) do
+    super(adapter_meta, schema_meta, params, on_conflict, returning,
+      returning_options(opts, schema_meta, returning))
+  end
+
+  @impl true
+  def update(adapter_meta, schema_meta, fields, params, returning, opts) do
+    super(adapter_meta, schema_meta, fields, params, returning,
+      returning_options(opts, schema_meta, returning))
+  end
+
+  @impl true
+  def delete(adapter_meta, schema_meta, params, returning, opts) do
+    super(adapter_meta, schema_meta, params, returning,
+      returning_options(opts, schema_meta, returning))
+  end
+
+  @impl true
+  def insert_all(adapter_meta, schema_meta, header, rows, on_conflict, returning,
+      placeholders, opts) do
+    super(adapter_meta, schema_meta, header, rows, on_conflict, returning, placeholders,
+      returning_options(opts, schema_meta, returning))
+  end
+
+  @doc false
+  def returning_options(opts, _schema_meta, []), do: opts
+  def returning_options(opts, schema_meta, returning) do
+    if Keyword.has_key?(opts, :out) do
+      opts
+    else
+      Keyword.put(opts, :out, returning_types(schema_meta, returning))
+    end
+  end
+
+  defp returning_types(%{schema: nil}, returning) do
+    Enum.map(returning, fn
+      {_field, type} -> output_type(type)
+      field ->
+        raise ArgumentError,
+          "cannot infer the Oracle output type for returning field #{inspect(field)} " <>
+          "without a schema; use a {field, type} tuple or pass the :out option"
+    end)
+  end
+  defp returning_types(%{schema: schema}, returning) when is_atom(schema) do
+    source_types = schema.__schema__(:dump)
+      |> Map.new(fn {_field, {source, type, _writable}} -> {source, type} end)
+
+    Enum.map(returning, fn source ->
+      source_types |> Map.fetch!(source) |> output_type()
+    end)
+  end
+
+  defp output_type(type) do
+    case Ecto.Type.type(type) do
+      type when type in [:id, :integer] -> :integer
+      :float -> :float
+      :decimal -> :decimal
+      type when type in [:string, :boolean] -> :string
+      type when type in [:binary, :binary_id] -> :binary
+      :date -> :date
+      type when type in [:time, :time_usec] -> :date
+      type when type in [:naive_datetime, :naive_datetime_usec] -> :timestamp
+      type when type in [:utc_datetime, :utc_datetime_usec] -> :timestamptz
+      :map -> :clob
+      {:map, _} -> :clob
+      type -> raise ArgumentError, "unsupported Oracle output type #{inspect(type)}"
+    end
+  end
+
+  @impl true
   def ensure_all_started(config, type) do
     Ecto.Adapters.SQL.ensure_all_started(:jamdb_oracle, config, type)
   end

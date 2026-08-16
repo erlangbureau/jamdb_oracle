@@ -543,10 +543,13 @@ defmodule Jamdb.Oracle.Query do
   defp returning([]),
     do: []
   defp returning(fields) do
-    returning = fields |> Enum.filter(& is_tuple(&1) == false)
+    returning = Enum.map(fields, &returning_field/1)
     [" RETURN ", intersperse_map(returning, ", ", &quote_name/1),
      " INTO ", intersperse_map(returning, ", ", &[?: | quote_name(&1)])]
-  end   
+  end
+
+  defp returning_field({field, _type}), do: field
+  defp returning_field(field), do: field
 
   defp create_names(%{sources: sources}, as_prefix) do
     create_names(sources, 0, tuple_size(sources), as_prefix) |> List.to_tuple()
