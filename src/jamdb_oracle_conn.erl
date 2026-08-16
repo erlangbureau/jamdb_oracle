@@ -55,8 +55,8 @@ connect(Opts, Tout) ->
     case gen_tcp:connect(Host, Port, SockOpts, Tout) of
         {ok, Socket} ->
             {ok, Socket2} = sock_connect(Socket, SslOpts, Tout),
-            {ok, [{recbuf, RecBuf}]} = inet:getopts(Socket2, [recbuf]),
-            inet:setopts(Socket2, [{buffer, RecBuf}]),
+            {ok, [{recbuf, RecBuf}]} = sock_getopts(Socket2, [recbuf]),
+            sock_setopts(Socket2, [{buffer, RecBuf}]),
             State = #oraclient{socket=Socket2, env=EnvOpts, passwd=Passwd, auth=Desc,
             auto=Auto, fetch=Fetch, sdu=Sdu, charset=Charset, timeouts={Tout, ReadTout}},
             {ok, State2} = send_req(login, State),
@@ -403,6 +403,12 @@ sock_send(Socket, Packet) -> ssl:send(Socket, Packet).
 
 sock_recv(Socket, Length, Tout) when is_port(Socket) -> gen_tcp:recv(Socket, Length, Tout);
 sock_recv(Socket, Length, Tout) -> ssl:recv(Socket, Length, Tout).
+
+sock_getopts(Socket, Opts) when is_port(Socket) -> inet:getopts(Socket, Opts);
+sock_getopts(Socket, Opts) -> ssl:getopts(Socket, Opts).
+
+sock_setopts(Socket, Opts) when is_port(Socket) -> inet:setopts(Socket, Opts);
+sock_setopts(Socket, Opts) -> ssl:setopts(Socket, Opts).
 
 send(State, _PacketType, <<>>) ->
     {ok, State};

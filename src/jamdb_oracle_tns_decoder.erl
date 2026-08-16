@@ -51,7 +51,7 @@ decode_two_task(<<Token, Data/binary>>, Acc) ->
         ?TTI_OER -> decode_token(oer, Data, Acc);
         ?TTI_STA -> {ok, Acc};     %tran
         ?TTI_FOB -> {error, fob};  %return
-        _ -> 
+        _ ->
             {error, <<Token, (hd(binary:split(Data, <<0>>)))/binary>>}
     end.
 
@@ -301,12 +301,12 @@ decode_next(keyword,Data) ->
     A =
     case decode_ub2(Data) of
         0 -> decode_next(ub2,Data);
-        _ -> decode_next(decode_next(ub2,Data))
+        _ -> decode_next(chr,decode_next(ub2,Data))
     end,
     B =
     case decode_ub2(A) of
         0 -> decode_next(ub2,A);
-        _ -> decode_next(decode_next(ub2,A))
+        _ -> decode_next(chr,decode_next(ub2,A))
     end,
     decode_next(ub2,B);
 decode_next(rxh,Data) ->
